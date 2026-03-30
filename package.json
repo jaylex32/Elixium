@@ -1,7 +1,7 @@
 {
   "name": "elixium",
   "version": "1.0.0",
-  "description": "A d-fi fork that keeps both the CLI workflow and the web UI/server for Deezer and Qobuz downloading.",
+  "description": "Elixium is a Deezer and Qobuz downloader based on d-fi, offering interactive CLI, headless automation, and a full web interface.",
   "author": "Sayem Chowdhury, Jay Ross",
   "license": "MIT",
   "scripts": {

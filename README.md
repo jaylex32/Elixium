@@ -160,4 +160,4 @@ npx pkg . --targets node16-macos-arm64 --output binaries/elixium-macos-arm64
 ## Notes
 
 - Local runtime state, caches, temp files, packaged binaries, and generated output are ignored from source control.
-- This repository is intended to be the public source release of the Elixium fork.
+- This project is intended to be a full public fork of d-fi with both CLI and web UI support, packaged releases, and ongoing feature development around Deezer and Qobuz workflows.
