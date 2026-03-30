@@ -5,7 +5,7 @@
 <h1 align="center">Elixium</h1>
 
 <p align="center">
-  Deezer and Qobuz downloading with both CLI and web UI workflows.
+  Deezer and Qobuz downloader with both CLI and web UI workflows.
 </p>
 
 Elixium is a Deezer and Qobuz downloader based on `d-fi`, offering interactive CLI, headless automation, and a full web interface.
