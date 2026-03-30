@@ -1,6 +1,8 @@
 # Elixium
 
-Elixium is a `d-fi` fork that keeps both sides of the project intact:
+Elixium is a Deezer and Qobuz downloader based on d-fi, offering interactive CLI, headless automation, and a full web interface.
+
+Elixium keeps both sides of the project intact:
 
 - the original CLI downloader workflow
 - a full web UI/server interface
