@@ -1,7 +1,7 @@
 {
   "name": "elixium",
   "version": "1.0.0",
-  "description": "A streaming music downloader.",
+  "description": "A d-fi fork that keeps both the CLI workflow and the web UI/server for Deezer and Qobuz downloading.",
   "author": "Sayem Chowdhury, Jay Ross",
   "license": "MIT",
   "scripts": {
@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/elixium.git"
+    "url": "https://github.com/jaylex32/Elixium.git"
   },
   "engines": {
     "node": ">=12"
