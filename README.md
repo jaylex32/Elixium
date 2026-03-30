@@ -1,13 +1,21 @@
-# Elixium
+<p align="center">
+  <img src="public/assets/icons/elixium_icon.svg" alt="Elixium logo" width="128">
+</p>
 
-Elixium is a Deezer and Qobuz downloader based on d-fi, offering interactive CLI, headless automation, and a full web interface.
+<h1 align="center">Elixium</h1>
 
-Elixium keeps both sides of the project intact:
+<p align="center">
+  Deezer and Qobuz downloading with both CLI and web UI workflows.
+</p>
+
+Elixium is a Deezer and Qobuz downloader based on `d-fi`, offering interactive CLI, headless automation, and a full web interface.
+
+It keeps both sides of the project in one app:
 
 - the original CLI downloader workflow
 - a full web UI/server interface
 
-This is not a web-first rewrite and it is not CLI-only either. Elixium can be used interactively in the terminal, in headless automation mode, or through the browser-based server UI.
+This project is not web-only and it is not CLI-only either. Elixium can be used interactively in the terminal, in headless automation mode, or through the browser-based server UI.
 
 ## Core capabilities
 
