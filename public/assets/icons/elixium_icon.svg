@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="geometricPrecision">
+  <title>Elixium app icon</title>
+  <desc>Elixium app icon with a visible app-tile background and light mark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="52" x2="436" y2="456" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#202836"/>
+      <stop offset="0.55" stop-color="#161d29"/>
+      <stop offset="1" stop-color="#0d1118"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(368 108) rotate(133.5) scale(282 258)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#93c5fd" stop-opacity="0.28"/>
+      <stop offset="0.55" stop-color="#60a5fa" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#60a5fa" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="28" y="28" width="456" height="456" rx="110" fill="url(#bg)"/>
+  <rect x="28" y="28" width="456" height="456" rx="110" fill="url(#glow)"/>
+  <rect x="40" y="40" width="432" height="432" rx="98" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+  <g fill="#f5f7fb" transform="translate(256 256) scale(1.14) translate(-785 -397)">
+    <path d="M 651 458 L 681 486 L 742 486 L 702 445 L 701 408 L 702 407 L 746 407 L 746 366 L 703 366 L 701 364 L 701 334 L 703 329 L 877 329 L 919 288 L 682 288 L 651 320 Z" fill-rule="evenodd"/>
+    <path d="M 767 366 L 767 444 L 766 445 L 728 445 L 728 446 L 786 503 L 791 506 L 852 445 L 815 445 L 813 443 L 813 366 Z" fill-rule="evenodd"/>
+    <path d="M 903 445 L 878 445 L 838 486 L 862 486 Z" fill-rule="evenodd"/>
+    <path d="M 874 366 L 834 366 L 833 367 L 833 406 L 868 373 Z" fill-rule="evenodd"/>
+  </g>
+</svg>

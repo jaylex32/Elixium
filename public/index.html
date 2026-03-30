@@ -1,0 +1,2022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elixium</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/elixium_icon.svg">
+    <link rel="alternate icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/app.css">
+    <link rel="stylesheet" href="/assets/css/mobile.css">
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="mini-rail" id="mini-rail">
+        <button class="mini-rail-btn" type="button" data-target="home" title="Home">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9,22 9,12 15,12 15,22"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="search" title="Search">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="downloads" title="Downloads">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7,10 12,15 17,10"/>
+                <line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="watchlist" title="Watchlist">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m12 17.27-5.18 3.05 1.4-5.88L3 9.76l6.09-.51L12 3.8l2.91 5.45 6.09.51-5.22 4.68 1.4 5.88z"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="genres" title="Genres">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="7" height="7" rx="1.5"/>
+                <rect x="14" y="4" width="7" height="7" rx="1.5"/>
+                <rect x="3" y="13" width="7" height="7" rx="1.5"/>
+                <rect x="14" y="13" width="7" height="7" rx="1.5"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="url-download" title="URL Download">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="playlists" title="Playlists">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="4" x2="20" y1="6" y2="6"/>
+                <line x1="4" x2="14" y1="12" y2="12"/>
+                <line x1="4" x2="10" y1="18" y2="18"/>
+                <polyline points="16,10 20,12 16,14"/>
+            </svg>
+        </button>
+        <button class="mini-rail-btn" type="button" data-target="player" title="Player">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/>
+            </svg>
+        </button>
+        <div class="mini-spacer"></div>
+        <button class="mini-rail-btn" type="button" data-target="settings" title="Settings">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+        </button>
+    </div>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo-section">
+            <div class="logo">
+              <div class="logo-type">Elixium</div>
+            </div>
+                <div class="version">v1.0.0</div>
+            </div>
+
+            <div class="service-switcher">
+                <div class="service-label">Music Service</div>
+                <div class="service-buttons">
+                    <button class="service-btn active" data-service="deezer">Deezer</button>
+                    <button class="service-btn" data-service="qobuz">Qobuz</button>
+                </div>
+            </div>            
+
+            <nav class="nav-section">
+                <button class="nav-item active" data-page="home">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9,22 9,12 15,12 15,22"/>
+                    </svg>
+                    Home
+                </button>                
+                <button class="nav-item active" data-page="search">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    Search Music
+                </button>
+                <button class="nav-item" data-page="downloads">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7,10 12,15 17,10"/>
+                        <line x1="12" x2="12" y1="15" y2="3"/>
+                    </svg>
+                    Downloads
+                    <span class="download-badge" id="download-badge">0</span>
+                </button>
+                <button class="nav-item" data-page="watchlist">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m12 17.27-5.18 3.05 1.4-5.88L3 9.76l6.09-.51L12 3.8l2.91 5.45 6.09.51-5.22 4.68 1.4 5.88z"/>
+                    </svg>
+                    Watchlist
+                </button>
+                <button class="nav-item" data-page="genres">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="7" height="7" rx="1.5"/>
+                        <rect x="14" y="4" width="7" height="7" rx="1.5"/>
+                        <rect x="3" y="13" width="7" height="7" rx="1.5"/>
+                        <rect x="14" y="13" width="7" height="7" rx="1.5"/>
+                    </svg>
+                    Genres
+                </button>
+                <button class="nav-item" data-page="url-download">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                    URL Download
+                </button>
+                <button class="nav-item" data-page="playlists">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="4" x2="20" y1="6" y2="6"/>
+                        <line x1="4" x2="14" y1="12" y2="12"/>
+                        <line x1="4" x2="10" y1="18" y2="18"/>
+                        <polyline points="16,10 20,12 16,14"/>
+                    </svg>
+                    Playlists
+                </button>
+                <button class="nav-item" data-page="player">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/>
+                    </svg>
+                    Player
+                    <span class="download-badge" id="queue-badge" style="display:none">0</span>
+                </button>
+                <button class="nav-item" data-page="settings">
+                    <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    Settings
+                </button>
+            </nav>
+        </aside>
+
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <header class="header">
+            <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle navigation" title="Toggle navigation">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="4" y1="7" x2="20" y2="7"/>
+                    <line x1="4" y1="12" x2="20" y2="12"/>
+                    <line x1="4" y1="17" x2="20" y2="17"/>
+                </svg>
+            </button>
+
+            <h1 class="page-title" id="page-title">Search Music</h1>
+            <div class="header-controls">
+                <div class="connection-status">
+                    <div class="status-dot" id="connection-status"></div>
+                    <span><span id="current-service">Deezer</span></span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Search Page -->
+            <div class="page active" id="search-page">
+                <div class="search-header">
+                    <div class="search-input-container">
+                        <div class="search-input-group">
+                            <input type="text" class="search-input" placeholder="Search for music..." id="search-input">
+                            <button class="search-btn" id="search-btn" aria-label="Search" title="Search">
+                                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+                                    <path d="m21 21-4.35-4.35" fill="none" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                                <span class="btn-text">Search</span>
+                                <div class="loading-spinner" style="display: none !important;"></div>
+                            </button>
+                        </div>
+
+                        <div class="search-filters">
+                            <div class="filter-group" id="type-options">
+                                <button class="filter-btn active" data-type="track">Tracks</button>
+                                <button class="filter-btn" data-type="album">Albums</button>
+                                <button class="filter-btn" data-type="artist">Artists</button>
+                                <button class="filter-btn" data-type="playlist">Playlists</button>
+                            </div>
+
+                            <div class="quality-selector">
+                                <div class="quality-label">Quality:</div>
+                                <div class="filter-group" id="quality-options"></div>
+                            </div>
+                        </div>
+
+                        
+                    </div>
+                </div>
+
+                <div class="search-command-center">
+                    <section class="search-overview-shell">
+                        <div class="search-overview-topbar">
+                            <div class="search-overview-heading">
+                                <h2 class="search-overview-title">Dashboard Overview</h2>
+                                <div class="search-overview-subtitle">Navigate Your Music Journey</div>
+                            </div>
+                            <button class="search-overview-toggle" id="search-overview-toggle" type="button" aria-expanded="true" aria-controls="search-overview-content">
+                                <span class="search-overview-toggle-label">Collapse</span>
+                                <span class="search-overview-toggle-icon">⌃</span>
+                            </button>
+                        </div>
+
+                        <div class="search-overview-content" id="search-overview-content">
+                        <div class="search-overview-quick-row">
+                            <button class="quick-route-btn quick-route-btn--overview" type="button" data-quick-route="home-new-releases">
+                                <span class="quick-route-icon">🆕</span>
+                                <span>
+                                    <strong>New Releases</strong>
+                                    <small>Jump into the latest albums</small>
+                                </span>
+                            </button>
+                            <button class="quick-route-btn quick-route-btn--overview" type="button" data-quick-route="home-top-artists">
+                                <span class="quick-route-icon">⭐</span>
+                                <span>
+                                    <strong>Top Artists</strong>
+                                    <small>Browse artists from the home deck</small>
+                                </span>
+                            </button>
+                            <button class="quick-route-btn quick-route-btn--overview" type="button" data-quick-route="downloads">
+                                <span class="quick-route-icon">📥</span>
+                                <span>
+                                    <strong>Open Queue</strong>
+                                    <small>Check active and queued downloads</small>
+                                </span>
+                            </button>
+                            <button class="quick-route-btn quick-route-btn--overview" type="button" data-quick-route="url-download">
+                                <span class="quick-route-icon">🔗</span>
+                                <span>
+                                    <strong>Paste URL</strong>
+                                    <small>Go straight to direct downloads</small>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div class="search-overview-grid">
+                            <section class="command-panel command-panel--overview command-panel--overview-history">
+                                <div class="command-panel-header command-panel-header--overview">
+                                    <div>
+                                        <div class="command-panel-eyebrow">Recent Searches</div>
+                                        <h3 class="command-panel-title">Pick Up Where You Left Off</h3>
+                                    </div>
+                                </div>
+                                <div class="history-chip-list" id="recent-searches-panel"></div>
+                            </section>
+
+                            <section class="command-panel command-panel--overview command-panel--overview-snapshot">
+                                <div class="command-panel-header command-panel-header--overview">
+                                    <div>
+                                        <div class="command-panel-eyebrow">Session Snapshot</div>
+                                        <h3 class="command-panel-title">Current Route</h3>
+                                    </div>
+                                </div>
+                                <div class="session-metric-grid session-metric-grid--overview">
+                                    <div class="session-metric-card">
+                                        <span class="session-metric-label">Service</span>
+                                        <strong class="session-metric-value" id="snapshot-service">Deezer</strong>
+                                    </div>
+                                    <div class="session-metric-card">
+                                        <span class="session-metric-label">Quality</span>
+                                        <strong class="session-metric-value" id="snapshot-quality">320</strong>
+                                    </div>
+                                    <div class="session-metric-card">
+                                        <span class="session-metric-label">Queue</span>
+                                        <strong class="session-metric-value" id="snapshot-queue">0 items</strong>
+                                    </div>
+                                    <div class="session-metric-card">
+                                        <span class="session-metric-label">Playlists</span>
+                                        <strong class="session-metric-value" id="snapshot-playlists">0 saved</strong>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <div class="search-overview-footer">
+                            <div class="session-pulse" id="search-session-pulse">Ready for a new route.</div>
+                        </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="results-container">
+                    <div class="results-header">
+                        <div class="results-count" id="results-count">No results</div>
+                        <div class="view-toggle">
+                            <button class="view-btn active" data-view="grid">⊞</button>
+                            <button class="view-btn" data-view="list">☰</button>
+                        </div>
+                    </div>
+
+                    <div class="results-grid" id="results-grid">
+                        <div class="empty-state centered-empty">
+                            <div class="empty-state-icon">🎵</div>
+                            <h3>Search for your favorite tracks, albums, artists, or playlists to get started</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Downloads Page -->
+            <div class="page" id="downloads-page">
+                <div class="downloads-container">
+                    <section class="downloads-overview-shell">
+                        <div class="downloads-overview-topbar">
+                            <div class="downloads-overview-heading">
+                                <h2 class="downloads-overview-title">Download Manager</h2>
+                                <div class="downloads-overview-subtitle">Organize queue activity, resume batches, and keep every session under control.</div>
+                            </div>
+                        </div>
+
+                        <div class="downloads-overview-content">
+                            <div class="queue-insights-grid downloads-insights-grid">
+                                <div class="queue-insight-card">
+                                    <span class="queue-insight-label">Total</span>
+                                    <strong class="queue-insight-value" id="queue-stat-total">0</strong>
+                                    <span class="queue-insight-copy">Items staged in this session</span>
+                                </div>
+                                <div class="queue-insight-card">
+                                    <span class="queue-insight-label">Active</span>
+                                    <strong class="queue-insight-value" id="queue-stat-active">0</strong>
+                                    <span class="queue-insight-copy">Currently moving through the pipeline</span>
+                                </div>
+                                <div class="queue-insight-card">
+                                    <span class="queue-insight-label">Completed</span>
+                                    <strong class="queue-insight-value" id="queue-stat-done">0</strong>
+                                    <span class="queue-insight-copy">Finished successfully in this queue</span>
+                                </div>
+                                <div class="queue-insight-card">
+                                    <span class="queue-insight-label">Failed</span>
+                                    <strong class="queue-insight-value" id="queue-stat-failed">0</strong>
+                                    <span class="queue-insight-copy">Items that need another pass</span>
+                                </div>
+                            </div>
+
+                            <div class="queue-toolbar downloads-toolbar">
+                                <div class="queue-toolbar-copy-wrap">
+                                    <div class="downloads-toolbar-eyebrow">Session Control</div>
+                                <div class="queue-toolbar-copy" id="queue-toolbar-copy">
+                                        Queue is idle. Add music from Search, Home, or URL Download.
+                                    </div>
+                                </div>
+                                <div class="queue-toolbar-actions">
+                                    <button class="btn downloads-toolbar-btn downloads-toolbar-btn--icon" id="queue-open-search-btn" type="button" title="Search Music" aria-label="Search Music">
+                                        <span class="downloads-toolbar-mask-icon downloads-toolbar-mask-icon--search" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="btn downloads-toolbar-btn downloads-toolbar-btn--icon" id="retry-failed-btn" type="button" title="Retry Failed" aria-label="Retry Failed">
+                                        <span class="downloads-toolbar-mask-icon downloads-toolbar-mask-icon--retry" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="btn downloads-toolbar-btn downloads-toolbar-btn--icon" id="remove-completed-btn" type="button" title="Remove Completed" aria-label="Remove Completed">
+                                        <span class="downloads-toolbar-mask-icon downloads-toolbar-mask-icon--remove-completed" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="btn downloads-toolbar-btn downloads-toolbar-btn--icon" id="remove-failed-btn" type="button" title="Remove Failed" aria-label="Remove Failed">
+                                        <span class="downloads-toolbar-mask-icon downloads-toolbar-mask-icon--remove-failed" aria-hidden="true"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="mobile-downloads-manager" id="mobile-downloads-manager">
+                        <div class="mobile-downloads-card">
+                            <div class="mobile-downloads-header">
+                                <div class="mobile-downloads-header-copy">
+                                    <span class="mobile-downloads-eyebrow">Live Queue</span>
+                                    <strong class="mobile-downloads-title">Current Download Session</strong>
+                                </div>
+                                <span class="mobile-downloads-badge" id="mobile-downloads-count">0</span>
+                            </div>
+
+                            <div class="mobile-downloads-stats" id="mobile-downloads-stats">
+                                <span class="mobile-downloads-stat">
+                                    <span class="mobile-downloads-stat-label">Queued</span>
+                                    <strong id="mobile-stat-queued">0</strong>
+                                </span>
+                                <span class="mobile-downloads-stat">
+                                    <span class="mobile-downloads-stat-label">Active</span>
+                                    <strong id="mobile-stat-active">0</strong>
+                                </span>
+                                <span class="mobile-downloads-stat">
+                                    <span class="mobile-downloads-stat-label">Done</span>
+                                    <strong id="mobile-stat-completed">0</strong>
+                                </span>
+                                <span class="mobile-downloads-stat">
+                                    <span class="mobile-downloads-stat-label">Failed</span>
+                                    <strong id="mobile-stat-failed">0</strong>
+                                </span>
+                            </div>
+
+                            <div class="mobile-downloads-list" id="mobile-downloads-list">
+                                <div class="mobile-downloads-empty">
+                                    <div class="mobile-downloads-empty-title">No downloads yet</div>
+                                    <div class="mobile-downloads-empty-copy">Add music from Search, Home, or URL Download to start a batch.</div>
+                                </div>
+                            </div>
+
+                            <div class="mobile-downloads-actions">
+                                <button class="mobile-downloads-btn mobile-downloads-btn--primary" id="mobile-download-start-btn" type="button" disabled>
+                                    Start Downloads
+                                </button>
+                                <button class="mobile-downloads-btn mobile-downloads-btn--secondary" id="mobile-download-resume-btn" type="button" disabled style="display:none;">
+                                    Resume Queued
+                                </button>
+                                <button class="mobile-downloads-btn mobile-downloads-btn--danger" id="mobile-download-clear-btn" type="button">
+                                    Clear All
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="downloads-manager-grid">
+                        <section class="download-queue-section">
+                            <div class="queue-header">
+                                <div class="queue-header-copy">
+                                    <span class="queue-eyebrow">Live Queue</span>
+                                    <span class="queue-title">Current Download Session</span>
+                                </div>
+                                <span class="queue-count" id="queue-count">0</span>
+                            </div>
+                            
+                            <div class="download-table-container">
+                                <table class="download-table">
+                                    <colgroup>
+                                        <col data-column="name">
+                                        <col data-column="status">
+                                        <col data-column="start">
+                                        <col data-column="end">
+                                        <col data-column="actions">
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th data-column="name">
+                                                <span class="download-table-heading">Name</span>
+                                                <button class="column-resizer" type="button" tabindex="-1" aria-hidden="true"></button>
+                                            </th>
+                                            <th data-column="status">
+                                                <span class="download-table-heading">Status &amp; Progress</span>
+                                                <button class="column-resizer" type="button" tabindex="-1" aria-hidden="true"></button>
+                                            </th>
+                                            <th data-column="start">
+                                                <span class="download-table-heading">Start Time</span>
+                                                <button class="column-resizer" type="button" tabindex="-1" aria-hidden="true"></button>
+                                            </th>
+                                            <th data-column="end">
+                                                <span class="download-table-heading">End Time</span>
+                                                <button class="column-resizer" type="button" tabindex="-1" aria-hidden="true"></button>
+                                            </th>
+                                            <th data-column="actions">
+                                                <span class="download-table-heading">Actions</span>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="download-table-body">
+                                        <tr>
+                                            <td colspan="5">
+                                                <div class="empty-state">
+                                                    <div class="empty-state-icon">📥</div>
+                                                    <h3>No Downloads Yet</h3>
+                                                    <p>Add some music to your queue to start downloading</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="download-controls">
+                                <button class="download-btn" id="download-btn" disabled>
+                                    Start Downloads
+                                </button>
+                                <button class="resume-queue-btn" id="resume-queued-btn" type="button" disabled style="display: none;">
+                                    Resume Queued
+                                </button>
+                                <button class="clear-queue-btn" id="clear-queue-btn" style="margin-left: auto;">
+                                    Clear All
+                                </button>
+                            </div>
+                        </section>
+
+                        <aside class="download-progress-panel" id="progress-panel">
+                            <button class="progress-toggle-btn" id="progress-toggle-btn" onclick="app.toggleProgressPanel()">
+                                <span class="toggle-icon">📊</span>
+                                <span class="toggle-text">Progress</span>
+                                <span class="toggle-arrow">▼</span>
+                            </button>
+                            
+                            <div class="progress-content" id="progress-content">
+                                <div class="progress-header">
+                                    <span class="progress-title">Overall Progress</span>
+                                    <span class="progress-percentage" id="progress-percentage">0%</span>
+                                </div>
+                                
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="progress-fill"></div>
+                                </div>
+                                
+                                <div class="current-download" id="current-download">
+                                    No active downloads
+                                </div>
+                                
+                                <div class="download-stats">
+                                    <div class="stat-item">
+                                        <div class="stat-value" id="downloaded-count">0</div>
+                                        <div class="stat-label">Completed</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value" id="total-count">0</div>
+                                        <div class="stat-label">Total Items</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="downloads-progress-note">
+                                    Individual item progress stays visible in the queue while this panel tracks the session.
+                                </div>
+                            </div>
+                            
+                            <div class="mini-progress-indicator" id="mini-progress-indicator" style="display: none;">
+                                <div class="mini-progress-bar">
+                                    <div class="mini-progress-fill" id="mini-progress-fill"></div>
+                                </div>
+                                <div class="mini-progress-text">
+                                    <span id="mini-progress-percentage">0%</span>
+                                    <span id="mini-progress-count">(0/0)</span>
+                                </div>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <!-- URL Download Page -->
+            <div class="page" id="url-download-page">
+                <div class="url-download-section">
+                    <h2 class="section-title">
+                        <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/mobile-url-download.svg');" aria-hidden="true"></span>
+                        Download from URL
+                    </h2>
+                    
+                    <div class="url-input-container">
+                        <input type="text" class="search-input" placeholder="Paste Deezer, Qobuz, or Spotify URL here..." id="url-input">
+                        <button class="search-btn" id="url-download-btn">
+                            <span>Download</span>
+                        </button>
+                    </div>
+
+                    <!-- Playlist Editor Toggle -->
+                    <div class="playlist-editor-toggle" id="playlist-editor-toggle" style="display: none;">
+                        <div class="setting-item">
+                            <label class="setting-label">
+                                <span>🎵 Playlist Editor</span>
+                                <div class="toggle-switch">
+                                    <input type="checkbox" id="enable-playlist-editor">
+                                    <span class="slider"></span>
+                                </div>
+                            </label>
+                            <div class="setting-description">
+                                Enable to select specific tracks from playlists before downloading
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="supported-urls">
+                        <strong>Supported URLs:</strong> Deezer tracks/albums/playlists/artists, Qobuz tracks/albums/playlists/artists, Spotify playlists (converted to Qobuz or Deezer)
+                    </div>
+                </div>
+
+                <div class="results-container">
+                    <div class="results-grid" id="url-results-grid">
+                     <div class="empty-state centered-empty">
+                         <div class="empty-state-icon">🔗</div>
+                         <h3>Paste a Music Service URL</h3>
+                     </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div class="page" id="settings-page">
+                <div class="settings-container">
+                    <div class="settings-section">
+                        <h2 class="section-title">🎨 Appearance</h2>
+
+                        <div class="theme-summary">
+                            <div>
+                                <div class="theme-summary-label">Active Theme</div>
+                                <div class="theme-summary-name" id="theme-active-name">Sterling Deck</div>
+                            </div>
+                            <div class="theme-summary-copy" id="theme-active-description">
+                                  Muted steel surfaces for a cleaner premium-console feel.
+                            </div>
+                        </div>
+
+                        <div class="theme-options" id="theme-options"></div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2 class="section-title">🔐 Authentication</h2>
+                        
+                        
+
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">Deezer ARL Cookie</label>
+                                <input type="password" class="setting-input" id="deezer-arl" placeholder="Enter your Deezer ARL cookie">
+                                <div class="setting-description">
+                                    Required for Deezer downloads. Get this from your browser's cookies after logging into Deezer.
+                                </div>
+                            </div>
+                            
+                              <div class="setting-item">
+                                  <label class="setting-label">Qobuz App ID</label>
+                                <input type="text" class="setting-input" id="qobuz-app-id" placeholder="Enter Qobuz app_id (numeric)">
+                                <div class="setting-description">
+                                    Used for Qobuz API requests. Leave blank to auto-detect; set to override.
+                                </div>
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Qobuz Secrets</label>
+                                <input type="text" class="setting-input" id="qobuz-secrets" placeholder="Comma-separated secrets (e.g., secret1,secret2)">
+                                <div class="setting-description">
+                                    Comma-separated app secrets. Leave blank to auto-fetch from Qobuz.
+                                </div>
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Qobuz Token</label>
+                                <input type="password" class="setting-input" id="qobuz-token" placeholder="Enter your Qobuz auth token">
+                                <div class="setting-description">
+                                    Required for Qobuz downloads. Obtained automatically during first login.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2 class="section-title">🎵 Quality Settings</h2>
+                        
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">Default Deezer Quality</label>
+                                <select class="setting-input" id="deezer-quality">
+                                    <option value="128">MP3 - 128 kbps</option>
+                                    <option value="320">MP3 - 320 kbps</option>
+                                    <option value="flac">FLAC - Lossless</option>
+                                </select>
+                                <div class="setting-description">
+                                    Your preferred quality when downloading from Deezer. This will be automatically selected when you switch to Deezer.
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Default Qobuz Quality</label>
+                                <select class="setting-input" id="qobuz-quality">
+                                    <option value="320kbps">MP3 - 320 kbps</option>
+                                    <option value="44khz">FLAC - CD Quality (16-bit/44.1kHz)</option>
+                                    <option value="96khz">FLAC - Hi-Fi (24-bit/96kHz)</option>
+                                    <option value="192khz">FLAC - Studio (24-bit/192kHz)</option>
+                                </select>
+                                <div class="setting-description">
+                                    Your preferred quality when downloading from Qobuz. Higher quality requires Qobuz Hi-Fi subscription.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 1.5rem; padding: 1rem; background: var(--surface-bg); border-radius: 8px; border-left: 3px solid var(--info-color);">
+                            <strong>💡 Tip:</strong> These settings will be applied automatically when you switch between services. You can also change quality quickly using the buttons next to the search filters.
+                        </div>
+                    </div>                    
+
+                    <div class="settings-section">
+                        <h2 class="section-title">⬇️ Download Settings</h2>
+                        
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">Concurrency</label>
+                                <input type="number" class="setting-input" id="concurrency" min="1" max="10" value="4">
+                                <div class="setting-description">
+                                    Number of simultaneous downloads (1-10). Higher values may be faster but can cause rate limiting.
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Track Numbering</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="track-number" checked>
+                                    <span class="slider"></span>
+                                </label>
+                                <div class="setting-description">
+                                    Include track numbers in filenames.
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Fallback Track</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="fallback-track" checked>
+                                    <span class="slider"></span>
+                                </label>
+                                <div class="setting-description">
+                                    Try alternative sources if a track is unavailable.
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Fallback Quality</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="fallback-quality" checked>
+                                    <span class="slider"></span>
+                                </label>
+                                <div class="setting-description">
+                                    Download lower quality if preferred quality is unavailable.
+                                </div>
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Download To Client</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="client-downloads">
+                                    <span class="slider"></span>
+                                </label>
+                                <div class="setting-description">
+                                    When enabled, clicking Download for a single track saves the file directly in your browser instead of the server path.
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Download Covers (Deezer)</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="deezer-download-cover">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Download Covers (Qobuz)</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="qobuz-download-cover">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Force Create Playlists</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="create-playlist">
+                                    <span class="slider"></span>
+                                </label>
+                                <div class="setting-description">
+                                    Create .m3u8 playlist files for all multi-track downloads (albums, artists, playlists). 
+                                    By default, only playlists and artist downloads create playlist files.
+                                </div>
+                            </div>                            
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2 class="section-title">📁 Download Paths</h2>
+                        
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">Deezer Download Path</label>
+                                <input type="text" class="setting-input" id="deezer-download-path" value="C:\Users\Downloads\Music\Deezer">
+                                <div class="setting-description">
+                                    Base directory where Deezer music will be downloaded.
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">Qobuz Download Path</label>
+                                <input type="text" class="setting-input" id="qobuz-download-path" value="C:\Users\Downloads\Music\Qobuz">
+                                <div class="setting-description">
+                                    Base directory where Qobuz music will be downloaded.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2 class="section-title">📂 File Organization</h2>
+
+                        <div class="setting-item" style="margin-bottom:1rem;">
+                            <label class="setting-label">Deezer Presets</label>
+                            <div class="setting-actions" style="display:flex;gap:.5rem;flex-wrap:wrap">
+                                <button class="btn" id="dz-preset-track">Track</button>
+                                <button class="btn" id="dz-preset-album">Album</button>
+                                <button class="btn" id="dz-preset-artist">Artist</button>
+                                <button class="btn" id="dz-preset-server">Server</button>
+                                <button class="btn" id="dz-vars-toggle">Show Variables</button>
+                            </div>
+                            <div id="dz-vars" style="display:none; margin-top:.6rem; font-size:.9rem; color:var(--text-secondary); background:var(--surface-bg); padding:.8rem; border:1px solid var(--border-color); border-radius:8px;">
+                                Common variables: {ALB_TITLE}, {SNG_TITLE}, {ART_NAME}, {TRACK_NUMBER}, {TRACK_POSITION}, {NO_TRACK_NUMBER}
+                            </div>
+                        </div>
+
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">Deezer Track Layout</label>
+                                <input type="text" class="setting-input" id="layout-track" value="{ALB_TITLE}/{SNG_TITLE}">
+                            </div>
+                            <div class="setting-item">
+                                <label class="setting-label">Deezer Album Layout</label>
+                                <input type="text" class="setting-input" id="layout-album" value="{ART_NAME}/{ALB_TITLE}/{SNG_TITLE}">
+                            </div>
+                            <div class="setting-item">
+                                <label class="setting-label">Deezer Artist Layout</label>
+                                <input type="text" class="setting-input" id="layout-artist" value="{ALB_TITLE}/{SNG_TITLE}">
+                            </div>
+                            <div class="setting-item">
+                                <label class="setting-label">Deezer Playlist Layout</label>
+                                <input type="text" class="setting-input" id="layout-playlist" value="Playlist/{TITLE}/{SNG_TITLE}">
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="margin:1.2rem 0 .6rem;">
+                            <label class="setting-label">Qobuz Presets</label>
+                            <div class="setting-actions" style="display:flex;gap:.5rem;flex-wrap:wrap">
+                                <button class="btn" id="qb-preset-track">Track</button>
+                                <button class="btn" id="qb-preset-album">Album</button>
+                                <button class="btn" id="qb-preset-artist">Artist</button>
+                                <button class="btn" id="qb-preset-server">Server</button>
+                                <button class="btn" id="qb-vars-toggle">Show Variables</button>
+                            </div>
+                            <div id="qb-vars" style="display:none; margin-top:.6rem; font-size:.9rem; color:var(--text-secondary); background:var(--surface-bg); padding:.8rem; border:1px solid var(--border-color); border-radius:8px;">
+                                Common variables: {title}, {alb_artist}, {alb_title}, {track_number}, {no_track_number}, {list_title}, {genre}, {release_date}, {disc_number}, {maximum_bit_depth}, {maximum_sampling_rate}
+                            </div>
+                        </div>
+
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">Qobuz Track Layout</label>
+                                <input type="text" class="setting-input" id="layout-qobuz-track" value="{alb_title}/{title}">
+                            </div>
+                            <div class="setting-item">
+                                <label class="setting-label">Qobuz Album Layout</label>
+                                <input type="text" class="setting-input" id="layout-qobuz-album" value="{alb_artist}/{alb_title}/{title}">
+                            </div>
+                            <div class="setting-item">
+                                <label class="setting-label">Qobuz Playlist Layout</label>
+                                <input type="text" class="setting-input" id="layout-qobuz-playlist" value="{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2 class="section-title">🎨 Cover Art Settings</h2>
+                        
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label class="setting-label">128kbps Cover Size (px)</label>
+                                <input type="number" class="setting-input" id="cover-size-128" value="500" min="100" max="2000">
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">320kbps Cover Size (px)</label>
+                                <input type="number" class="setting-input" id="cover-size-320" value="500" min="100" max="2000">
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="setting-label">FLAC Cover Size (px)</label>
+                                <input type="number" class="setting-input" id="cover-size-flac" value="1000" min="100" max="2000">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="save-btn" id="save-settings">Save All Settings</button>
+                </div>
+            </div>
+
+            <!-- Home/Discovery Page -->
+            <div class="page" id="home-page">
+                <div class="home-container">
+                    <div class="mobile-home-shell" style="display:none;">
+                        <section class="mobile-home-now-playing-card">
+                            <div class="mobile-home-now-playing-kicker">Continue Listening</div>
+                            <div class="mobile-home-now-playing-body" id="mobile-home-now-playing-open" role="button" tabindex="0" aria-label="Open player">
+                                <div class="mobile-home-now-playing-cover" id="mobile-home-now-playing-cover">
+                                    <div class="result-cover-placeholder">🎵</div>
+                                </div>
+                                <div class="mobile-home-now-playing-copy">
+                                    <strong id="mobile-home-now-playing-title">Nothing playing</strong>
+                                    <span id="mobile-home-now-playing-artist">Queue a track to keep listening here.</span>
+                                    <div class="mobile-home-now-playing-progressline">
+                                        <div class="mobile-home-now-playing-progressbar">
+                                            <span id="mobile-home-now-playing-progress"></span>
+                                        </div>
+                                        <span id="mobile-home-now-playing-time">0:00 / 0:00</span>
+                                    </div>
+                                </div>
+                                <div class="mobile-home-now-playing-actions">
+                                    <button class="mobile-home-pill-btn" type="button" id="mobile-home-play-toggle" aria-label="Play or pause">
+                                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                                    </button>
+                                    <button class="mobile-home-pill-btn" type="button" id="mobile-home-play-next" aria-label="Next track">
+                                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 5h2v14h-2V5zm-2 7L4 19V5l9 7z"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="mobile-home-service-switch">
+                            <button class="home-service-btn mobile-home-service-card active" data-service="deezer" type="button">
+                                <span class="mobile-home-service-card-icon">
+                                    <svg class="service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                </span>
+                                <span class="mobile-home-service-card-copy">
+                                    <strong>Deezer</strong>
+                                    <small>60M+ tracks</small>
+                                </span>
+                                <span class="mobile-home-service-card-cta">Browse</span>
+                            </button>
+                            <button class="home-service-btn mobile-home-service-card active" data-service="qobuz" type="button">
+                                <span class="mobile-home-service-card-icon">
+                                    <svg class="service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9 18V5l12-2v13"/>
+                                        <circle cx="6" cy="18" r="3"/>
+                                        <circle cx="18" cy="16" r="3"/>
+                                    </svg>
+                                </span>
+                                <span class="mobile-home-service-card-copy">
+                                    <strong>Qobuz</strong>
+                                    <small>Hi-Res &amp; 24-bit</small>
+                                </span>
+                                <span class="mobile-home-service-card-cta">Browse</span>
+                            </button>
+                        </section>
+                    </div>
+
+                    <!-- Hero Section -->
+                    <div class="hero-section">
+                        <div class="hero-content">
+                            <div class="hero-text">
+                                <h1 class="hero-title">Discover Amazing Music</h1>
+                                <p class="hero-subtitle">Explore the latest releases, trending albums, and popular playlists</p>
+                            </div>
+                            <!-- <div class="hero-stats">
+                                <div class="stat-card">
+                                    <div class="stat-number" id="total-albums">∞</div>
+                                    <div class="stat-label">Albums Available</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-number" id="total-tracks">∞</div>
+                                    <div class="stat-label">Tracks Ready</div>
+                                </div>
+                            </div> -->
+                        </div>
+                        <div class="hero-visual">
+                            <div class="floating-disc"></div>
+                            <div class="floating-note note-1">🎵</div>
+                            <div class="floating-note note-2">🎶</div>
+                            <div class="floating-note note-3">🎼</div>
+                        </div>
+                    </div>
+            
+                    <!-- Service Toggle for Home -->
+<div class="home-service-toggle">
+    <div class="service-toggle-label">Browse Content From:</div>
+    <div class="service-toggle-buttons">
+        <button class="home-service-btn active" data-service="deezer">
+            <svg class="service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span>Deezer</span>
+        </button>
+        <button class="home-service-btn" data-service="qobuz">
+            <svg class="service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18V5l12-2v13"/>
+                <circle cx="6" cy="18" r="3"/>
+                <circle cx="18" cy="16" r="3"/>
+            </svg>
+            <span>Qobuz</span>
+        </button>
+    </div>
+</div>
+
+                    <div class="home-overview-shell">
+                        <div class="home-overview-topbar">
+                            <div class="home-overview-heading">
+                                <div class="mission-panel-eyebrow">Home Overview</div>
+                                <h2 class="home-overview-title">Session and Watchlist</h2>
+                                <div class="home-overview-subtitle">Keep your route, activity, and monitor state in one place.</div>
+                            </div>
+                            <button class="search-overview-toggle" id="home-overview-toggle" type="button" aria-expanded="true" aria-controls="home-overview-content">
+                                <span class="search-overview-toggle-label">Collapse</span>
+                                <span class="search-overview-toggle-icon">⌃</span>
+                            </button>
+                        </div>
+
+                        <div class="home-overview-content" id="home-overview-content">
+                    <div class="mission-control-grid">
+                        <section class="mission-panel mission-panel--primary mission-panel--home-session">
+                            <div class="mission-panel-header">
+                                <div>
+                                    <div class="mission-panel-eyebrow">Mission Control</div>
+                                    <h3 class="mission-panel-title">Session Deck</h3>
+                                </div>
+                            </div>
+                            <div class="session-metric-grid">
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">Service</span>
+                                    <strong class="session-metric-value" id="home-session-service">Deezer</strong>
+                                </div>
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">Quality</span>
+                                    <strong class="session-metric-value" id="home-session-quality">320</strong>
+                                </div>
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">Queue</span>
+                                    <strong class="session-metric-value" id="home-session-queue">0 items</strong>
+                                </div>
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">Playlists</span>
+                                    <strong class="session-metric-value" id="home-session-playlists">0 saved</strong>
+                                </div>
+                            </div>
+                            <div class="session-pulse" id="home-session-pulse">Ready for discovery.</div>
+                        </section>
+
+                        <section class="mission-panel mission-panel--compact mission-panel--home-searches">
+                            <div class="mission-panel-header">
+                                <div>
+                                    <div class="mission-panel-eyebrow">Continue</div>
+                                    <h3 class="mission-panel-title">Recent Searches</h3>
+                                </div>
+                            </div>
+                            <div class="history-chip-list" id="home-recent-searches"></div>
+                        </section>
+
+                        <section class="mission-panel mission-panel--compact mission-panel--home-recent">
+                            <div class="mission-panel-header">
+                                <div>
+                                    <div class="mission-panel-eyebrow">Recently Landed</div>
+                                    <h3 class="mission-panel-title">Recent Downloads</h3>
+                                </div>
+                            </div>
+                            <div class="recent-downloads-stack" id="home-recent-downloads"></div>
+                        </section>
+
+                        <section class="mission-panel mission-panel--compact mission-panel--home-watchlist">
+                            <div class="mission-panel-header">
+                                <div>
+                                    <div class="mission-panel-eyebrow">Watchlist</div>
+                                    <h3 class="mission-panel-title">Qobuz Monitor</h3>
+                                </div>
+                                <button class="pf-icon-btn" id="home-watchlist-refresh" type="button">Refresh</button>
+                            </div>
+                            <div class="session-metric-grid watchlist-summary-grid">
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">Artists</span>
+                                    <strong class="session-metric-value" id="home-watchlist-artists">0</strong>
+                                </div>
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">Candidates</span>
+                                    <strong class="session-metric-value" id="home-watchlist-candidates">0</strong>
+                                </div>
+                                <div class="session-metric-card">
+                                    <span class="session-metric-label">History</span>
+                                    <strong class="session-metric-value" id="home-watchlist-history">0</strong>
+                                </div>
+                            </div>
+                            <div class="session-pulse" id="home-watchlist-pulse">Qobuz watchlist idle.</div>
+                        </section>
+                    </div>
+                        </div>
+                    </div>
+            
+                    <!-- Content Sections -->
+                    <div class="discovery-sections">
+                        <!-- New Releases Section -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-new-releases.svg');" aria-hidden="true"></span>
+                                    New Releases
+                                </h2>
+                                <button class="view-all-btn" onclick="app.searchNewReleases()">View All</button>
+                            </div>
+                            <div class="content-grid" id="new-releases-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading new releases...</p>
+                                </div>
+                            </div>
+                        </section>
+            
+                        <!-- Trending Albums Section -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-trending.svg');" aria-hidden="true"></span>
+                                    Trending Albums
+                                </h2>
+                                <button class="view-all-btn" onclick="app.searchTrendingAlbums()">View All</button>
+                            </div>
+                            <div class="content-grid" id="trending-albums-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading trending albums...</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Popular Playlists Section -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-playlists.svg');" aria-hidden="true"></span>
+                                    Popular Playlists
+                                </h2>
+                                <button class="view-all-btn" onclick="app.searchPopularPlaylists()">View All</button>
+                            </div>
+                            <div class="content-grid" id="popular-playlists-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading popular playlists...</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Top Tracks Section -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-featured.svg');" aria-hidden="true"></span>
+                                    Top Tracks
+                                </h2>
+                                <button class="view-all-btn" onclick="app.showViewAllModal('top-tracks', app.homeService)">View All</button>
+                            </div>
+                            <div class="content-grid" id="top-tracks-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading top tracks...</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Genres Section: Pop -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/Deezer-pophighlights.svg');" aria-hidden="true"></span>
+                                    Pop Highlights
+                                </h2>
+                                <button class="view-all-btn" onclick="app.showViewAllModal('genre-pop', app.homeService)">View All</button>
+                            </div>
+                            <div class="content-grid" id="genre-pop-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading pop highlights...</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Genres Section: Hip-Hop -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/Deezer-hiphophighlights.svg');" aria-hidden="true"></span>
+                                    Hip-Hop Highlights
+                                </h2>
+                                <button class="view-all-btn" onclick="app.showViewAllModal('genre-rap', app.homeService)">View All</button>
+                            </div>
+                            <div class="content-grid" id="genre-rap-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading hip-hop highlights...</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Genres Section: Jazz -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/Deezer-jazzhighlights.svg');" aria-hidden="true"></span>
+                                    Jazz Highlights
+                                </h2>
+                                <button class="view-all-btn" onclick="app.showViewAllModal('genre-jazz', app.homeService)">View All</button>
+                            </div>
+                            <div class="content-grid" id="genre-jazz-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading jazz highlights...</p>
+                                </div>
+                            </div>
+                        </section>
+            
+                        <!-- Top Artists Section -->
+                        <section class="discovery-section">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-top-artists.svg');" aria-hidden="true"></span>
+                                    Top Artists
+                                </h2>
+                                <button class="view-all-btn" onclick="app.searchTopArtists()">View All</button>
+                            </div>
+                            <div class="content-grid artists-grid" id="top-artists-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Loading top artists...</p>
+                                </div>
+                            </div>
+                        </section>
+
+                    </div>
+                </div>
+            </div>            
+
+            <div class="page" id="watchlist-page">
+                <div class="home-container">
+                    <div class="watchlist-page-grid">
+                        <section class="watchlist-hero">
+                            <div class="watchlist-hero-copy">
+                                <div class="mission-panel-eyebrow">Qobuz Watchlist</div>
+                                <h2 class="mission-panel-title">Artist Watchlist</h2>
+                                <p class="session-pulse" id="watchlist-hero-copy">Follow artists, review fresh albums, and route only the releases that are worth adding to your queue.</p>
+                            </div>
+                            <div class="watchlist-hero-actions">
+                                <button class="btn" id="watchlist-refresh-all" type="button">Refresh All</button>
+                                <button class="btn" id="watchlist-open-search" type="button">Search Artists</button>
+                            </div>
+                        </section>
+
+                        <section class="watchlist-summary-strip">
+                            <div class="session-metric-card">
+                                <span class="session-metric-label">Watched Artists</span>
+                                <strong class="session-metric-value" id="watchlist-summary-artists">0</strong>
+                            </div>
+                            <div class="session-metric-card">
+                                <span class="session-metric-label">Watched Playlists</span>
+                                <strong class="session-metric-value" id="watchlist-summary-playlists">0</strong>
+                            </div>
+                            <div class="session-metric-card">
+                                <span class="session-metric-label">Review Queue</span>
+                                <strong class="session-metric-value" id="watchlist-summary-candidates">0</strong>
+                            </div>
+                            <div class="session-metric-card">
+                                <span class="session-metric-label">History</span>
+                                <strong class="session-metric-value" id="watchlist-summary-history">0</strong>
+                            </div>
+                        </section>
+
+                        <section class="watchlist-panel watchlist-nav-panel">
+                            <div class="watchlist-nav-tabs" id="watchlist-nav-tabs">
+                                <button class="watchlist-nav-tab active" type="button" data-watchlist-view="artists">Artists</button>
+                                <button class="watchlist-nav-tab" type="button" data-watchlist-view="playlists">Playlists</button>
+                                <button class="watchlist-nav-tab" type="button" data-watchlist-view="wanted">Wanted</button>
+                                <button class="watchlist-nav-tab" type="button" data-watchlist-view="history">History</button>
+                                <button class="watchlist-nav-tab" type="button" data-watchlist-view="schedule">Schedule</button>
+                            </div>
+                        </section>
+
+                        <section class="watchlist-panel watchlist-section-view active" data-watchlist-view-panel="artists">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-top-artists.svg');" aria-hidden="true"></span>
+                                    Watched Artists
+                                </h2>
+                            </div>
+                            <div class="watchlist-artists-grid" id="watchlist-artists-grid"></div>
+                        </section>
+
+                        <section class="watchlist-panel watchlist-section-view" data-watchlist-view-panel="playlists">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/home-playlists.svg');" aria-hidden="true"></span>
+                                    Watched Playlists
+                                </h2>
+                            </div>
+                            <div class="watchlist-playlist-service-strip">
+                                <div class="watchlist-playlist-service-card active">
+                                    <strong>Qobuz</strong>
+                                    <span>Live now</span>
+                                </div>
+                                <div class="watchlist-playlist-service-card">
+                                    <strong>Spotify</strong>
+                                    <span>Coming soon</span>
+                                </div>
+                                <div class="watchlist-playlist-service-card active">
+                                    <strong>Deezer</strong>
+                                    <span>Live now</span>
+                                </div>
+                                <div class="watchlist-playlist-service-card active">
+                                    <strong>TIDAL</strong>
+                                    <span>Live now</span>
+                                </div>
+                            </div>
+                            <div class="watchlist-playlist-form">
+                                <input class="search-input" id="watchlist-playlist-url" type="text" placeholder="Paste a Qobuz, Spotify, Deezer, or TIDAL playlist URL">
+                                <button class="btn" id="watchlist-add-playlist" type="button">Add Playlist</button>
+                                <button class="btn btn-secondary" id="watchlist-refresh-playlists" type="button">Refresh Playlists</button>
+                            </div>
+                            <div class="watchlist-artists-grid" id="watchlist-playlists-grid"></div>
+                        </section>
+
+                        <section class="watchlist-panel watchlist-section-view" data-watchlist-view-panel="wanted">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/watchlist-compass.svg');" aria-hidden="true"></span>
+                                    Review New Albums
+                                </h2>
+                                <div class="pf-actions">
+                                    <button class="view-all-btn" id="watchlist-download-selected" type="button">Download Selected</button>
+                                    <button class="view-all-btn" id="watchlist-queue-selected" type="button">Queue Selected</button>
+                                    <button class="view-all-btn" id="watchlist-mark-reviewed" type="button">Mark Reviewed</button>
+                                </div>
+                            </div>
+                            <div class="watchlist-candidates-list" id="watchlist-candidates-list"></div>
+                            <div class="watchlist-candidates-list" id="watchlist-playlist-candidates-list"></div>
+                        </section>
+
+                        <section class="watchlist-panel watchlist-section-view" data-watchlist-view-panel="history">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/watchlist-history.svg');" aria-hidden="true"></span>
+                                    Processed History
+                                </h2>
+                            </div>
+                            <div class="watchlist-history-list" id="watchlist-history-list"></div>
+                        </section>
+
+                        <section class="watchlist-panel watchlist-section-view" data-watchlist-view-panel="schedule">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <span class="section-icon section-icon-mask" style="--section-icon:url('/assets/icons/mobile/watchlist-schedule.svg');" aria-hidden="true"></span>
+                                    Monitor Schedule
+                                </h2>
+                            </div>
+                            <div class="watchlist-schedule-grid">
+                                <div class="watchlist-schedule-card" data-schedule-kind="artists">
+                                    <div class="watchlist-schedule-card-header">
+                                        <div class="watchlist-schedule-card-copy">
+                                            <strong>Artists</strong>
+                                            <span>Control when artist monitors scan for new releases.</span>
+                                        </div>
+                                        <div class="watchlist-schedule-header-actions">
+                                            <label class="watchlist-schedule-toggle">
+                                                <span class="watchlist-schedule-toggle-copy">
+                                                    <strong>Enabled</strong>
+                                                    <small>Allow background artist scans</small>
+                                                </span>
+                                                <input type="checkbox" data-schedule-enabled="artists">
+                                            </label>
+                                            <button class="pf-icon-btn" type="button" data-run-monitor-now="artists">Run Now</button>
+                                        </div>
+                                    </div>
+                                    <div class="watchlist-schedule-fields">
+                                        <div class="watchlist-schedule-mode-row">
+                                            <button class="watchlist-schedule-mode-chip active" type="button" data-schedule-mode-chip="artists" data-mode-value="interval-days">Every few days</button>
+                                            <button class="watchlist-schedule-mode-chip" type="button" data-schedule-mode-chip="artists" data-mode-value="interval-hours">Every few hours</button>
+                                            <button class="watchlist-schedule-mode-chip" type="button" data-schedule-mode-chip="artists" data-mode-value="weekdays">Days of the week</button>
+                                            <button class="watchlist-schedule-mode-chip" type="button" data-schedule-mode-chip="artists" data-mode-value="monthly">Dates of the month</button>
+                                            <select data-schedule-mode="artists" hidden>
+                                                <option value="interval-days">Every N days</option>
+                                                <option value="interval-hours">Every N hours</option>
+                                                <option value="weekdays">Specific weekdays</option>
+                                                <option value="monthly">Dates of the month</option>
+                                            </select>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="artists" data-schedule-mode-target="interval-days">
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Repeat every N days</span>
+                                                <input type="number" min="1" max="30" data-schedule-days="artists" placeholder="Days">
+                                            </label>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="artists" data-schedule-mode-target="interval-hours" hidden>
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Repeat every N hours</span>
+                                                <input type="number" min="1" max="168" data-schedule-hours="artists" placeholder="Hours">
+                                            </label>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="artists" data-schedule-mode-target="weekdays" hidden>
+                                            <span class="watchlist-schedule-block-label">Pick weekdays</span>
+                                            <div class="watchlist-weekday-grid" data-schedule-weekday-grid="artists"></div>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="artists" data-schedule-mode-target="monthly" hidden>
+                                            <span class="watchlist-schedule-block-label">Pick dates of the month</span>
+                                            <div class="watchlist-monthday-grid" data-schedule-monthday-grid="artists"></div>
+                                        </div>
+                                        <div class="watchlist-schedule-time-row">
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Hour</span>
+                                                <input type="number" min="0" max="23" data-schedule-hour="artists" placeholder="Hour">
+                                            </label>
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Minute</span>
+                                                <input type="number" min="0" max="59" data-schedule-minute="artists" placeholder="Minute">
+                                            </label>
+                                        </div>
+                                        <div class="watchlist-schedule-footer">
+                                            <button class="btn btn-secondary" type="button" data-save-schedule="artists">Save Artist Schedule</button>
+                                            <small class="watchlist-schedule-next-run" id="schedule-artists-next-run">Next run: not scheduled</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="watchlist-schedule-card" data-schedule-kind="playlists">
+                                    <div class="watchlist-schedule-card-header">
+                                        <div class="watchlist-schedule-card-copy">
+                                            <strong>Playlists</strong>
+                                            <span>Control when watched playlists check for newly added tracks.</span>
+                                        </div>
+                                        <div class="watchlist-schedule-header-actions">
+                                            <label class="watchlist-schedule-toggle">
+                                                <span class="watchlist-schedule-toggle-copy">
+                                                    <strong>Enabled</strong>
+                                                    <small>Allow background playlist scans</small>
+                                                </span>
+                                                <input type="checkbox" data-schedule-enabled="playlists">
+                                            </label>
+                                            <button class="pf-icon-btn" type="button" data-run-monitor-now="playlists">Run Now</button>
+                                        </div>
+                                    </div>
+                                    <div class="watchlist-schedule-fields">
+                                        <div class="watchlist-schedule-mode-row">
+                                            <button class="watchlist-schedule-mode-chip active" type="button" data-schedule-mode-chip="playlists" data-mode-value="interval-days">Every few days</button>
+                                            <button class="watchlist-schedule-mode-chip" type="button" data-schedule-mode-chip="playlists" data-mode-value="interval-hours">Every few hours</button>
+                                            <button class="watchlist-schedule-mode-chip" type="button" data-schedule-mode-chip="playlists" data-mode-value="weekdays">Days of the week</button>
+                                            <button class="watchlist-schedule-mode-chip" type="button" data-schedule-mode-chip="playlists" data-mode-value="monthly">Dates of the month</button>
+                                            <select data-schedule-mode="playlists" hidden>
+                                                <option value="interval-days">Every N days</option>
+                                                <option value="interval-hours">Every N hours</option>
+                                                <option value="weekdays">Specific weekdays</option>
+                                                <option value="monthly">Dates of the month</option>
+                                            </select>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="playlists" data-schedule-mode-target="interval-days">
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Repeat every N days</span>
+                                                <input type="number" min="1" max="30" data-schedule-days="playlists" placeholder="Days">
+                                            </label>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="playlists" data-schedule-mode-target="interval-hours" hidden>
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Repeat every N hours</span>
+                                                <input type="number" min="1" max="168" data-schedule-hours="playlists" placeholder="Hours">
+                                            </label>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="playlists" data-schedule-mode-target="weekdays" hidden>
+                                            <span class="watchlist-schedule-block-label">Pick weekdays</span>
+                                            <div class="watchlist-weekday-grid" data-schedule-weekday-grid="playlists"></div>
+                                        </div>
+                                        <div class="watchlist-schedule-block" data-schedule-block="playlists" data-schedule-mode-target="monthly" hidden>
+                                            <span class="watchlist-schedule-block-label">Pick dates of the month</span>
+                                            <div class="watchlist-monthday-grid" data-schedule-monthday-grid="playlists"></div>
+                                        </div>
+                                        <div class="watchlist-schedule-time-row">
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Hour</span>
+                                                <input type="number" min="0" max="23" data-schedule-hour="playlists" placeholder="Hour">
+                                            </label>
+                                            <label class="watchlist-schedule-field-group">
+                                                <span>Minute</span>
+                                                <input type="number" min="0" max="59" data-schedule-minute="playlists" placeholder="Minute">
+                                            </label>
+                                        </div>
+                                        <div class="watchlist-schedule-footer">
+                                            <button class="btn btn-secondary" type="button" data-save-schedule="playlists">Save Playlist Schedule</button>
+                                            <small class="watchlist-schedule-next-run" id="schedule-playlists-next-run">Next run: not scheduled</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <section class="watchlist-schedule-log-shell">
+                                <div class="watchlist-schedule-log-header">
+                                    <div>
+                                        <strong>Monitor Activity</strong>
+                                        <span>Recent manual and scheduled runs stay here without stretching the page.</span>
+                                    </div>
+                                </div>
+                                <div class="watchlist-history-list watchlist-history-list--schedule" id="monitor-history-list"></div>
+                            </section>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overlay-mask" id="watchlist-artist-modal">
+                <div class="overlay-dialog watchlist-artist-dialog">
+                    <div class="overlay-header watchlist-artist-modal-header">
+                        <div class="watchlist-artist-modal-main">
+                            <div class="watchlist-artist-modal-cover" id="watchlist-artist-modal-cover">🎤</div>
+                            <div class="watchlist-artist-modal-copy">
+                                <div class="artist-detail-kicker">Qobuz Watchlist</div>
+                                <div class="overlay-title" id="watchlist-artist-modal-title">Artist</div>
+                                <div class="artist-detail-subtitle" id="watchlist-artist-modal-subtitle">Review artist albums, expand tracks, and route the releases you want.</div>
+                            </div>
+                        </div>
+                        <div class="watchlist-artist-modal-header-actions">
+                            <button class="pf-icon-btn" id="watchlist-artist-modal-refresh" type="button">Refresh</button>
+                            <button class="pf-icon-btn" id="watchlist-artist-modal-remove" type="button">Remove</button>
+                            <button class="pf-icon-btn" id="watchlist-artist-modal-close" type="button" aria-label="Close">×</button>
+                        </div>
+                    </div>
+                    <div class="overlay-body watchlist-artist-modal-body">
+                        <div class="watchlist-artist-modal-toolbar">
+                            <div class="watchlist-artist-modal-toolbar-copy" id="watchlist-artist-modal-status">No review items yet.</div>
+                            <div class="watchlist-artist-modal-toolbar-actions">
+                                <button class="view-all-btn" id="watchlist-artist-modal-select-all" type="button">Select All</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-clear-selection" type="button">Clear</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-queue-all" type="button">Queue All</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-download-all" type="button">Download All</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-discography" type="button">Queue Discography</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-top-tracks" type="button">Top Tracks</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-download-selected" type="button">Download Selected</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-queue-selected" type="button">Queue Selected</button>
+                                <button class="view-all-btn" id="watchlist-artist-modal-mark-reviewed" type="button">Mark Reviewed</button>
+                            </div>
+                        </div>
+                        <div class="watchlist-artist-modal-rules">
+                            <button class="watchlist-rule-chip" id="watchlist-artist-modal-auto-albums" type="button">Auto Download Albums</button>
+                            <button class="watchlist-rule-chip" id="watchlist-artist-modal-auto-tracks" type="button">Auto Download Tracks</button>
+                        </div>
+                        <div class="watchlist-artist-modal-helper" id="watchlist-artist-modal-helper">Enable auto download, then use Refresh or Refresh All to scan and start grabbing new releases automatically.</div>
+                        <div class="watchlist-artist-modal-list" id="watchlist-artist-modal-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="genres-page">
+                <div class="home-container">
+                    <div class="genres-page-grid">
+                        <section class="genres-hero">
+                            <div class="genres-hero-copy">
+                                <div class="mission-panel-eyebrow">Qobuz Discover</div>
+                                <h2 class="mission-panel-title">Genres</h2>
+                                <p class="session-pulse" id="genres-hero-copy">Browse Qobuz genres and open the strongest album runs from each one.</p>
+                            </div>
+                        </section>
+
+                        <section class="genres-filter-panel">
+                            <div class="section-header">
+                                <h2 class="section-title"><span class="section-icon">▦</span>Filter by Genre</h2>
+                            </div>
+                            <div class="genres-filter-grid" id="genres-filter-grid"></div>
+                        </section>
+
+                        <section class="genres-results-panel">
+                            <div class="section-header">
+                                <h2 class="section-title" id="genres-results-title"><span class="section-icon">♪</span>Select a Genre</h2>
+                                <button class="view-all-btn" id="genres-refresh-current" type="button">Refresh</button>
+                            </div>
+                            <div class="content-grid genres-results-grid" id="genres-results-grid">
+                                <div class="loading-placeholder">
+                                    <div class="loading-spinner"></div>
+                                    <p>Choose a Qobuz genre to load albums.</p>
+                                </div>
+                            </div>
+                            <div class="pf-actions genres-results-actions">
+                                <button class="view-all-btn" id="genres-load-more" type="button" style="display:none;">Load More</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playlists Page -->
+            <div class="page" id="playlists-page">
+                <div class="home-container">
+                    <div class="section-header" style="margin-bottom:12px;">
+                        <h2 class="section-title">
+                            <span class="section-icon">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 18V5l12-2v13"/>
+                                    <path d="M6 15v3"/>
+                                    <path d="M21 16v3"/>
+                                    <circle cx="6" cy="18" r="3"/>
+                                    <circle cx="21" cy="16" r="3"/>
+                                </svg>
+                            </span>
+                            Playlists
+                        </h2>
+                        <div class="pf-actions">
+                            <button class="pf-icon-btn" id="pl-new">New Playlist</button>
+                            <button class="pf-icon-btn" id="pl-save-queue">Save Queue as Playlist</button>
+                        </div>
+                    </div>
+                    <div class="content-grid" id="playlists-grid">
+                        <div class="loading-placeholder">
+                            <div class="loading-spinner"></div>
+                            <p>Loading playlists...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playlist Picker Modal -->
+            <div class="overlay-mask" id="pl-picker">
+                <div class="overlay-dialog">
+                    <div class="overlay-header">
+                        <div class="overlay-title">Add to Playlist</div>
+                        <button class="pf-icon-btn" id="pl-picker-close">Close</button>
+                    </div>
+                    <div class="overlay-body">
+                        <div id="pl-picker-list"></div>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input class="text-input" id="pl-picker-new" placeholder="New playlist name"> 
+                            <button class="btn" id="pl-picker-create">Create</button>
+                        </div>
+                    </div>
+                    <div class="overlay-actions">
+                        <button class="btn" id="pl-picker-cancel">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Playlist View Modal -->
+            <div class="overlay-mask" id="user-pl-view">
+                <div class="overlay-dialog">
+                    <div class="overlay-header">
+                        <div class="overlay-title" id="user-pl-title">Playlist</div>
+                        <div class="pf-actions">
+                            <button class="pf-icon-btn" id="user-pl-play">Play</button>
+                            <button class="pf-icon-btn" id="user-pl-enqueue">Add All</button>
+                            <button class="pf-icon-btn" id="user-pl-download">Download All</button>
+                            <button class="pf-icon-btn" id="user-pl-close">Close</button>
+                        </div>
+                    </div>
+                    <div class="overlay-body" id="user-pl-body">
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playlist Editor Modal -->
+            <div class="overlay-mask" id="playlist-editor-modal">
+                <div class="overlay-dialog" style="max-height: 85vh;">
+                    <div class="overlay-header">
+                        <div class="playlist-editor-title">
+                            <span>🎵 Edit Playlist</span>
+                            <input type="text" class="text-input" id="playlist-name-editor" placeholder="Playlist Name" style="margin-left: 12px; max-width: 200px;">
+                        </div>
+                        <button class="pf-icon-btn playlist-editor-close-btn" id="playlist-editor-close">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="overlay-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="playlist-editor-controls" style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn" id="select-all-tracks">Select All</button>
+                            <button class="btn" id="deselect-all-tracks">Deselect All</button>
+                            <span style="color: var(--text-secondary); margin-left: auto;">
+                                <span id="selected-count">0</span> of <span id="total-count">0</span> tracks selected
+                            </span>
+                        </div>
+                        <div class="playlist-tracks-list" id="playlist-tracks-list" style="flex: 1; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 0;">
+                            <!-- Track items will be inserted here -->
+                        </div>
+                    </div>
+                    <div class="overlay-actions">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <button class="btn" id="save-to-user-playlist">💾 Save as Playlist</button>
+                            <button class="btn" id="add-to-queue">🎵 Add to Queue</button>
+                            <button class="btn" id="play-selected">▶️ Play Selected</button>
+                            <button class="btn primary" id="download-selected">⬇️ Download Selected</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                        <!-- tracks will populate here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="overlay-mask" id="artist-detail-overlay">
+        <div class="overlay-dialog artist-detail-dialog">
+            <div class="overlay-header artist-detail-header">
+                <div class="artist-detail-header-copy">
+                    <div class="artist-detail-cover" id="artist-detail-cover">🎤</div>
+                    <div>
+                        <div class="artist-detail-kicker" id="artist-detail-kicker">Artist Spotlight</div>
+                        <div class="overlay-title" id="artist-detail-title">Artist</div>
+                        <div class="artist-detail-subtitle" id="artist-detail-subtitle">Loading artist profile…</div>
+                    </div>
+                </div>
+                <div class="pf-actions artist-detail-header-actions">
+                    <button class="pf-icon-btn artist-detail-header-btn" id="artist-detail-watch" title="Watch artist" aria-label="Watch artist">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m12 17.27-5.18 3.05 1.4-5.88L3 9.76l6.09-.51L12 3.8l2.91 5.45 6.09.51-5.22 4.68 1.4 5.88z"/>
+                        </svg>
+                    </button>
+                    <button class="pf-icon-btn artist-detail-header-btn" id="artist-detail-download" title="Download artist" aria-label="Download artist">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7,10 12,15 17,10"/>
+                            <line x1="12" x2="12" y1="15" y2="3"/>
+                        </svg>
+                    </button>
+                    <button class="pf-icon-btn artist-detail-header-btn" id="artist-detail-close" title="Close" aria-label="Close">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" x2="6" y1="6" y2="18"/>
+                            <line x1="6" x2="18" y1="6" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="overlay-body artist-detail-body">
+                <div class="artist-detail-grid">
+                    <section class="artist-detail-panel artist-detail-panel--tracks">
+                        <div class="artist-detail-panel-head">
+                            <h3>Top Tracks</h3>
+                            <span id="artist-detail-tracks-count">Loading…</span>
+                        </div>
+                        <div class="artist-detail-list" id="artist-detail-tracks"></div>
+                    </section>
+                    <section class="artist-detail-panel artist-detail-panel--albums">
+                        <div class="artist-detail-panel-head">
+                            <h3>Albums</h3>
+                            <span id="artist-detail-albums-count">Loading…</span>
+                        </div>
+                        <div class="artist-detail-list" id="artist-detail-albums"></div>
+                    </section>
+                    <section class="artist-detail-panel artist-detail-panel--playlists">
+                        <div class="artist-detail-panel-head">
+                            <h3>Playlists</h3>
+                            <span id="artist-detail-playlists-count">Loading…</span>
+                        </div>
+                        <div class="artist-detail-list" id="artist-detail-playlists"></div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Album Tracks Modal -->
+    <div class="album-modal-overlay" id="album-modal-overlay">
+        <div class="album-modal">
+            <div class="album-modal-header">
+                <button class="album-modal-close" id="album-modal-close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+                <div class="album-modal-cover" id="album-modal-cover">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </div>
+                <div class="album-modal-info">
+                    <div class="album-modal-title" id="album-modal-title">Album Title</div>
+                    <div class="album-modal-artist" id="album-modal-artist">Artist Name</div>
+                    <div class="album-modal-meta">
+                        <span id="album-modal-year">2023</span>
+                        <span id="album-modal-tracks">12 tracks</span>
+                    </div>
+                </div>
+            </div>
+            <div class="album-modal-body">
+                <div class="modal-loading" id="modal-loading">
+                    <div class="modal-loading-spinner">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                        </svg>
+                    </div>
+                    <div class="modal-loading-text">Loading album tracks...</div>
+                </div>
+                <div class="album-tracks-container" id="album-tracks-container" style="display: none;">
+                    <div class="album-tracks-header">
+                        <div class="album-tracks-title">Album Tracks</div>
+                        <button class="album-download-all-btn" id="album-download-all-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7,10 12,15 17,10"/>
+                                <line x1="12" x2="12" y1="15" y2="3"/>
+                            </svg>
+                            Download All
+                        </button>
+                    </div>
+                    <div class="album-tracks-list" id="album-tracks-list">
+                        <!-- Tracks will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Playlist Tracks Modal -->
+    <div class="playlist-modal-overlay" id="playlist-modal-overlay">
+        <div class="playlist-modal">
+            <div class="playlist-modal-header">
+                <button class="playlist-modal-close" id="playlist-modal-close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+                <div class="playlist-modal-cover" id="playlist-modal-cover">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" x2="21" y1="6" y2="6"/>
+                        <line x1="8" x2="21" y1="12" y2="12"/>
+                        <line x1="8" x2="21" y1="18" y2="18"/>
+                        <line x1="3" x2="3.01" y1="6" y2="6"/>
+                        <line x1="3" x2="3.01" y1="12" y2="12"/>
+                        <line x1="3" x2="3.01" y1="18" y2="18"/>
+                    </svg>
+                </div>
+                <div class="playlist-modal-info">
+                    <div class="playlist-modal-title" id="playlist-modal-title">Playlist Title</div>
+                    <div class="playlist-modal-artist" id="playlist-modal-artist">Creator Name</div>
+                    <div class="playlist-modal-meta">
+                        <span id="playlist-modal-year">2023</span>
+                        <span id="playlist-modal-tracks">12 tracks</span>
+                    </div>
+                </div>
+            </div>
+            <div class="playlist-modal-body">
+                <div class="playlist-modal-loading" id="playlist-modal-loading">
+                    <div class="playlist-modal-loading-spinner">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                        </svg>
+                    </div>
+                    <div class="playlist-modal-loading-text">Loading playlist tracks...</div>
+                </div>
+                <div class="playlist-tracks-container" id="playlist-tracks-container" style="display: none;">
+                    <div class="playlist-tracks-header">
+                        <div class="playlist-tracks-title">Playlist Tracks</div>
+                        <button class="playlist-download-all-btn" id="playlist-download-all-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7,10 12,15 17,10"/>
+                                <line x1="12" x2="12" y1="15" y2="3"/>
+                            </svg>
+                            Download All
+                        </button>
+                    </div>
+                    <div class="playlist-tracks-list" id="playlist-modal-tracks-list">
+                        <!-- Tracks will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- View All Modal -->
+    <div class="view-all-modal-overlay" id="view-all-modal-overlay">
+        <div class="view-all-modal">
+            <div class="view-all-modal-header">
+                <button class="view-all-modal-close" id="view-all-modal-close">×</button>
+                <div class="view-all-modal-title" id="view-all-modal-title">Content</div>
+                <div class="view-all-modal-subtitle" id="view-all-modal-subtitle">Deezer</div>
+            </div>
+            <div class="view-all-modal-body">
+                <div class="view-all-loading" id="view-all-loading">
+                    <div class="view-all-loading-spinner"></div>
+                    <div class="view-all-loading-text">Loading content...</div>
+                </div>
+                <div class="view-all-content" id="view-all-content" style="display: none;">
+                    <div class="view-all-grid" id="view-all-grid">
+                        <!-- Content will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>    
+
+    <div class="notification" id="notification"></div>
+
+    <!-- Player bar -->
+    <div class="player-bar" id="player-bar">
+        <div class="player-cover" id="player-cover">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" stroke="none">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" opacity="0.7"/>
+                <circle cx="10" cy="19" r="2" opacity="0.9"/>
+            </svg>
+        </div>
+        <div class="player-meta">
+            <div class="player-title" id="player-title">Nothing playing</div>
+            <div class="player-artist" id="player-artist"></div>
+        </div>
+        <div class="player-controls">
+            <button class="player-btn" id="player-prev">⏮</button>
+            <button class="player-btn" id="player-toggle">▶</button>
+            <button class="player-btn" id="player-next">⏭</button>
+        </div>
+        <div class="player-seek">
+            <span class="player-time" id="player-current">0:00</span>
+            <input type="range" min="0" max="100" value="0" id="player-seek" class="player-range">
+            <span class="player-time" id="player-duration">0:00</span>
+        </div>
+        <input type="range" min="0" max="1" step="0.01" value="1" id="player-volume" class="player-volume">
+        <audio id="audio-el" preload="none"></audio>
+    </div>
+
+    <!-- Fullscreen Player -->
+    <div class="player-fullscreen-overlay" id="player-fs-overlay">
+        <div class="player-fullscreen">
+            <div class="pf-backdrop" id="pf-backdrop"></div>
+            <div class="pf-left">
+                <div class="pf-cover" id="pf-cover">
+                    <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor" stroke="none">
+                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" opacity="0.7"/>
+                        <path d="M12 15.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4c0-.55-.45-1-1-1h-1V3c0-.55-.45-1-1-1h-4c-.55 0-1 .45-1 1v12.55z" opacity="0.4"/>
+                        <circle cx="10" cy="19" r="2" opacity="0.9"/>
+                    </svg>
+                </div>
+                <div class="pf-meta">
+                    <div class="pf-title" id="pf-title">Nothing playing</div>
+                    <div class="pf-artist" id="pf-artist"></div>
+                    <div class="pf-sub">
+                        <span id="pf-album"></span>
+                        <span class="pf-badge" id="pf-quality" title="Stream quality"></span>
+                    </div>
+                <div class="pf-controls">
+                        <button class="pf-btn pf-btn--icon" id="pf-prev" aria-label="Previous">⏮</button>
+                        <button class="pf-btn pf-btn--primary" id="pf-toggle" aria-label="Play/Pause">▶</button>
+                        <button class="pf-btn pf-btn--icon" id="pf-next" aria-label="Next">⏭</button>
+                    </div>
+                    <div class="pf-seek">
+                        <span class="pf-time" id="pf-current">0:00</span>
+                        <input type="range" min="0" max="100" value="0" id="pf-seek" class="player-range">
+                        <span class="pf-time" id="pf-duration">0:00</span>
+                    </div>
+                    <div class="pf-volume">
+                        <svg class="pf-volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M11 5l-5 4H3v6h3l5 4V5z"/>
+                            <path d="M19 8a5 5 0 0 1 0 8"/>
+                            <path d="M16 5a9 9 0 0 1 0 14"/>
+                        </svg>
+                        <input type="range" min="0" max="1" step="0.01" value="1" id="pf-volume" class="pf-volume-range">
+                    </div>
+                </div>
+            </div>
+            <div class="pf-resizer" id="pf-resizer" role="separator" aria-orientation="vertical" aria-label="Resize panels" tabindex="0"></div>
+            <div class="pf-right">
+                <div class="pf-header">
+                    <div class="pf-title-small">Queue</div>
+                    <div class="pf-chips">
+                        <button class="pf-chip" id="pf-repeat">Repeat</button>
+                        <button class="pf-chip" id="pf-shuffle">Shuffle</button>
+                    </div>
+                    <div class="pf-actions">
+                        <button class="pf-icon-btn" id="pf-hide-queue" title="Hide queue" aria-label="Hide queue">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18l6-6l-6-6"/>
+                            </svg>
+                        </button>
+                        <button class="pf-icon-btn" id="pf-download-all" title="Download All">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7,10 12,15 17,10"/>
+                                <line x1="12" x2="12" y1="15" y2="3"/>
+                            </svg>
+                        </button>
+                        <button class="pf-icon-btn" id="pf-clear" title="Clear Queue" aria-label="Clear Queue">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1-2-2h4a2 2 0 0 1 2 2v2"/>
+                                <line x1="10" x2="10" y1="11" y2="17"/>
+                                <line x1="14" x2="14" y1="11" y2="17"/>
+                            </svg>
+                        </button>
+                        <button class="pf-icon-btn" id="pf-close" title="Close player">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 6L18 18M6 18L18 6"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="pf-queue" id="pf-queue"></div>
+            </div>
+            <button class="pf-reveal-queue" id="pf-reveal-queue" title="Show queue" aria-label="Show queue">
+                <svg class="icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="8" x2="21" y1="6" y2="6"/>
+                    <line x1="8" x2="21" y1="12" y2="12"/>
+                    <line x1="8" x2="21" y1="18" y2="18"/>
+                    <line x1="3" x2="3.01" y1="6" y2="6"/>
+                    <line x1="3" x2="3.01" y1="12" y2="12"/>
+                    <line x1="3" x2="3.01" y1="18" y2="18"/>
+                </svg>
+                Queue
+            </button>
+            <button class="pf-floating-close" id="pf-floating-close" title="Close player" aria-label="Close player">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 6L18 18M6 18L18 6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+    <script src="/assets/vendor/embla-carousel.umd.js"></script>
+    <script src="/assets/js/app.js"></script>
+    <script src="/assets/js/results-enhancements.js"></script>
+    <script src="/assets/js/layout-enhancements.js"></script>
+    <script src="/assets/js/mobile-shell.js"></script>
+</body>
+</html>
