@@ -334,6 +334,7 @@ const setupWebServer = () => {
       qobuz,
       parseDeezerUrl: parseInfo,
       parseQobuzUrl,
+      parseToQobuz,
       ensureQobuzSearchReady: () => initQobuzForSearch(),
       ensureDeezerDownloadReady: () => initDeezerForDownload(),
     });

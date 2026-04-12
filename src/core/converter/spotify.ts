@@ -23,6 +23,7 @@ let cachedUserAgent = '';
 let cachedPublicToken: {token: string; expiresAt: number} | null = null;
 let cachedOAuthAppToken: {token: string; expiresAt: number} | null = null;
 let lastSpotifyApiRequestTime = 0;
+const SPOTIFY_SCRAPE_USER_AGENT = 'Mozilla/5.0';
 
 const SPOTIFY_REQUEST_MIN_INTERVAL_MS = 500;
 const DEFAULT_SP_APP_CLIENT_ID = '880ca2262b0447bd82e4ea0b17febc16';
@@ -233,7 +234,7 @@ const parseMetaContent = (html: string, attribute: 'property' | 'name', key: str
 
 const scrapeSpotifyTrackPageMetadata = async (
   id: string,
-  userAgent: string,
+  userAgent = SPOTIFY_SCRAPE_USER_AGENT,
 ): Promise<SpotifyApi.TrackObjectFull | null> => {
   try {
     const response = await withTimeout(
@@ -252,6 +253,7 @@ const scrapeSpotifyTrackPageMetadata = async (
     const title = parseMetaContent(html, 'property', 'og:title');
     const description = parseMetaContent(html, 'property', 'og:description');
     const durationRaw = parseMetaContent(html, 'name', 'music:duration');
+    const musiciansRaw = parseMetaContent(html, 'name', 'music:musician_description');
 
     if (!title || !description) {
       return null;
@@ -261,7 +263,12 @@ const scrapeSpotifyTrackPageMetadata = async (
       .split('·')
       .map((part) => part.trim())
       .filter(Boolean);
-    const artistName = parts[0] || 'Unknown Artist';
+    const artistText = musiciansRaw || parts[0] || 'Unknown Artist';
+    const artistNames = artistText
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const primaryArtist = artistNames[0] || 'Unknown Artist';
     const albumName = parts[1] || 'Unknown Album';
     const durationSeconds = Number(durationRaw || 0);
 
@@ -269,7 +276,9 @@ const scrapeSpotifyTrackPageMetadata = async (
       id,
       name: title,
       duration_ms: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds * 1000 : 0,
-      artists: [{name: artistName} as SpotifyApi.ArtistObjectSimplified],
+      artists: artistNames.length
+        ? artistNames.map((name) => ({name} as SpotifyApi.ArtistObjectSimplified))
+        : [{name: primaryArtist} as SpotifyApi.ArtistObjectSimplified],
       album: {name: albumName} as SpotifyApi.AlbumObjectSimplified,
       external_ids: {},
     } as SpotifyApi.TrackObjectFull;
@@ -277,6 +286,49 @@ const scrapeSpotifyTrackPageMetadata = async (
     console.warn(`⚠️ Spotify track page fallback could not fetch ${id}: ${error.message}`);
     return null;
   }
+};
+
+const fetchSpotifyTracksFromPages = async (
+  ids: string[],
+  onProgress?: (progress: spotifyConversionProgressType) => void,
+): Promise<SpotifyApi.TrackObjectFull[]> => {
+  const pageQueue = new PQueue({concurrency: 6});
+  const total = ids.length;
+  let processed = 0;
+  const tracksById = new Map<string, SpotifyApi.TrackObjectFull>();
+
+  await Promise.all(
+    ids.map((id) =>
+      pageQueue.add(async () => {
+        const track = await scrapeSpotifyTrackPageMetadata(id);
+        processed++;
+
+        emitSpotifyProgress(onProgress, {
+          phase: 'metadata',
+          message: `Loading Spotify track pages... ${processed}/${total}`,
+          current: processed,
+          total,
+          percentage: total > 0 ? Math.round((processed / total) * 100) : 100,
+        });
+
+        if (track) {
+          tracksById.set(id, track);
+        } else {
+          console.warn(`⚠️ Spotify track page metadata could not be parsed for ${id}`);
+        }
+      }),
+    ),
+  );
+
+  const orderedTracks = ids
+    .map((id) => tracksById.get(id))
+    .filter((track): track is SpotifyApi.TrackObjectFull => Boolean(track));
+
+  if (orderedTracks.length === 0 && ids.length > 0) {
+    throw new Error('Spotify track page metadata extraction returned no playable tracks.');
+  }
+
+  return orderedTracks;
 };
 
 const getSpotifyErrorStatus = (error: any): number | undefined =>
@@ -890,7 +942,7 @@ export const getSpotifyPlaylistBundle = async (
     total: snapshot.trackIds.length,
     percentage: 0,
   });
-  const tracks = await fetchSpotifyTracksByIds(snapshot.trackIds, onProgress);
+  const tracks = await fetchSpotifyTracksFromPages(snapshot.trackIds, onProgress);
   emitSpotifyProgress(onProgress, {
     phase: 'metadata',
     message: `Resolved ${tracks.length} Spotify tracks.`,
@@ -1237,7 +1289,10 @@ const ensureValidToken = async (): Promise<tokensType> => {
 export const track2deezer = async (id: string) => {
   await ensureValidToken();
   const {body} = await spotifyApi.getTrack(id);
-  return await isrc2deezer(body.name, body.external_ids.isrc);
+  const artistName = body.artists[0]?.name || '';
+  const albumName = body.album?.name;
+  const durationSeconds = body.duration_ms ? Math.round(body.duration_ms / 1000) : undefined;
+  return await isrc2deezer(body.name, body.external_ids.isrc, artistName, albumName, durationSeconds);
 };
 
 /**
@@ -1265,7 +1320,16 @@ export const playlist2Deezer = async (
     spotifyTracks.map((spotifyTrack, index) => {
       return async () => {
         try {
-          const track = await isrc2deezer(spotifyTrack.name, spotifyTrack.external_ids?.isrc);
+          const artistName = spotifyTrack.artists[0]?.name || '';
+          const albumName = spotifyTrack.album?.name;
+          const durationSeconds = spotifyTrack.duration_ms ? Math.round(spotifyTrack.duration_ms / 1000) : undefined;
+          const track = await isrc2deezer(
+            spotifyTrack.name,
+            spotifyTrack.external_ids?.isrc,
+            artistName,
+            albumName,
+            durationSeconds,
+          );
           track.TRACK_POSITION = index + 1;
           tracks.push(track);
         } catch (err: any) {
@@ -1318,7 +1382,10 @@ export const artist2Deezer = async (
     body.tracks.map((item, index) => {
       return async () => {
         try {
-          const track = await isrc2deezer(item.name, item.external_ids.isrc);
+          const artistName = item.artists[0]?.name || '';
+          const albumName = item.album?.name;
+          const durationSeconds = item.duration_ms ? Math.round(item.duration_ms / 1000) : undefined;
+          const track = await isrc2deezer(item.name, item.external_ids.isrc, artistName, albumName, durationSeconds);
           tracks.push(track);
         } catch (err: any) {
           if (onError) {

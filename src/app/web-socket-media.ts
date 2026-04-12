@@ -6,6 +6,7 @@ interface WebSocketMediaDependencies {
   qobuz: any;
   parseDeezerUrl: (url: string) => Promise<any>;
   parseQobuzUrl: (url: string) => Promise<any>;
+  parseToQobuz: (url: string, onProgress?: (progress: any) => void) => Promise<any>;
   ensureQobuzSearchReady: () => Promise<void>;
   ensureDeezerDownloadReady: () => Promise<void>;
 }
@@ -16,6 +17,7 @@ export const registerMediaSocketHandlers = ({
   qobuz,
   parseDeezerUrl,
   parseQobuzUrl,
+  parseToQobuz,
   ensureQobuzSearchReady,
   ensureDeezerDownloadReady,
 }: WebSocketMediaDependencies) => {
@@ -104,9 +106,33 @@ export const registerMediaSocketHandlers = ({
 
   socket.on('getSpotifyPlaylistForEditing', async (data) => {
     try {
-      throw new Error(
-        'Spotify playlist conversion is temporarily disabled due to Spotify authorization and rate-limit changes.',
-      );
+      const targetService = data?.service === 'deezer' ? 'deezer' : 'qobuz';
+      let playlistData: any;
+
+      if (targetService === 'deezer') {
+        await ensureDeezerDownloadReady();
+        playlistData = await parseDeezerUrl(String(data.url));
+      } else {
+        await ensureQobuzSearchReady();
+        playlistData = await parseToQobuz(String(data.url));
+      }
+
+      if (!playlistData || !playlistData.tracks || !Array.isArray(playlistData.tracks)) {
+        throw new Error('Invalid playlist data returned from Spotify conversion');
+      }
+
+      const linkinfo = playlistData.linkinfo as any;
+      socket.emit('playlistTracks', {
+        playlistId: data.playlistId,
+        service: targetService,
+        tracks: playlistData.tracks,
+        playlistInfo: {
+          title: linkinfo?.title || linkinfo?.name || linkinfo?.TITLE || 'Spotify Playlist',
+          artist:
+            linkinfo?.owner?.name || linkinfo?.owner?.id || linkinfo?.PARENT_USERNAME || linkinfo?.artist || 'Spotify',
+          ...linkinfo,
+        },
+      });
     } catch (error: any) {
       console.error('❌ Spotify playlist editing error:', error.message);
       socket.emit('playlistTracksError', {

@@ -72,27 +72,210 @@ interface MatchCriteria {
   isrc?: string | null;
 }
 
+const splitSourceTitle = (title: string): {baseTitle: string; version: string | null} => {
+  const trimmed = String(title || '').trim();
+  const dashParts = trimmed
+    .split(/\s+-\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (dashParts.length > 1) {
+    return {
+      baseTitle: dashParts[0],
+      version: dashParts.slice(1).join(' - '),
+    };
+  }
+
+  return {baseTitle: trimmed, version: null};
+};
+
+const normalizedContains = (left: unknown, right: unknown): boolean => {
+  const a = normalizeForComparison(left);
+  const b = normalizeForComparison(right);
+  if (!a || !b) {
+    return false;
+  }
+  return a.includes(b) || b.includes(a);
+};
+
+const getQobuzCandidateTitle = (candidate: qobuz.types.trackType): string => {
+  const title = candidate.title || '';
+  const version = candidate.version?.trim();
+  if (!version) {
+    return title;
+  }
+
+  return title.includes(version) ? title : `${title} ${version}`.trim();
+};
+
+const splitArtistCandidates = (artist?: string | null): string[] => {
+  if (!artist) {
+    return [];
+  }
+
+  const variants = new Set<string>();
+  const normalized = artist.trim();
+  if (normalized) {
+    variants.add(normalized);
+  }
+
+  normalized
+    .split(/\s*(?:,|;|\/)\s*/g)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .forEach((value) => {
+      variants.add(value);
+
+      const withoutInlineFeat = value.replace(/\s+(?:feat\.?|ft\.?|featuring)\s+.*$/i, '').trim();
+      if (withoutInlineFeat) {
+        variants.add(withoutInlineFeat);
+      }
+
+      const withoutBracketFeat = value.replace(/\((?:feat\.?|ft\.?|featuring)[^)]+\)/i, '').trim();
+      if (withoutBracketFeat) {
+        variants.add(withoutBracketFeat);
+      }
+    });
+
+  return Array.from(variants);
+};
+
+const buildArtistSearchVariants = (artist?: string | null): string[] => {
+  const variants = new Set<string>(splitArtistCandidates(artist));
+
+  for (const variant of Array.from(variants)) {
+    variant
+      .split(/\s+(?:&|and|x|X)\s+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .forEach((value) => variants.add(value));
+  }
+
+  return Array.from(variants);
+};
+
+const buildTitleVariants = (title: string): string[] => {
+  const variants = new Set<string>();
+  const push = (value?: string | null) => {
+    const trimmed = String(value || '').trim();
+    if (trimmed) {
+      variants.add(trimmed);
+    }
+  };
+
+  push(title);
+
+  const withoutBrackets = title.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+  push(withoutBrackets.replace(/\s+/g, ' ').trim());
+
+  const withoutFeat = title.replace(/\b(feat|ft)\..*$/i, '').trim();
+  push(withoutFeat);
+
+  const {baseTitle} = splitSourceTitle(title);
+  if (baseTitle && baseTitle !== title) {
+    push(baseTitle);
+  }
+
+  return Array.from(variants);
+};
+
+const buildSearchQueries = (expected: MatchCriteria): Array<{query: string; limit: number}> => {
+  const queries: Array<{query: string; limit: number}> = [];
+  const seen = new Set<string>();
+  const titleVariants = buildTitleVariants(expected.title);
+  const artistVariants = buildArtistSearchVariants(expected.artist);
+
+  const push = (query: string | undefined, limit: number) => {
+    const trimmed = String(query || '').trim();
+    if (!trimmed) {
+      return;
+    }
+    const normalized = normalizeForComparison(trimmed);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    queries.push({query: trimmed, limit});
+  };
+
+  for (const titleVariant of titleVariants) {
+    for (const artistVariant of artistVariants) {
+      push(`${artistVariant} ${titleVariant}`, 25);
+    }
+    push(titleVariant, 25);
+  }
+
+  for (const artistVariant of artistVariants) {
+    push(artistVariant, 50);
+  }
+
+  if (expected.album) {
+    for (const artistVariant of artistVariants) {
+      push(`${artistVariant} ${expected.album}`, 25);
+    }
+    push(expected.album, 25);
+  }
+
+  return queries;
+};
+
 const isHighConfidenceMatch = (candidate: qobuz.types.trackType, expected: MatchCriteria): boolean => {
-  const candidateTitle = candidate.title || '';
+  const {baseTitle, version: expectedVersion} = splitSourceTitle(expected.title);
+  const candidateTitle = getQobuzCandidateTitle(candidate);
+  const candidateBaseTitle = candidate.title || '';
+  const candidateVersion = candidate.version || '';
   const candidateArtist = candidate.performer?.name || candidate.album?.artist?.name || '';
   const candidateAlbum = (candidate.album as any)?.title || (candidate.album as any)?.name || '';
   const candidateDuration = Number(candidate.duration ?? (candidate as any)?.streamable?.duration ?? 0);
+  const normalizedExpectedVersion = normalizeForComparison(expectedVersion);
+  const softVersionExpected =
+    normalizedExpectedVersion === 'mixed' ||
+    normalizedExpectedVersion === 'mix' ||
+    normalizedExpectedVersion === 'dj mix' ||
+    normalizedExpectedVersion === 'continuous mix';
 
-  const titleScore = similarityScore(candidateTitle, expected.title);
+  const titleVariants = buildTitleVariants(expected.title);
+  const titleScore = Math.max(
+    ...titleVariants.map((variant) => similarityScore(candidateTitle, variant)),
+    similarityScore(candidateBaseTitle, baseTitle),
+  );
   if (titleScore < 0.97) {
     return false;
   }
 
+  if (expectedVersion && !softVersionExpected) {
+    const versionScore = Math.max(
+      similarityScore(candidateVersion, expectedVersion),
+      similarityScore(candidateTitle, expected.title),
+      similarityScore(candidateAlbum, expectedVersion),
+    );
+    const versionContained =
+      normalizedContains(candidateVersion, expectedVersion) ||
+      normalizedContains(candidateTitle, expectedVersion) ||
+      normalizedContains(candidateAlbum, expectedVersion);
+
+    if (versionScore < 0.82 && !versionContained) {
+      return false;
+    }
+  }
+
   if (expected.artist) {
-    const artistScore = similarityScore(candidateArtist, expected.artist);
+    const artistVariants = splitArtistCandidates(expected.artist);
+    const artistScore = Math.max(...artistVariants.map((variant) => similarityScore(candidateArtist, variant)));
     if (artistScore < 0.94) {
       return false;
     }
   }
 
   if (expected.album && candidateAlbum) {
-    const albumScore = similarityScore(candidateAlbum, expected.album);
-    if (albumScore < 0.9) {
+    const albumVariants = [expected.album, baseTitle, expected.title].filter(Boolean);
+    const albumScore = Math.max(...albumVariants.map((variant) => similarityScore(candidateAlbum, variant)));
+    const albumContained = albumVariants.some((variant) => normalizedContains(candidateAlbum, variant));
+    const strongTitleMatch = titleScore >= 0.992;
+    const strongDurationMatch =
+      !expected.durationSeconds || !candidateDuration || Math.abs(candidateDuration - expected.durationSeconds) <= 1;
+
+    if (albumScore < 0.8 && !albumContained && !(strongTitleMatch && strongDurationMatch)) {
       return false;
     }
   }
@@ -152,21 +335,7 @@ export const searchQobuzTrack = async (
     durationSeconds: durationSeconds ?? null,
   };
   const tryPick = (items?: qobuz.types.trackType[]) => pickMatchingTrack(items, expected);
-  const queries: Array<{query: string; limit: number}> = [];
-  if (artist) {
-    const combined = `${artist} ${name}`.trim();
-    if (combined) {
-      queries.push({query: combined, limit: 25});
-    }
-  }
-
-  if (name) {
-    queries.push({query: name, limit: 25});
-  }
-
-  if (artist) {
-    queries.push({query: artist, limit: 50});
-  }
+  const queries = buildSearchQueries(expected);
 
   for (const {query, limit} of queries) {
     if (!query) {
@@ -174,21 +343,6 @@ export const searchQobuzTrack = async (
     }
 
     const result = await qobuz.searchMusic(query, 'track', limit);
-    const match = tryPick(result?.tracks?.items);
-    if (match) {
-      return match;
-    }
-  }
-
-  const cleanName = name
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\[[^\]]*\]/g, '')
-    .replace(/feat\..*$/i, '')
-    .replace(/ft\..*$/i, '')
-    .trim();
-
-  if (cleanName && cleanName !== name) {
-    const result = await qobuz.searchMusic(cleanName, 'track', 25);
     const match = tryPick(result?.tracks?.items);
     if (match) {
       return match;
@@ -238,35 +392,10 @@ export const isrc2qobuz = async (
     }
   }
 
-  const combinedQuery = artist ? `${artist} ${name}`.trim() : name;
-  const matchByCombined = await trySearch(combinedQuery, 25);
-  if (matchByCombined) {
-    return matchByCombined;
-  }
-
-  const matchByName = await trySearch(name, 25);
-  if (matchByName) {
-    return matchByName;
-  }
-
-  if (artist) {
-    const matchByArtist = await trySearch(artist, 50);
-    if (matchByArtist) {
-      return matchByArtist;
-    }
-  }
-
-  const cleanName = name
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\[[^\]]*\]/g, '')
-    .replace(/feat\..*$/i, '')
-    .replace(/ft\..*$/i, '')
-    .trim();
-
-  if (cleanName && cleanName !== name) {
-    const matchByCleanName = await trySearch(cleanName, 25);
-    if (matchByCleanName) {
-      return matchByCleanName;
+  for (const {query, limit} of buildSearchQueries(expected)) {
+    const match = await trySearch(query, limit);
+    if (match) {
+      return match;
     }
   }
 
@@ -282,7 +411,7 @@ export const isrc2qobuz = async (
   }
 
   if (!normalizedIsrc) {
-    throw new Error('ISRC code not found for ' + name);
+    throw new Error(`No match on Qobuz for ${name}${artist ? ' by ' + artist : ''}`);
   }
 
   throw new Error(`No match on Qobuz for ${name} (ISRC: ${normalizedIsrc})`);
@@ -327,7 +456,10 @@ export const upc2qobuz = async (
  */
 export const track2qobuz = async (id: string): Promise<qobuz.types.trackType> => {
   const {body} = await spotify.spotifyApi.getTrack(id);
-  const artistName = body.artists[0]?.name || '';
+  const artistName = body.artists
+    .map((artist) => artist.name)
+    .filter(Boolean)
+    .join(', ');
   const albumName = body.album?.name;
   const durationSeconds = body.duration_ms ? Math.round(body.duration_ms / 1000) : undefined;
   return await isrc2qobuz(body.name, body.external_ids?.isrc, artistName, albumName, durationSeconds);
@@ -381,7 +513,10 @@ export const playlist2Qobuz = async (
     spotifyTracks.map((item: SpotifyApi.TrackObjectFull, index: number) => {
       return async () => {
         try {
-          const artistName = item.artists[0]?.name || '';
+          const artistName = item.artists
+            .map((artist) => artist.name)
+            .filter(Boolean)
+            .join(', ');
           const durationSeconds = item.duration_ms ? Math.round(item.duration_ms / 1000) : undefined;
           const albumName = item.album?.name;
           const track = await isrc2qobuz(item.name, item.external_ids?.isrc, artistName, albumName, durationSeconds);
@@ -461,7 +596,10 @@ export const artist2Qobuz = async (
     body.tracks.map((item: SpotifyApi.TrackObjectFull, index: number) => {
       return async () => {
         try {
-          const artistName = item.artists[0]?.name || '';
+          const artistName = item.artists
+            .map((artist) => artist.name)
+            .filter(Boolean)
+            .join(', ');
           const albumName = item.album?.name;
           const durationSeconds = item.duration_ms ? Math.round(item.duration_ms / 1000) : undefined;
           const track = await isrc2qobuz(item.name, item.external_ids?.isrc, artistName, albumName, durationSeconds);

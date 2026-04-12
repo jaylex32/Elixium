@@ -1423,7 +1423,7 @@
 
                 if (playlistsGrid) {
                     if (!watchedPlaylists.length) {
-                        playlistsGrid.innerHTML = '<div class="watchlist-empty">Paste a Qobuz playlist URL above to monitor it for new tracks.</div>';
+                        playlistsGrid.innerHTML = '<div class="watchlist-empty">Paste a Qobuz, Spotify, Deezer, or TIDAL playlist URL above to monitor it for new tracks.</div>';
                     } else {
                         playlistsGrid.innerHTML = watchedPlaylists
                             .map((playlist) => `
@@ -1451,13 +1451,13 @@
                                         </div>
                                         <small>${playlist.lastError ? this.escapeHtml(playlist.lastError) : (playlist.lastCheckedAt ? `Checked ${this.escapeHtml(new Date(playlist.lastCheckedAt).toLocaleString())}` : 'Not checked yet')}</small>
                                         <div class="watchlist-artist-rule-row">
-                                            <button class="watchlist-rule-chip ${playlist.rules?.autoQueueTracks ? 'active' : ''}" type="button" data-watchlist-playlist-auto="${this.escapeHtml(String(playlist.id))}" ${playlist.service === 'spotify' ? 'disabled' : ''}>
+                                            <button class="watchlist-rule-chip ${playlist.rules?.autoQueueTracks ? 'active' : ''}" type="button" data-watchlist-playlist-auto="${this.escapeHtml(String(playlist.id))}">
                                                 ${playlist.rules?.autoQueueTracks ? 'Scheduled Download On' : 'Schedule Downloads'}
                                             </button>
                                         </div>
                                         <div class="watchlist-artist-action-row">
-                                            <button class="watchlist-artist-mini-btn" type="button" data-watchlist-playlist-download="${this.escapeHtml(String(playlist.id))}" ${playlist.service === 'spotify' ? 'disabled' : ''}>Download New</button>
-                                            <button class="watchlist-artist-mini-btn" type="button" data-watchlist-playlist-queue="${this.escapeHtml(String(playlist.id))}" ${playlist.service === 'spotify' ? 'disabled' : ''}>Queue New</button>
+                                            <button class="watchlist-artist-mini-btn" type="button" data-watchlist-playlist-download="${this.escapeHtml(String(playlist.id))}">Download New</button>
+                                            <button class="watchlist-artist-mini-btn" type="button" data-watchlist-playlist-queue="${this.escapeHtml(String(playlist.id))}">Queue New</button>
                                         </div>
                                     </div>
                                 </article>
@@ -8076,15 +8076,6 @@ createDiscoveryCard(item, service = this.homeService) {
                     return;
                 }
 
-                const isSpotifyPlaylistUrl = /(?:open\.spotify\.com\/playlist\/|spotify:playlist:)/i.test(url);
-                if (isSpotifyPlaylistUrl) {
-                    this.showNotification(
-                        'Spotify playlist conversion is temporarily disabled due to Spotify authorization and rate-limit changes.',
-                        'error'
-                    );
-                    return;
-                }
-
                 // Check if this is a playlist URL and if playlist editor is enabled
                 const isPlaylistUrl = url.includes('/playlist/') || url.includes('album/') || url.includes('artist/');
                 const isPlaylistEditorEnabled = document.getElementById('enable-playlist-editor')?.checked;
@@ -8111,15 +8102,6 @@ createDiscoveryCard(item, service = this.homeService) {
 
             async fetchPlaylistForEditing(url) {
                 try {
-                    if (/(?:open\.spotify\.com\/playlist\/|spotify:playlist:)/i.test(url)) {
-                        this.showNotification(
-                            'Spotify playlist conversion is temporarily disabled due to Spotify authorization and rate-limit changes.',
-                            'error'
-                        );
-                        this.resetUrlButton();
-                        return;
-                    }
-
                     // Show loading state
                     const urlBtn = document.getElementById('url-download-btn');
                     urlBtn.querySelector('span').textContent = 'Loading playlist...';

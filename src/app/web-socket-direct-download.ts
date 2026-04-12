@@ -23,9 +23,6 @@ export const registerDirectDownloadSocketHandler = ({
   downloadQobuzTracks,
   downloadDeezerTracks,
 }: WebSocketDirectDownloadDependencies) => {
-  const isSpotifyPlaylistUrl = (url: string): boolean =>
-    /(?:open\.spotify\.com\/playlist\/|spotify:playlist:)/i.test(url);
-
   socket.on('directUrlDownload', async (data) => {
     try {
       let parsedData: any;
@@ -72,12 +69,6 @@ export const registerDirectDownloadSocketHandler = ({
       console.log('🚀 Direct URL download started');
       console.log('📄 URL:', data.url);
       console.log('🎵 Selected service:', data.service);
-
-      if (isSpotifyPlaylistUrl(data.url)) {
-        throw new Error(
-          'Spotify playlist conversion is temporarily disabled due to Spotify authorization and rate-limit changes.',
-        );
-      }
 
       if (
         data.url.includes('spotify.com') ||

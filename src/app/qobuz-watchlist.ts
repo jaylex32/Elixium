@@ -426,15 +426,9 @@ export const createQobuzWatchlistService = ({
       };
     }
 
-    if (playlist.service === 'spotify') {
-      throw new Error(
-        'Spotify playlist monitoring is temporarily disabled due to Spotify authorization and rate-limit changes.',
-      );
-    }
-
     await ensureQobuzSearchReady();
     const parsedData = await parseToQobuz(String(playlist.url));
-    if (parsedData.linktype !== 'qobuz-playlist') {
+    if (!['qobuz-playlist', 'spotify-playlist'].includes(parsedData.linktype)) {
       throw new Error(`Unsupported monitored playlist type: ${playlist.service}`);
     }
 
@@ -654,43 +648,6 @@ export const createQobuzWatchlistService = ({
       throw new Error('That URL is not a supported playlist link.');
     }
 
-    if (playlistService === 'spotify') {
-      const state = store.update((draft) => {
-        const existing = draft.watchedPlaylists.find(
-          (entry) => String(entry.id) === String(info.id) && entry.service === playlistService,
-        );
-        if (existing) {
-          existing.url = String(url);
-          existing.status = 'coming-soon';
-          existing.lastError = `Playlist monitoring for ${playlistService.toUpperCase()} is coming soon.`;
-          return;
-        }
-
-        draft.watchedPlaylists.unshift({
-          id: String(info.id),
-          url: String(url),
-          title: `${playlistService.toUpperCase()} Playlist`,
-          owner: '',
-          service: playlistService,
-          image: '',
-          lastCheckedAt: null,
-          status: 'coming-soon',
-          lastTrackCount: 0,
-          lastError: `Playlist monitoring for ${playlistService.toUpperCase()} is coming soon.`,
-          rules: {
-            autoQueueTracks: false,
-          },
-        });
-      });
-      pushMonitorHistory(
-        'playlists',
-        'info',
-        `Added ${playlistService.toUpperCase()} playlist monitor`,
-        'Monitoring is coming soon for this service.',
-      );
-      return enrichState(state);
-    }
-
     const {playlistInfo, tracks} = await fetchWatchedPlaylistSource({
       id: String(info.id),
       url: String(url),
@@ -837,18 +794,6 @@ export const createQobuzWatchlistService = ({
     const current = store.getState();
     const watchedPlaylist = current.watchedPlaylists.find((entry) => String(entry.id) === String(playlistId));
     if (!watchedPlaylist) return {state: getState(), queueItems: [] as any[]};
-
-    if (watchedPlaylist.service === 'spotify') {
-      const state = store.update((draft) => {
-        const playlist = draft.watchedPlaylists.find((entry) => String(entry.id) === String(playlistId));
-        if (playlist) {
-          playlist.status = 'coming-soon';
-          playlist.lastCheckedAt = new Date().toISOString();
-          playlist.lastError = `${playlist.service.toUpperCase()} playlist monitoring is coming soon.`;
-        }
-      });
-      return {state: enrichState(state), queueItems: [] as any[]};
-    }
 
     store.update((draft) => {
       const playlist = draft.watchedPlaylists.find((entry) => String(entry.id) === String(playlistId));
