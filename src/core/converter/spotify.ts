@@ -227,9 +227,42 @@ const decodeHtmlEntities = (value: string): string =>
 
 const parseMetaContent = (html: string, attribute: 'property' | 'name', key: string): string | null => {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`<meta\\s+${attribute}="${escapedKey}"\\s+content="([^"]*)"`, 'i');
-  const match = html.match(regex);
-  return match?.[1] ? decodeHtmlEntities(match[1]) : null;
+  const patterns = [
+    new RegExp(`<meta\\b[^>]*\\b${attribute}=["']${escapedKey}["'][^>]*\\bcontent=["']([^"']*)["'][^>]*>`, 'i'),
+    new RegExp(`<meta\\b[^>]*\\bcontent=["']([^"']*)["'][^>]*\\b${attribute}=["']${escapedKey}["'][^>]*>`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      return decodeHtmlEntities(match[1]);
+    }
+  }
+
+  return null;
+};
+
+const parseSpotifyJsonLd = (
+  html: string,
+): {title: string | null; description: string | null; datePublished: string | null} => {
+  const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
+  if (!match?.[1]) {
+    return {title: null, description: null, datePublished: null};
+  }
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    const data = Array.isArray(parsed)
+      ? parsed.find((entry) => entry && typeof entry === 'object') || {}
+      : parsed || {};
+    return {
+      title: typeof data.name === 'string' ? decodeHtmlEntities(data.name) : null,
+      description: typeof data.description === 'string' ? decodeHtmlEntities(data.description) : null,
+      datePublished: typeof data.datePublished === 'string' ? data.datePublished : null,
+    };
+  } catch {
+    return {title: null, description: null, datePublished: null};
+  }
 };
 
 const scrapeSpotifyTrackPageMetadata = async (
@@ -250,9 +283,14 @@ const scrapeSpotifyTrackPageMetadata = async (
     );
 
     const html = String(response.data || '');
-    const title = parseMetaContent(html, 'property', 'og:title');
-    const description = parseMetaContent(html, 'property', 'og:description');
+    const jsonLd = parseSpotifyJsonLd(html);
+    const title = parseMetaContent(html, 'property', 'og:title') || jsonLd.title;
+    const description =
+      parseMetaContent(html, 'property', 'og:description') ||
+      parseMetaContent(html, 'name', 'description') ||
+      jsonLd.description;
     const durationRaw = parseMetaContent(html, 'name', 'music:duration');
+    const releaseDate = parseMetaContent(html, 'name', 'music:release_date') || jsonLd.datePublished;
     const musiciansRaw = parseMetaContent(html, 'name', 'music:musician_description');
 
     if (!title || !description) {
@@ -263,13 +301,14 @@ const scrapeSpotifyTrackPageMetadata = async (
       .split('·')
       .map((part) => part.trim())
       .filter(Boolean);
-    const artistText = musiciansRaw || parts[0] || 'Unknown Artist';
+
+    const artistText = musiciansRaw || (description.startsWith('Listen to ') ? parts[1] : parts[0]) || 'Unknown Artist';
     const artistNames = artistText
       .split(',')
       .map((part) => part.trim())
       .filter(Boolean);
     const primaryArtist = artistNames[0] || 'Unknown Artist';
-    const albumName = parts[1] || 'Unknown Album';
+    const albumName = !description.startsWith('Listen to ') && parts[1] ? parts[1] : 'Unknown Album';
     const durationSeconds = Number(durationRaw || 0);
 
     return {
@@ -279,7 +318,7 @@ const scrapeSpotifyTrackPageMetadata = async (
       artists: artistNames.length
         ? artistNames.map((name) => ({name} as SpotifyApi.ArtistObjectSimplified))
         : [{name: primaryArtist} as SpotifyApi.ArtistObjectSimplified],
-      album: {name: albumName} as SpotifyApi.AlbumObjectSimplified,
+      album: {name: albumName, release_date: releaseDate || undefined} as SpotifyApi.AlbumObjectSimplified,
       external_ids: {},
     } as SpotifyApi.TrackObjectFull;
   } catch (error: any) {
@@ -287,7 +326,6 @@ const scrapeSpotifyTrackPageMetadata = async (
     return null;
   }
 };
-
 const fetchSpotifyTracksFromPages = async (
   ids: string[],
   onProgress?: (progress: spotifyConversionProgressType) => void,
