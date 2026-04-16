@@ -1,6 +1,7 @@
 import {existsSync, readdirSync} from 'fs';
 import path from 'path';
-import {getUrlParts} from '../core';
+import {getUrlParts, tidal} from '../core';
+import {getSpotifyPlaylistBundle} from '../core/converter/spotify';
 import type Config from '../lib/config';
 import {parseToQobuz} from '../lib/to-qobuz-parser';
 import type {
@@ -59,6 +60,33 @@ const buildTrackKey = (artist: string, title: string) => buildAlbumKey(artist, t
 const WATCHLIST_ARTIST_ALBUM_PAGE_SIZE = 100;
 const WATCHLIST_PLAYLIST_TRACK_PAGE_SIZE = 100;
 const SCHEDULER_TICK_MS = 60_000;
+
+const normalizePlaylistImage = (...values: unknown[]) => {
+  for (const value of values) {
+    const normalized = String(value || '').trim();
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const extractPlaylistTrackImage = (tracks: any[]) => {
+  if (!Array.isArray(tracks)) return '';
+  for (const track of tracks) {
+    const image = normalizePlaylistImage(
+      track?.album?.image?.large,
+      track?.album?.image?.thumbnail,
+      track?.album?.image?.small,
+      track?.image,
+      track?.rawData?.album?.image?.large,
+      track?.rawData?.album?.image?.thumbnail,
+      track?.rawData?.album?.image?.small,
+      track?.rawData?.album?.cover,
+      track?.rawData?.cover,
+    );
+    if (image) return image;
+  }
+  return '';
+};
 
 const collectFilesystemTokens = (rootPath: string) => {
   const names = new Set<string>();
@@ -402,6 +430,35 @@ export const createQobuzWatchlistService = ({
     return {playlistInfo, tracks: Array.from(trackById.values())};
   };
 
+  const fetchSpotifyWatchlistPlaylistMeta = async (playlistId: string) => {
+    try {
+      const bundle = await getSpotifyPlaylistBundle(String(playlistId));
+      return {
+        id: String(bundle.id || playlistId),
+        title: String(bundle.name || 'Playlist'),
+        owner: String(bundle.ownerName || bundle.ownerId || 'Spotify'),
+        image: normalizePlaylistImage(bundle.imageUrl),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchTidalWatchlistPlaylistMeta = async (playlistId: string) => {
+    try {
+      const playlistInfo = await tidal.getPlaylist(String(playlistId));
+      const imageUrls = playlistInfo?.image ? tidal.albumArtToUrl(String(playlistInfo.image)) : null;
+      return {
+        id: String(playlistInfo?.uuid || playlistId),
+        title: String(playlistInfo?.title || 'Playlist'),
+        owner: String(playlistInfo?.creator?.id || 'TIDAL'),
+        image: normalizePlaylistImage(imageUrls?.xl, imageUrls?.lg, imageUrls?.md, imageUrls?.sm),
+      };
+    } catch {
+      return null;
+    }
+  };
+
   const fetchWatchedPlaylistSource = async (playlist: {
     id: string;
     url: string;
@@ -414,7 +471,7 @@ export const createQobuzWatchlistService = ({
           id: String(playlist.id),
           title: String(playlistInfo?.name || playlistInfo?.title || 'Playlist'),
           owner: String(playlistInfo?.owner?.name || playlistInfo?.owner?.display_name || ''),
-          image: String(
+          image: normalizePlaylistImage(
             playlistInfo?.image_rectangle?.[0]?.url ||
               playlistInfo?.images300?.[0] ||
               playlistInfo?.images150?.[0] ||
@@ -432,17 +489,35 @@ export const createQobuzWatchlistService = ({
       throw new Error(`Unsupported monitored playlist type: ${playlist.service}`);
     }
 
+    const spotifyMeta = playlist.service === 'spotify' ? await fetchSpotifyWatchlistPlaylistMeta(playlist.id) : null;
+    const tidalMeta = playlist.service === 'tidal' ? await fetchTidalWatchlistPlaylistMeta(playlist.id) : null;
+    const fallbackMeta = spotifyMeta || tidalMeta;
+    const trackImage = extractPlaylistTrackImage(parsedData.tracks || []);
+    const playlistImage =
+      playlist.service === 'tidal'
+        ? normalizePlaylistImage(
+            trackImage,
+            parsedData.linkinfo?.image?.large,
+            parsedData.linkinfo?.image?.thumbnail,
+            parsedData.linkinfo?.image?.small,
+            fallbackMeta?.image,
+          )
+        : normalizePlaylistImage(
+            fallbackMeta?.image,
+            parsedData.linkinfo?.image?.large,
+            parsedData.linkinfo?.image?.thumbnail,
+            parsedData.linkinfo?.image?.small,
+            trackImage,
+          );
+
     return {
       playlistInfo: {
-        id: String(parsedData.linkinfo?.id || playlist.id),
-        title: String(parsedData.linkinfo?.title || parsedData.linkinfo?.name || 'Playlist'),
-        owner: String(parsedData.linkinfo?.owner?.name || parsedData.linkinfo?.owner?.id || playlist.service),
-        image: String(
-          parsedData.linkinfo?.image?.large ||
-            parsedData.linkinfo?.image?.thumbnail ||
-            parsedData.linkinfo?.image?.small ||
-            '',
+        id: String(parsedData.linkinfo?.id || fallbackMeta?.id || playlist.id),
+        title: String(parsedData.linkinfo?.title || parsedData.linkinfo?.name || fallbackMeta?.title || 'Playlist'),
+        owner: String(
+          parsedData.linkinfo?.owner?.name || parsedData.linkinfo?.owner?.id || fallbackMeta?.owner || playlist.service,
         ),
+        image: playlistImage,
       },
       tracks: parsedData.tracks || [],
     };

@@ -187,6 +187,46 @@ type spclientPlaylistResponseType = {
   };
 };
 
+type spotifyMetadataTrackExternalIdType = {
+  type?: string;
+  id?: string;
+};
+
+type spotifyMetadataTrackImageType = {
+  file_id?: string;
+  size?: string;
+  width?: number;
+  height?: number;
+};
+
+type spotifyMetadataTrackArtistType = {
+  gid?: string;
+  name?: string;
+};
+
+type spotifyMetadataTrackResponseType = {
+  gid?: string;
+  name?: string;
+  album?: {
+    gid?: string;
+    name?: string;
+    artist?: spotifyMetadataTrackArtistType[];
+    date?: {
+      year?: number;
+      month?: number;
+      day?: number;
+    };
+    cover_group?: {
+      image?: spotifyMetadataTrackImageType[];
+    };
+  };
+  artist?: spotifyMetadataTrackArtistType[];
+  duration?: number;
+  external_id?: spotifyMetadataTrackExternalIdType[];
+  canonical_uri?: string;
+  original_title?: string;
+};
+
 export type spotifyPlaylistBundleType = {
   id: string;
   name: string;
@@ -262,6 +302,51 @@ const parseSpotifyJsonLd = (
     };
   } catch {
     return {title: null, description: null, datePublished: null};
+  }
+};
+
+const normalizeSpotifyImageUrl = (value: string | null | undefined): string => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  if (normalized.startsWith('spotify:image:')) {
+    return `https://i.scdn.co/image/${normalized.slice('spotify:image:'.length)}`;
+  }
+  if (/^[a-z0-9]{20,}$/i.test(normalized)) {
+    return `https://i.scdn.co/image/${normalized}`;
+  }
+  return normalized;
+};
+
+const scrapeSpotifyPlaylistPageMetadata = async (
+  id: string,
+  userAgent = SPOTIFY_SCRAPE_USER_AGENT,
+): Promise<{title: string | null; description: string | null; imageUrl: string | null}> => {
+  try {
+    const response = await withTimeout(
+      axios.get<string>(`https://open.spotify.com/playlist/${id}`, {
+        headers: {
+          'User-Agent': userAgent,
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        timeout: 20000,
+      }),
+      25000,
+      `Spotify playlist page request timed out for ${id}`,
+    );
+
+    const html = String(response.data || '');
+    const jsonLd = parseSpotifyJsonLd(html);
+    return {
+      title: parseMetaContent(html, 'property', 'og:title') || jsonLd.title,
+      description:
+        parseMetaContent(html, 'property', 'og:description') ||
+        parseMetaContent(html, 'name', 'description') ||
+        jsonLd.description,
+      imageUrl: normalizeSpotifyImageUrl(parseMetaContent(html, 'property', 'og:image')),
+    };
+  } catch {
+    return {title: null, description: null, imageUrl: null};
   }
 };
 
@@ -386,6 +471,9 @@ const getRetryAfterMs = (headers: Record<string, unknown> | undefined, fallbackM
   return Math.min(fallbackMs, maxMs);
 };
 
+const SPOTIFY_BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const SPOTIFY_METADATA_APP_VERSION = '1.2.88.405.gd43644ed';
+
 const extractTrackIdFromUri = (uri: string | undefined): string | null => {
   if (!uri || !uri.startsWith('spotify:track:')) {
     return null;
@@ -393,6 +481,217 @@ const extractTrackIdFromUri = (uri: string | undefined): string | null => {
   const parts = uri.split(':');
   const id = parts[parts.length - 1];
   return id || null;
+};
+
+const convertSpotifyTrackIdToGid = (id: string): string => {
+  let num = 0n;
+  for (const ch of id) {
+    const idx = SPOTIFY_BASE62_ALPHABET.indexOf(ch);
+    if (idx < 0) {
+      throw new Error(`Invalid Spotify track id character: ${ch}`);
+    }
+    num = num * 62n + BigInt(idx);
+  }
+  return num.toString(16).padStart(32, '0');
+};
+
+const buildSpotifyImageUrl = (fileId?: string): string | undefined => {
+  const normalized = String(fileId || '').trim();
+  if (!normalized) {
+    return undefined;
+  }
+  return `https://i.scdn.co/image/${normalized}`;
+};
+
+const formatSpotifyReleaseDate = (date?: {year?: number; month?: number; day?: number}): string | undefined => {
+  const year = Number(date?.year || 0);
+  const month = Number(date?.month || 0);
+  const day = Number(date?.day || 0);
+  if (!year) {
+    return undefined;
+  }
+  if (month > 0 && day > 0) {
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  if (month > 0) {
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  return String(year);
+};
+
+const mapSpotifyMetadataTrackToTrackObject = (
+  originalTrackId: string,
+  payload: spotifyMetadataTrackResponseType,
+): SpotifyApi.TrackObjectFull | null => {
+  const title = String(payload.name || payload.original_title || '').trim();
+  if (!title) {
+    return null;
+  }
+
+  const canonicalId = extractTrackIdFromUri(payload.canonical_uri) || originalTrackId;
+  const artists = (payload.artist || []).map((artist) => String(artist?.name || '').trim()).filter(Boolean);
+  const albumArtists = (payload.album?.artist || []).map((artist) => String(artist?.name || '').trim()).filter(Boolean);
+  const releaseDate = formatSpotifyReleaseDate(payload.album?.date);
+  const images = (payload.album?.cover_group?.image || [])
+    .map((image) => {
+      const url = buildSpotifyImageUrl(image.file_id);
+      if (!url) {
+        return null;
+      }
+      return {
+        url,
+        width: Number(image.width || 0) || undefined,
+        height: Number(image.height || 0) || undefined,
+      } as SpotifyApi.ImageObject;
+    })
+    .filter((image): image is SpotifyApi.ImageObject => Boolean(image));
+  const isrc = (payload.external_id || []).find((entry) => String(entry?.type || '').toLowerCase() === 'isrc')?.id;
+
+  return {
+    id: canonicalId,
+    uri: `spotify:track:${canonicalId}`,
+    name: title,
+    duration_ms: Number(payload.duration || 0) || 0,
+    artists: (artists.length ? artists : albumArtists.length ? albumArtists : ['Unknown Artist']).map(
+      (name) => ({name} as SpotifyApi.ArtistObjectSimplified),
+    ),
+    album: {
+      name: String(payload.album?.name || 'Unknown Album'),
+      release_date: releaseDate,
+      images,
+      artists: albumArtists.map((name) => ({name} as SpotifyApi.ArtistObjectSimplified)),
+    } as SpotifyApi.AlbumObjectSimplified,
+    external_ids: isrc ? {isrc: String(isrc)} : {},
+  } as SpotifyApi.TrackObjectFull;
+};
+
+const fetchSpotifyTrackMetadataFromEndpoint = async (
+  id: string,
+  accessToken: string,
+  userAgent: string,
+  clientId?: string,
+): Promise<SpotifyApi.TrackObjectFull | null> => {
+  const gid = convertSpotifyTrackIdToGid(id);
+  const response = await withTimeout(
+    axios.get<spotifyMetadataTrackResponseType>(`https://spclient.wg.spotify.com/metadata/4/track/${gid}`, {
+      params: {market: 'from_token'},
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'User-Agent': userAgent,
+        Accept: 'application/json',
+        'Accept-Language': 'en',
+        Referer: 'https://open.spotify.com/',
+        'app-platform': 'WebPlayer',
+        'spotify-app-version': SPOTIFY_METADATA_APP_VERSION,
+        Origin: 'https://open.spotify.com',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+        ...(clientId ? {'Client-Id': clientId} : {}),
+      },
+      timeout: 25000,
+    }),
+    30000,
+    `Spotify metadata endpoint request timed out for ${id}`,
+  );
+
+  return mapSpotifyMetadataTrackToTrackObject(id, response.data || {});
+};
+
+const fetchSpotifyTracksFromMetadataEndpoint = async (
+  ids: string[],
+  onProgress?: (progress: spotifyConversionProgressType) => void,
+): Promise<SpotifyApi.TrackObjectFull[]> => {
+  const tokenData = await ensureValidToken();
+  const total = ids.length;
+  const userAgent = cachedUserAgent || generateUserAgent();
+  const metadataQueue = new PQueue({concurrency: 6});
+  let processed = 0;
+  const tracksById = new Map<string, SpotifyApi.TrackObjectFull>();
+
+  await Promise.all(
+    ids.map((id) =>
+      metadataQueue.add(async () => {
+        let track: SpotifyApi.TrackObjectFull | null = null;
+        let lastError: Error | null = null;
+
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            track = await fetchSpotifyTrackMetadataFromEndpoint(
+              id,
+              tokenData.accessToken,
+              userAgent,
+              tokenData.clientId,
+            );
+            break;
+          } catch (error: any) {
+            lastError = error as Error;
+            const status = getSpotifyErrorStatus(error);
+
+            if (status === 401 && attempt === 1) {
+              const refreshedToken = await forceRefreshSpotifyToken();
+              tokenData.accessToken = refreshedToken.accessToken;
+              tokenData.clientId = refreshedToken.clientId;
+              continue;
+            }
+
+            if (status === 429) {
+              const waitMs = getRetryAfterMs(
+                (error?.response?.headers || error?.headers) as Record<string, unknown>,
+                1000 * attempt,
+                10000,
+              );
+              await sleep(waitMs);
+              continue;
+            }
+
+            if (attempt < 3 && (!status || status >= 500)) {
+              await sleep(500 * attempt);
+              continue;
+            }
+
+            break;
+          }
+        }
+
+        if (!track) {
+          track = await scrapeSpotifyTrackPageMetadata(id, SPOTIFY_SCRAPE_USER_AGENT);
+          if (track) {
+            console.log(`🔁 Using Spotify track page fallback for ${id}`);
+          } else if (lastError) {
+            console.warn(`⚠️ Spotify metadata endpoint could not resolve ${id}: ${lastError.message}`);
+          } else {
+            console.warn(`⚠️ Spotify metadata endpoint could not resolve ${id}`);
+          }
+        }
+
+        processed++;
+        emitSpotifyProgress(onProgress, {
+          phase: 'metadata',
+          message: `Loading Spotify track metadata... ${processed}/${total}`,
+          current: processed,
+          total,
+          percentage: total > 0 ? Math.round((processed / total) * 100) : 100,
+        });
+
+        if (track) {
+          tracksById.set(id, track);
+        } else {
+          console.warn(`⚠️ Spotify track metadata could not be resolved for ${id}`);
+        }
+      }),
+    ),
+  );
+
+  const orderedTracks = ids
+    .map((id) => tracksById.get(id))
+    .filter((track): track is SpotifyApi.TrackObjectFull => Boolean(track));
+
+  if (orderedTracks.length === 0 && ids.length > 0) {
+    throw new Error('Spotify metadata endpoint returned no playable tracks.');
+  }
+
+  return orderedTracks;
 };
 
 const getPublicSpotifyToken = async (): Promise<string | null> => {
@@ -901,7 +1200,7 @@ const fetchSpclientPlaylistSnapshot = async (
     if (offset === 0) {
       name = pageData.attributes?.name || name;
       description = pageData.attributes?.description || description;
-      imageUrl = pageData.attributes?.picture || imageUrl;
+      imageUrl = normalizeSpotifyImageUrl(pageData.attributes?.picture) || imageUrl;
       ownerName = pageData.attributes?.owner_name || ownerName;
       ownerId = pageData.attributes?.owner_username || ownerId;
       totalTracks = Number(pageData.length || 0);
@@ -951,6 +1250,13 @@ const fetchSpclientPlaylistSnapshot = async (
     }
   }
 
+  if (!imageUrl || !name || name === 'Unknown Playlist') {
+    const playlistPageMeta = await scrapeSpotifyPlaylistPageMetadata(playlistId);
+    imageUrl = normalizeSpotifyImageUrl(playlistPageMeta.imageUrl) || imageUrl;
+    name = String(playlistPageMeta.title || name || 'Unknown Playlist');
+    description = String(playlistPageMeta.description || description || '');
+  }
+
   return {
     id: playlistId,
     name,
@@ -980,7 +1286,7 @@ export const getSpotifyPlaylistBundle = async (
     total: snapshot.trackIds.length,
     percentage: 0,
   });
-  const tracks = await fetchSpotifyTracksFromPages(snapshot.trackIds, onProgress);
+  const tracks = await fetchSpotifyTracksFromMetadataEndpoint(snapshot.trackIds, onProgress);
   emitSpotifyProgress(onProgress, {
     phase: 'metadata',
     message: `Resolved ${tracks.length} Spotify tracks.`,

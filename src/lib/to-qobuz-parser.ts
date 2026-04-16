@@ -438,6 +438,7 @@ export const parseToQobuz = async (
     case 'tidal-playlist': {
       const tidalPlaylist = await tidal.getPlaylist(info.id);
       const tidalPlaylistTracks = await tidal.getPlaylistTracks(info.id);
+      const tidalPlaylistImage = tidalPlaylist.image ? tidal.albumArtToUrl(String(tidalPlaylist.image)) : null;
       tracks = await convertTidalTrackListToQobuz(tidalPlaylistTracks.items, onProgress);
       linkinfo = buildPlaylistInfo({
         id: tidalPlaylist.uuid,
@@ -446,7 +447,7 @@ export const parseToQobuz = async (
         ownerId: String(tidalPlaylist.creator?.id || ''),
         ownerName: String(tidalPlaylist.creator?.id || 'TIDAL'),
         totalTracks: tidalPlaylist.numberOfTracks,
-        imageUrl: tidalPlaylist.image,
+        imageUrl: tidalPlaylistImage?.xl || tidalPlaylistImage?.lg || tidalPlaylistImage?.md || tidalPlaylistImage?.sm,
         createdAt: tidalPlaylist.created,
         updatedAt: tidalPlaylist.lastUpdated,
       });

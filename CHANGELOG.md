@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.3 - 2026-04-15
+
+- Enhanced Spotify playlist converter.
+- Fixed Spotify and TIDAL watchlist playlist covers in the web UI.
+- Improved watchlist card layouts for artists and playlists.
+- Added a collapsible Downloads overview section with the grid area prioritized by default.
+
 ## v1.0.2 - 2026-04-12
 
 - Fixed the packaged Spotify playlist conversion path so release binaries use the updated track-page parser reliably.

@@ -335,9 +335,19 @@
                                 <h2 class="downloads-overview-title">Download Manager</h2>
                                 <div class="downloads-overview-subtitle">Organize queue activity, resume batches, and keep every session under control.</div>
                             </div>
+                            <button
+                                class="search-overview-toggle"
+                                id="downloads-overview-toggle"
+                                type="button"
+                                aria-expanded="false"
+                                aria-controls="downloads-overview-content"
+                            >
+                                <span class="search-overview-toggle-label">Expand</span>
+                                <span class="search-overview-toggle-icon">⌄</span>
+                            </button>
                         </div>
 
-                        <div class="downloads-overview-content">
+                        <div class="downloads-overview-content" id="downloads-overview-content">
                             <div class="queue-insights-grid downloads-insights-grid">
                                 <div class="queue-insight-card">
                                     <span class="queue-insight-label">Total</span>
@@ -1330,7 +1340,7 @@
                                 <button class="btn" id="watchlist-add-playlist" type="button">Add Playlist</button>
                                 <button class="btn btn-secondary" id="watchlist-refresh-playlists" type="button">Refresh Playlists</button>
                             </div>
-                            <div class="watchlist-artists-grid" id="watchlist-playlists-grid"></div>
+                            <div class="watchlist-playlists-grid" id="watchlist-playlists-grid"></div>
                         </section>
 
                         <section class="watchlist-panel watchlist-section-view" data-watchlist-view-panel="wanted">

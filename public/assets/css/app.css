@@ -3075,6 +3075,18 @@
         gap: 0.85rem;
     }
 
+    .downloads-overview-shell.is-collapsed {
+        margin-bottom: 0.8rem;
+    }
+
+    .downloads-overview-shell.is-collapsed .downloads-overview-topbar {
+        margin-bottom: 0;
+    }
+
+    .downloads-overview-shell.is-collapsed .downloads-overview-content {
+        display: none;
+    }
+
     .downloads-insights-grid {
         margin-bottom: 0;
     }
@@ -7150,6 +7162,7 @@
     }
 
     .watchlist-artists-grid,
+    .watchlist-playlists-grid,
     .watchlist-candidates-list,
     .watchlist-history-list {
         display: grid;
@@ -7157,7 +7170,12 @@
     }
 
     .watchlist-artists-grid {
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .watchlist-playlists-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: stretch;
     }
 
     .watchlist-artist-card {
@@ -7258,6 +7276,8 @@
     .watchlist-playlist-card {
         grid-template-columns: 64px minmax(0, 1fr);
         align-items: start;
+        min-width: 0;
+        min-height: 242px;
     }
 
     .watchlist-playlist-card .watchlist-artist-cover {
@@ -7319,6 +7339,31 @@
 
     .watchlist-playlist-card .watchlist-artist-copy small {
         margin-top: 0.1rem;
+    }
+
+    @media (max-width: 1500px) {
+        .watchlist-artists-grid,
+        .watchlist-playlists-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 1100px) {
+        .watchlist-artists-grid,
+        .watchlist-playlists-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 700px) {
+        .watchlist-artists-grid,
+        .watchlist-playlists-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .watchlist-playlist-card {
+            min-height: 0;
+        }
     }
 
     .watchlist-review-card {

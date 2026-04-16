@@ -63,6 +63,7 @@
                 this.lastSearchRequestOffset = 0;
                 this.searchOverviewCollapsed = localStorage.getItem('elixium-search-overview-collapsed') !== 'false';
                 this.homeOverviewCollapsed = localStorage.getItem('elixium-home-overview-collapsed') !== 'false';
+                this.downloadsOverviewCollapsed = localStorage.getItem('elixium-downloads-overview-collapsed') !== 'false';
                 this.currentQuality = '320';
                 this.currentView = 'grid';
                 this.downloadColumnStorageKey = 'elixium-download-column-widths';
@@ -205,6 +206,26 @@
                 this.syncHomeOverviewState();
             }
 
+            syncDownloadsOverviewState() {
+                const container = document.querySelector('.downloads-overview-shell');
+                const toggle = document.getElementById('downloads-overview-toggle');
+                if (!container || !toggle) return;
+
+                container.classList.toggle('is-collapsed', this.downloadsOverviewCollapsed);
+                toggle.setAttribute('aria-expanded', String(!this.downloadsOverviewCollapsed));
+
+                const label = toggle.querySelector('.search-overview-toggle-label');
+                const icon = toggle.querySelector('.search-overview-toggle-icon');
+                if (label) label.textContent = this.downloadsOverviewCollapsed ? 'Expand' : 'Collapse';
+                if (icon) icon.textContent = this.downloadsOverviewCollapsed ? '⌄' : '⌃';
+            }
+
+            toggleDownloadsOverview() {
+                this.downloadsOverviewCollapsed = !this.downloadsOverviewCollapsed;
+                localStorage.setItem('elixium-downloads-overview-collapsed', String(this.downloadsOverviewCollapsed));
+                this.syncDownloadsOverviewState();
+            }
+
             init() {
                 this.applyTheme(this.currentTheme, false);
                 this.renderThemeOptions();
@@ -255,6 +276,7 @@
                 this.renderQueueInsights();
                 this.syncSearchOverviewState();
                 this.syncHomeOverviewState();
+                this.syncDownloadsOverviewState();
                 this.loadWatchlistState();
                 this.loadFavoriteGenres();
 
@@ -731,6 +753,18 @@
 
             getWatchlistPlaylistCandidates(playlistId) {
                 return (this.watchlistState?.playlistCandidates || []).filter((candidate) => String(candidate.playlistId) === String(playlistId));
+            }
+
+            getWatchlistPlaylistDisplayImage(playlist) {
+                const fallbackCandidate = this.getWatchlistPlaylistCandidates(playlist?.id).find((candidate) => candidate?.image);
+                const candidateImage = fallbackCandidate?.image || '';
+                const savedImage = String(playlist?.image || '');
+
+                if (playlist?.service === 'tidal' && savedImage.includes('resources.tidal.com')) {
+                    return candidateImage || savedImage;
+                }
+
+                return savedImage || candidateImage;
             }
 
             isWatchlistTrackQueueable(candidate) {
@@ -1426,11 +1460,13 @@
                         playlistsGrid.innerHTML = '<div class="watchlist-empty">Paste a Qobuz, Spotify, Deezer, or TIDAL playlist URL above to monitor it for new tracks.</div>';
                     } else {
                         playlistsGrid.innerHTML = watchedPlaylists
-                            .map((playlist) => `
+                            .map((playlist) => {
+                                const displayImage = this.getWatchlistPlaylistDisplayImage(playlist);
+                                return `
                                 <article class="watchlist-artist-card watchlist-playlist-card" data-watchlist-playlist="${this.escapeHtml(String(playlist.id))}">
                                     <div class="watchlist-artist-cover">
-                                        ${playlist.image
-                                            ? `<img src="${playlist.image}" alt="${this.escapeHtml(playlist.title)}" loading="lazy">`
+                                        ${displayImage
+                                            ? `<img src="${displayImage}" alt="${this.escapeHtml(playlist.title)}" loading="lazy">`
                                             : '<div class="result-cover-placeholder">🎼</div>'}
                                     </div>
                                     <div class="watchlist-artist-copy">
@@ -1461,7 +1497,8 @@
                                         </div>
                                     </div>
                                 </article>
-                            `)
+                            `;
+                            })
                             .join('');
 
                         playlistsGrid.querySelectorAll('[data-watchlist-refresh-playlist]').forEach((button) => {
@@ -1586,11 +1623,12 @@
                             .map((playlist) => {
                                 const items = candidatesByPlaylist.get(String(playlist.id)) || [];
                                 const queueableIds = items.filter((entry) => this.isWatchlistTrackQueueable(entry)).map((entry) => String(entry.id));
+                                const displayImage = this.getWatchlistPlaylistDisplayImage(playlist);
                                 return `
                                     <article class="watchlist-review-card">
                                         <div class="watchlist-review-card-main">
                                             <div class="watchlist-review-card-cover">
-                                                ${playlist.image ? `<img src="${playlist.image}" alt="${this.escapeHtml(playlist.title)}" loading="lazy">` : '<div class="result-cover-placeholder">🎼</div>'}
+                                                ${displayImage ? `<img src="${displayImage}" alt="${this.escapeHtml(playlist.title)}" loading="lazy">` : '<div class="result-cover-placeholder">🎼</div>'}
                                             </div>
                                             <div class="watchlist-review-card-copy">
                                                 <strong>${this.escapeHtml(playlist.title)}</strong>
@@ -4516,6 +4554,10 @@
 
                 document.getElementById('home-overview-toggle')?.addEventListener('click', () => {
                     this.toggleHomeOverview();
+                });
+
+                document.getElementById('downloads-overview-toggle')?.addEventListener('click', () => {
+                    this.toggleDownloadsOverview();
                 });
 
                 // Filter buttons
