@@ -10,6 +10,8 @@ import {useWatchlistStore, toWatchedPlaylist, type WatchlistTab} from '@/store/w
 import {useDownload} from '@/shared/hooks/useDownload';
 import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
+import {ScheduleEditor} from './ScheduleEditor';
+import {FavoriteGenres} from './FavoriteGenres';
 
 interface WatchlistState {
   watchedArtists?: Array<{
@@ -145,7 +147,7 @@ export function WatchlistPage() {
   const selectedCount = wanted.filter((i) => i.selected).length;
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl mx-auto animate-fade-in">
+    <div className="mx-auto max-w-6xl animate-fade-in space-y-5 p-4 sm:p-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Eye size={20} className="text-accent" />
@@ -180,6 +182,7 @@ export function WatchlistPage() {
           </TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
+          <TabsTrigger value="genres">Genres</TabsTrigger>
         </TabsList>
 
         <TabsContent value="artists" className="mt-5">
@@ -296,17 +299,20 @@ export function WatchlistPage() {
                   <p className="text-sm font-medium text-text-primary truncate">{item.title}</p>
                   <p className="text-xs text-text-muted truncate">{item.artist}</p>
                 </div>
-                <span className="text-xs text-text-muted shrink-0">{item.downloadedAt}</span>
+                <span className="shrink-0 text-xs text-text-muted">
+                  {item.downloadedAt ? new Date(item.downloadedAt).toLocaleDateString() : ""}
+                </span>
               </div>
             ))
           )}
         </TabsContent>
 
         <TabsContent value="schedule" className="mt-5">
-          <div className="rounded-xl border border-border bg-card-bg p-6 max-w-sm">
-            <p className="font-medium text-text-primary mb-4">Automatic scan schedule</p>
-            <p className="text-sm text-text-muted">Schedule configuration coming soon.</p>
-          </div>
+          <ScheduleEditor />
+        </TabsContent>
+
+        <TabsContent value="genres" className="mt-5">
+          <FavoriteGenres />
         </TabsContent>
       </TabsRoot>
     </div>

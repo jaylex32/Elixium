@@ -57,7 +57,7 @@ export interface WatchlistHistory {
   quality: string;
 }
 
-export type WatchlistTab = 'artists' | 'wanted' | 'history' | 'schedule';
+export type WatchlistTab = 'artists' | 'wanted' | 'history' | 'schedule' | 'genres';
 
 interface WatchlistState {
   artists: WatchedArtist[];
