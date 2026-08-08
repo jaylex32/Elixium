@@ -5,6 +5,12 @@ import {writeMetadataFlac} from './flacmetata';
 import {getAlbumInfoPublicApi} from '../api';
 import type {trackType} from '../types';
 
+// Re-exported so the web API can serve lyrics. Previously these were reachable
+// only from inside the tagging pipeline, which is why the UI had no way to
+// display lyrics despite the implementation existing.
+export {getTrackLyrics} from './getTrackLyrics';
+export {getLyricsMusixmatch} from './musixmatchLyrics';
+
 const albumInfo = async (track: trackType) => {
   try {
     return await getAlbumInfoPublicApi(track.ALB_ID);

@@ -92,6 +92,7 @@ export const registerApiV1 = (deps: ApiV1Dependencies): void => {
           genres: `GET ${basePath}/genres`,
           stream: `GET|HEAD ${basePath}/tracks/:id/stream?service=&quality=`,
           trackFile: `GET ${basePath}/tracks/:id/file?service=&quality=`,
+          lyrics: `GET ${basePath}/tracks/:id/lyrics?service=`,
           archive: `POST ${basePath}/downloads/archive`,
           downloads: `GET ${basePath}/downloads`,
           startDownload: `POST ${basePath}/downloads`,

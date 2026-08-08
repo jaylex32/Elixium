@@ -133,3 +133,36 @@ export function useParseUrl() {
     },
   });
 }
+
+// ── Lyrics ──────────────────────────────────────────────────────────────────
+export interface SyncedLine {
+  timeMs: number;
+  durationMs: number;
+  text: string;
+}
+
+export interface LyricsResult {
+  text: string;
+  synced: SyncedLine[];
+  writers: string | null;
+  copyright: string | null;
+}
+
+/**
+ * Lyrics for a track.
+ *
+ * 404 is an expected outcome (many tracks simply have none), so it is not
+ * retried and the caller renders an empty state rather than an error.
+ */
+export function useLyrics(id: string | undefined, service: Service | undefined, enabled = true) {
+  return useQuery<LyricsResult | null>({
+    queryKey: ['lyrics', service, id],
+    queryFn: async () => {
+      const res = await http.get(`/v1/tracks/${encodeURIComponent(id!)}/lyrics`, {params: {service}});
+      return (res.data?.data ?? null) as LyricsResult | null;
+    },
+    enabled: Boolean(id && service) && enabled,
+    retry: false,
+    staleTime: 1000 * 60 * 30,
+  });
+}

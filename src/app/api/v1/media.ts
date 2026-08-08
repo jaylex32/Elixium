@@ -387,6 +387,67 @@ export const registerMediaRoutes = ({
     }),
   );
 
+  /**
+   * GET /tracks/:id/lyrics?service=
+   *
+   * Returns plain text plus, when the source has them, timestamped lines for a
+   * synced/karaoke display.
+   *
+   * Deezer exposes its own lyrics for tracks that have them and falls back to a
+   * Musixmatch lookup by "artist - title". Qobuz has no lyrics API, so it
+   * always uses that text lookup.
+   */
+  app.get(
+    `${basePath}/tracks/:id/lyrics`,
+    route(async (req, res) => {
+      const service = parseService(req.query.service);
+      const id = requireString(req.params.id, 'id');
+
+      if (service === 'deezer') {
+        await initDeezerForDownload().catch(() => undefined);
+        const trackInfo = await deezer.getTrackInfo(id).catch(() => undefined);
+        if (!trackInfo) throw ApiError.notFound('Track not found');
+
+        const lyrics = await deezer.getTrackLyrics(trackInfo).catch(() => null);
+        if (!lyrics?.LYRICS_TEXT) throw ApiError.notFound('No lyrics available for this track');
+
+        const synced = Array.isArray(lyrics.LYRICS_SYNC_JSON)
+          ? lyrics.LYRICS_SYNC_JSON.filter((line: any) => line?.line).map((line: any) => ({
+              // Timestamps arrive as strings; a client should not have to parse them.
+              timeMs: Number(line.milliseconds) || 0,
+              durationMs: Number(line.duration) || 0,
+              text: String(line.line),
+            }))
+          : [];
+
+        return sendData(
+          res,
+          {
+            text: lyrics.LYRICS_TEXT,
+            synced,
+            writers: lyrics.LYRICS_WRITERS ?? null,
+            copyright: lyrics.LYRICS_COPYRIGHTS ?? null,
+          },
+          {service, id, hasSynced: synced.length > 0, source: 'deezer'},
+        );
+      }
+
+      await initQobuzForSearch();
+      const meta = await qobuz.getTrackInfo(Number(id)).catch(() => undefined);
+      if (!meta) throw ApiError.notFound('Track not found');
+
+      const query = `${meta?.performer?.name ?? ''} - ${meta?.title ?? ''}`.trim();
+      const text = await deezer.getLyricsMusixmatch(query).catch(() => '');
+      if (!text) throw ApiError.notFound('No lyrics available for this track');
+
+      return sendData(
+        res,
+        {text, synced: [], writers: null, copyright: null},
+        {service, id, hasSynced: false, source: 'musixmatch'},
+      );
+    }),
+  );
+
   /** GET /cache/stats — operational visibility into the stream buffer cache. */
   app.get(
     `${basePath}/cache/stats`,
