@@ -7,6 +7,12 @@ export interface WatchedArtist {
   addedAt: string;
   lastChecked?: string;
   newReleases?: number;
+  /**
+   * Server-side automation rules. When autoQueueAlbums is on, a scheduled
+   * scan queues and downloads new releases without asking — this is what
+   * makes the watchlist run unattended rather than only building a list.
+   */
+  rules?: {autoQueueAlbums?: boolean; autoQueueTracks?: boolean; trackLimit?: number};
 }
 
 /**
@@ -34,6 +40,7 @@ export interface WatchedPlaylist {
   lastCheckedAt?: string;
   status?: string;
   lastError?: string;
+  rules?: {autoQueueTracks?: boolean};
 }
 
 /** Normalize a raw server entry, which uses `title` where the UI wants `name`. */
@@ -49,6 +56,7 @@ export const toWatchedPlaylist = (raw: Record<string, unknown>): WatchedPlaylist
   lastCheckedAt: raw?.lastCheckedAt as string | undefined,
   status: raw?.status as string | undefined,
   lastError: raw?.lastError as string | undefined,
+  rules: raw?.rules as {autoQueueTracks?: boolean} | undefined,
 });
 
 export interface WantedItem {

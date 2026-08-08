@@ -53,7 +53,87 @@ export const normalizeWatchlistText = (value: string) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+/*
+ * Edition markers that identify the *same* record rather than a different one.
+ *
+ * Without stripping these, "Album" and "Album (Deluxe Edition)" normalize to
+ * different keys, so both are treated as new and both get downloaded — and
+ * again for the remaster, the anniversary edition, and the explicit version.
+ * Collapsing them means the first one wins and the rest are recognised as
+ * already handled.
+ *
+ * Deliberately NOT collapsed: "Live", "Acoustic", "Instrumental", "Remix" and
+ * "Demo" are genuinely different recordings, not repackages of the same one.
+ */
+const EDITION_MARKERS = [
+  'deluxe',
+  'deluxe edition',
+  'super deluxe',
+  'expanded',
+  'expanded edition',
+  'remaster',
+  'remastered',
+  'remastered version',
+  'anniversary edition',
+  'special edition',
+  'limited edition',
+  'collectors edition',
+  'bonus track version',
+  'bonus tracks',
+  'explicit',
+  'clean',
+  'standard edition',
+  'original mix',
+  'single version',
+  'radio edit',
+];
+
+/**
+ * Remove edition/packaging qualifiers so variants of one release share a key.
+ *
+ * Handles the three shapes services actually use: a parenthetical, a bracketed
+ * suffix, and a trailing " - Qualifier".
+ */
+export const stripEditionMarkers = (value: string): string => {
+  let text = String(value || '');
+
+  // "(...)" and "[...]" whose contents are only edition words, plus optional years.
+  text = text.replace(/[([]([^)\]]*)[)\]]/g, (match, inner: string) => {
+    const cleaned = normalizeWatchlistText(inner)
+      .replace(/\b(19|20)\d{2}\b/g, '')
+      // Ordinals too, so "20th Anniversary Edition" reduces to the marker.
+      .replace(/\b\d+(st|nd|rd|th)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) return '';
+    return EDITION_MARKERS.includes(cleaned) ? '' : match;
+  });
+
+  // Trailing " - Qualifier".
+  text = text.replace(/\s[-–—]\s([^-–—]+)$/, (match, tail: string) => {
+    const cleaned = normalizeWatchlistText(tail)
+      .replace(/\b(19|20)\d{2}\b/g, '')
+      // Ordinals too, so "20th Anniversary Edition" reduces to the marker.
+      .replace(/\b\d+(st|nd|rd|th)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return EDITION_MARKERS.includes(cleaned) ? '' : match;
+  });
+
+  return text.trim();
+};
+
 const buildAlbumKey = (artist: string, title: string) =>
+  `${normalizeWatchlistText(artist)}::${normalizeWatchlistText(stripEditionMarkers(title))}`;
+
+/**
+ * The pre-edition-stripping key.
+ *
+ * Existing state was written with this format, so a scan must still match it —
+ * otherwise every previously downloaded album reappears as new the first time
+ * the improved key ships.
+ */
+const buildLegacyAlbumKey = (artist: string, title: string) =>
   `${normalizeWatchlistText(artist)}::${normalizeWatchlistText(title)}`;
 
 const buildTrackKey = (artist: string, title: string) => buildAlbumKey(artist, title);
@@ -540,14 +620,23 @@ export const createQobuzWatchlistService = ({
 
     albums.forEach((album) => {
       const title = String(album?.title || album?.name || 'Unknown Album');
-      const normalizedTitle = normalizeWatchlistText(title);
-      const normalizedArtist = normalizeWatchlistText(album?.artist?.name || artist.name);
-      const normalizedKey = `${normalizedArtist}::${normalizedTitle}`;
+      const rawArtist = album?.artist?.name || artist.name;
+      const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(title));
+      const normalizedKey = buildAlbumKey(rawArtist, title);
+      // Match legacy-format entries too, so shipping the improved key does not
+      // resurface everything already downloaded.
+      const legacyKey = buildLegacyAlbumKey(rawArtist, title);
 
       let reason: WatchlistCandidateRecord['reason'] = 'new';
       let duplicateSource = '';
-      if (processedByKey.has(normalizedKey)) {
-        const processedReason = processedByKey.get(normalizedKey)?.reason || 'history';
+      const matchedKey = processedByKey.has(normalizedKey)
+        ? normalizedKey
+        : processedByKey.has(legacyKey)
+        ? legacyKey
+        : '';
+
+      if (matchedKey) {
+        const processedReason = processedByKey.get(matchedKey)?.reason || 'history';
         if (['downloaded', 'dismissed', 'duplicate'].includes(processedReason)) {
           reason = 'already-processed';
           duplicateSource = processedReason;

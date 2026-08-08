@@ -1,9 +1,10 @@
 import {useEffect} from 'react';
-import {Eye, RefreshCw, Download, Plus, Clock, Trash2, CheckSquare, Square, ListMusic, AlertTriangle} from 'lucide-react';
+import {Eye, RefreshCw, Download, Plus, Clock, Trash2, CheckSquare, Square, ListMusic, AlertTriangle, Zap} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 import {Badge} from '@/shared/components/ui/Badge';
+import {Switch} from '@/shared/components/ui/Switch';
 import {Spinner} from '@/shared/components/ui/Spinner';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
 import {useWatchlistStore, toWatchedPlaylist, type WatchlistTab} from '@/store/watchlist-store';
@@ -21,6 +22,7 @@ interface WatchlistState {
     picture?: string;
     addedAt?: string;
     lastChecked?: string;
+    rules?: {autoQueueAlbums?: boolean; autoQueueTracks?: boolean; trackLimit?: number};
   }>;
   watchedPlaylists?: Array<Record<string, unknown>>;
   /*
@@ -104,6 +106,7 @@ export function WatchlistPage() {
             picture: a.picture_url ?? a.picture ?? '',
             addedAt: a.addedAt ?? new Date().toISOString(),
             lastChecked: a.lastChecked,
+            rules: a.rules,
           })),
         );
       }
@@ -267,6 +270,16 @@ export function WatchlistPage() {
         </div>
       )}
 
+      <div className="flex items-start gap-2.5 rounded-md border border-border bg-secondary-bg px-4 py-3">
+        <Zap size={15} className="mt-0.5 shrink-0 text-accent" />
+        <p className="text-xs text-text-muted">
+          <span className="font-medium text-text-secondary">Auto</span> makes a scheduled scan download new items by
+          itself. Leave it off to have scans only collect them under{' '}
+          <span className="font-medium text-text-secondary">Wanted</span> for you to pick. Repackages of a release you
+          already have — deluxe, remaster, explicit, anniversary — are skipped automatically.
+        </p>
+      </div>
+
       <TabsRoot value={activeTab} onValueChange={(v) => setActiveTab(v as WatchlistTab)}>
         <TabsList>
           <TabsTrigger value="artists">
@@ -319,7 +332,25 @@ export function WatchlistPage() {
                       <Eye size={24} className="text-text-muted" />
                     </div>
                   )}
-                  <p className="text-sm font-medium text-text-primary text-center truncate w-full">{artist.name}</p>
+                  <p className="w-full truncate text-center text-sm font-medium text-text-primary">{artist.name}</p>
+
+                  <label className="flex cursor-pointer items-center gap-2 rounded-sm border border-border px-2.5 py-1.5 text-xs">
+                    <Switch
+                      checked={Boolean(artist.rules?.autoQueueAlbums)}
+                      onCheckedChange={(v) => {
+                        socketSend('saveWatchedArtistRules', {
+                          artistId: artist.id,
+                          rules: {
+                            autoQueueAlbums: v,
+                            autoQueueTracks: Boolean(artist.rules?.autoQueueTracks),
+                            trackLimit: artist.rules?.trackLimit ?? 20,
+                          },
+                        });
+                        toast.success(v ? `Auto-download on for ${artist.name}` : `Auto-download off for ${artist.name}`);
+                      }}
+                    />
+                    <span className={artist.rules?.autoQueueAlbums ? 'text-accent' : 'text-text-muted'}>Auto</span>
+                  </label>
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -378,7 +409,19 @@ export function WatchlistPage() {
                     )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {/* With this on, a scheduled scan queues and downloads new
+                        tracks on its own. Off, the scan only builds the list. */}
+                    <label className="flex cursor-pointer items-center gap-2 rounded-sm border border-border px-2.5 py-1.5 text-xs">
+                      <Switch
+                        checked={Boolean(p.rules?.autoQueueTracks)}
+                        onCheckedChange={(v) => {
+                          socketSend('saveWatchedPlaylistRules', {playlistId: p.id, rules: {autoQueueTracks: v}});
+                          toast.success(v ? `Auto-download on for ${p.name}` : `Auto-download off for ${p.name}`);
+                        }}
+                      />
+                      <span className={p.rules?.autoQueueTracks ? 'text-accent' : 'text-text-muted'}>Auto</span>
+                    </label>
                     {newTracks.length > 0 && <Badge variant="warning">{newTracks.length} new</Badge>}
                     <Button
                       size="sm"
