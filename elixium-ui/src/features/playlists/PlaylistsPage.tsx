@@ -1,5 +1,6 @@
 import {useState, useDeferredValue} from 'react';
 import {ListMusic, Search, X, Eye} from 'lucide-react';
+import {toast} from 'sonner';
 import {useSearch} from '@/shared/lib/api';
 import {extractCover} from '@/shared/lib/cover';
 import {useAppStore} from '@/store/app-store';
@@ -79,21 +80,43 @@ export function PlaylistsPage() {
                 tracks: p.trackCount,
                 type: 'playlist',
               };
+
+              /*
+               * A watched playlist's id belongs to the service it came from.
+               * Passing a Spotify id with service=qobuz built
+               * open.qobuz.com/playlist/<spotify-id>, and Qobuz rejects it —
+               * "Invalid argument: playlist_id (accepted type are number)".
+               * Sending the original URL instead lets the parser convert.
+               */
+              const foreign = Boolean(p.service && p.service !== service);
+
+              const startDownload = () =>
+                download({
+                  id: p.id,
+                  url: p.url,
+                  type: 'playlist',
+                  title: p.name,
+                  artist: p.owner ?? 'Playlist',
+                  cover: p.image,
+                  service,
+                });
+
               return (
                 <AlbumCard
                   key={p.id}
                   album={card}
-                  onClick={() => openPlaylist(card)}
-                  onDownload={() =>
-                    download({
-                      id: p.id,
-                      type: 'playlist',
-                      title: p.name,
-                      artist: p.owner ?? 'Playlist',
-                      cover: p.image,
-                      service,
-                    })
-                  }
+                  // Expanding uses /item-tracks, which only understands ids
+                  // belonging to the selected service — so a cross-service
+                  // playlist downloads (and converts) rather than opening.
+                  onClick={() => {
+                    if (foreign) {
+                      toast.info(`Converting from ${p.service} to ${service}…`, {description: p.name});
+                      startDownload();
+                    } else {
+                      openPlaylist(card);
+                    }
+                  }}
+                  onDownload={startDownload}
                 />
               );
             })}

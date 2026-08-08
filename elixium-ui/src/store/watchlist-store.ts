@@ -17,6 +17,14 @@ export interface WatchedArtist {
  */
 export interface WatchedPlaylist {
   id: string;
+  /**
+   * The original link, e.g. an open.spotify.com URL.
+   *
+   * Load-bearing: a watched playlist's id belongs to *its* service, so it
+   * cannot be pasted into another service's URL template. Downloads go
+   * through this URL and let the parser convert.
+   */
+  url?: string;
   name: string;
   owner?: string;
   image?: string;
@@ -31,6 +39,7 @@ export interface WatchedPlaylist {
 /** Normalize a raw server entry, which uses `title` where the UI wants `name`. */
 export const toWatchedPlaylist = (raw: Record<string, unknown>): WatchedPlaylist => ({
   id: String(raw?.id ?? ''),
+  url: raw?.url as string | undefined,
   name: (raw?.title as string) ?? (raw?.name as string) ?? 'Untitled playlist',
   owner: raw?.owner as string | undefined,
   image: raw?.image as string | undefined,

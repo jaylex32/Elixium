@@ -23,7 +23,17 @@ export function useDownload() {
 
   const download = useCallback(
     (target: DownloadTarget) => {
-      const url = target.url ?? buildServiceUrl(target.id, target.type, target.service);
+      let url: string;
+      try {
+        url = target.url ?? buildServiceUrl(target.id, target.type, target.service);
+      } catch (error) {
+        // A mismatched id would otherwise fail deep inside the service API
+        // with a message that says nothing about where it came from.
+        toast.error('Cannot download this item', {
+          description: error instanceof Error ? error.message : 'Unrecognised item id.',
+        });
+        return null;
+      }
       const itemId = `${target.service}-${target.type}-${target.id}-${Date.now()}`;
 
       const socket = getSocket();
