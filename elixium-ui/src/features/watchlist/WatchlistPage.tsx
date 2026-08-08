@@ -13,6 +13,7 @@ import {getSocket} from '@/shared/lib/socket';
 import {socketSend} from '@/shared/lib/socket-client';
 import {ScheduleEditor} from './ScheduleEditor';
 import {FavoriteGenres} from './FavoriteGenres';
+import {ReleaseTypeFilter} from './ReleaseTypeFilter';
 
 interface WatchlistState {
   watchedArtists?: Array<{
@@ -41,9 +42,11 @@ interface WatchlistState {
     image?: string;
     service?: string;
     reason?: string;
+    releaseType?: string;
   }>;
   playlistCandidates?: Array<{
     id: string;
+    reason?: string;
     playlistId: string;
     playlistTitle?: string;
     artist?: string;
@@ -116,8 +119,17 @@ export function WatchlistPage() {
         setWatchedPlaylists(state.watchedPlaylists.map(toWatchedPlaylist));
       }
       if (state.candidates) {
+        /*
+         * Wanted lists what can actually be acted on. Candidates also carry
+         * entries already downloaded, dismissed, or excluded by the release
+         * type filter — showing those made the count meaningless and offered
+         * downloads the server would refuse to queue.
+         */
+        const actionable = state.candidates.filter(
+          (a) => !a.reason || a.reason === 'new' || a.reason === 'needs-review',
+        );
         setWanted(
-          state.candidates.map((a) => ({
+          actionable.map((a) => ({
             id: a.id,
             title: a.title,
             artist: a.artist ?? 'Unknown',
@@ -129,8 +141,11 @@ export function WatchlistPage() {
         );
       }
       if (state.playlistCandidates) {
+        const actionableTracks = state.playlistCandidates.filter(
+          (t) => !t.reason || t.reason === 'new' || t.reason === 'needs-review',
+        );
         setPlaylistWanted(
-          state.playlistCandidates.map((t) => ({
+          actionableTracks.map((t) => ({
             id: t.id,
             playlistId: t.playlistId,
             playlistTitle: t.playlistTitle ?? 'Playlist',
@@ -308,7 +323,7 @@ export function WatchlistPage() {
           </TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
-          <TabsTrigger value="genres">Genres</TabsTrigger>
+          <TabsTrigger value="genres">Filters</TabsTrigger>
         </TabsList>
 
         <TabsContent value="artists" className="mt-5">
@@ -608,7 +623,9 @@ export function WatchlistPage() {
           <ScheduleEditor />
         </TabsContent>
 
-        <TabsContent value="genres" className="mt-5">
+        <TabsContent value="genres" className="mt-5 space-y-8">
+          <ReleaseTypeFilter />
+          <div className="h-px bg-border" />
           <FavoriteGenres />
         </TabsContent>
       </TabsRoot>

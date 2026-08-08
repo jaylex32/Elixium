@@ -76,7 +76,8 @@ export interface WatchlistCandidateRecord {
   image: string;
   service: 'qobuz';
   normalizedKey: string;
-  reason: 'new' | 'duplicate' | 'already-processed' | 'needs-review';
+  reason: 'new' | 'duplicate' | 'already-processed' | 'needs-review' | 'filtered-type';
+  releaseType?: ReleaseType;
   duplicateSource?: string;
   rawData: any;
   checkedAt: string;
@@ -92,7 +93,8 @@ export interface PlaylistCandidateRecord {
   image?: string;
   service: 'qobuz';
   normalizedKey: string;
-  reason: 'new' | 'duplicate' | 'already-processed' | 'needs-review';
+  reason: 'new' | 'duplicate' | 'already-processed' | 'needs-review' | 'filtered-type';
+  releaseType?: ReleaseType;
   duplicateSource?: string;
   rawData: any;
   checkedAt: string;
@@ -135,7 +137,22 @@ export interface WatchlistData {
   };
   monitorHistory: MonitorHistoryRecord[];
   availableGenres?: FavoriteGenreRecord[];
+  /**
+   * Which kinds of release the watchlist should collect.
+   *
+   * Equivalent to a Lidarr metadata profile. Without it every single, EP and
+   * compilation an artist appears on is treated as a wanted release, which
+   * buries the actual albums.
+   */
+  releaseTypes?: ReleaseType[];
 }
+
+export type ReleaseType = 'album' | 'ep' | 'single' | 'live' | 'compilation';
+
+export const ALL_RELEASE_TYPES: ReleaseType[] = ['album', 'ep', 'single', 'live', 'compilation'];
+
+/** Albums and EPs by default — the two most people actually want to keep. */
+export const DEFAULT_RELEASE_TYPES: ReleaseType[] = ['album', 'ep'];
 
 const defaultSchedule = (): MonitorScheduleRecord => ({
   enabled: false,
@@ -164,6 +181,7 @@ const defaultWatchlistData = (): WatchlistData => ({
     playlists: defaultSchedule(),
   },
   monitorHistory: [],
+  releaseTypes: [...DEFAULT_RELEASE_TYPES],
 });
 
 export class WatchlistStore {
@@ -192,6 +210,7 @@ export class WatchlistStore {
         processedTracks: Array.isArray(parsed?.processedTracks) ? parsed.processedTracks : [],
         candidates: Array.isArray(parsed?.candidates) ? parsed.candidates : [],
         playlistCandidates: Array.isArray(parsed?.playlistCandidates) ? parsed.playlistCandidates : [],
+        releaseTypes: Array.isArray(parsed?.releaseTypes) ? parsed.releaseTypes : [...DEFAULT_RELEASE_TYPES],
         schedules: {
           artists: {
             ...defaultSchedule(),

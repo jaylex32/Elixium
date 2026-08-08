@@ -16,7 +16,7 @@ import type {
   WatchedArtistRecord,
   WatchedPlaylistRecord,
 } from './watchlist-store';
-import {WatchlistStore} from './watchlist-store';
+import {WatchlistStore, type ReleaseType, DEFAULT_RELEASE_TYPES, ALL_RELEASE_TYPES} from './watchlist-store';
 
 interface QobuzWatchlistDependencies {
   conf: Config | any;
@@ -121,6 +121,43 @@ export const stripEditionMarkers = (value: string): string => {
   });
 
   return text.trim();
+};
+
+/**
+ * Infer what kind of release an album is.
+ *
+ * Qobuz exposes no release-type field, so this reads the signals it does give:
+ * track count, the `version` string, the title, and whether the credited
+ * artist is a various-artists placeholder. It is a heuristic, not metadata —
+ * a 4-track album by an artist who releases short records will read as an EP.
+ * Erring toward "album" keeps real releases from being filtered away.
+ */
+export const classifyReleaseType = (album: any): ReleaseType => {
+  const title = normalizeWatchlistText(album?.title || album?.name || '');
+  const version = normalizeWatchlistText(album?.version || '');
+  const artistName = normalizeWatchlistText(album?.artist?.name || '');
+  const trackCount = Number(album?.tracks_count) || 0;
+  const durationSec = Number(album?.duration) || 0;
+  const haystack = `${title} ${version}`;
+
+  // Explicit markers win over any count-based guess.
+  if (/\blive\b|\bin concert\b|\bunplugged\b|\bsession(s)?\b/.test(haystack)) return 'live';
+  if (/\bcompilation\b|\bgreatest hits\b|\bbest of\b|\banthology\b|\bcollection\b/.test(haystack)) {
+    return 'compilation';
+  }
+  if (/\bvarious artists\b|\bva\b/.test(artistName)) return 'compilation';
+  if (/\bsingle\b/.test(haystack)) return 'single';
+  if (/\bep\b/.test(haystack)) return 'ep';
+
+  // Otherwise fall back to size. Duration guards against an "album" that is
+  // three long tracks, and against an EP padded with many short ones.
+  if (trackCount > 0) {
+    if (trackCount <= 2) return 'single';
+    if (trackCount <= 6 && durationSec > 0 && durationSec < 30 * 60) return 'ep';
+    if (trackCount <= 4) return 'ep';
+  }
+
+  return 'album';
 };
 
 const buildAlbumKey = (artist: string, title: string) =>
@@ -415,6 +452,30 @@ export const createQobuzWatchlistService = ({
     };
   };
 
+  const getReleaseTypes = (): ReleaseType[] => {
+    const current = store.getState().releaseTypes;
+    return Array.isArray(current) && current.length > 0 ? current : [...DEFAULT_RELEASE_TYPES];
+  };
+
+  /**
+   * Replace the accepted release kinds.
+   *
+   * Rejects an empty selection: saving "collect nothing" silently stops every
+   * scan from ever producing a candidate, which looks identical to the
+   * watchlist being broken.
+   */
+  const saveReleaseTypes = (types: string[]) => {
+    const allowed = new Set(ALL_RELEASE_TYPES);
+    const next = [...new Set((types || []).map(String))].filter((t): t is ReleaseType => allowed.has(t as ReleaseType));
+    const effective = next.length > 0 ? next : [...DEFAULT_RELEASE_TYPES];
+
+    const state = store.update((draft) => {
+      draft.releaseTypes = effective;
+    });
+    pushMonitorHistory('artists', 'info', `Release types set to ${effective.join(', ')}`);
+    return enrichState(state);
+  };
+
   const saveFavoriteGenres = (genreIds: string[]) => {
     const allowed = new Set(availableGenres.map((genre) => genre.id));
     const nextGenres = availableGenres.filter((genre) => allowed.has(genre.id) && genreIds.includes(genre.id));
@@ -618,9 +679,17 @@ export const createQobuzWatchlistService = ({
     const libraryTokens = collectFilesystemTokens(getQobuzPath());
     const nextCandidates: WatchlistCandidateRecord[] = [];
 
+    // Which release kinds the user wants collected at all. Anything else is
+    // still recorded, but flagged so it never reaches the wanted list or an
+    // automatic download.
+    const allowedTypes = new Set<ReleaseType>(
+      Array.isArray(state.releaseTypes) && state.releaseTypes.length > 0 ? state.releaseTypes : DEFAULT_RELEASE_TYPES,
+    );
+
     albums.forEach((album) => {
       const title = String(album?.title || album?.name || 'Unknown Album');
       const rawArtist = album?.artist?.name || artist.name;
+      const releaseType = classifyReleaseType(album);
       const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(title));
       const normalizedKey = buildAlbumKey(rawArtist, title);
       // Match legacy-format entries too, so shipping the improved key does not
@@ -647,10 +716,16 @@ export const createQobuzWatchlistService = ({
       } else if (libraryTokens.has(normalizedTitle)) {
         reason = 'needs-review';
         duplicateSource = 'local-library';
+      } else if (!allowedTypes.has(releaseType)) {
+        // Checked last so a genuine duplicate still reports as such — the more
+        // specific explanation is the more useful one.
+        reason = 'filtered-type';
+        duplicateSource = releaseType;
       }
 
       nextCandidates.push({
         id: String(album.id),
+        releaseType,
         artistId: String(artist.id),
         artist: String(album?.artist?.name || artist.name),
         title,
@@ -1439,6 +1514,8 @@ export const createQobuzWatchlistService = ({
     saveMonitorSchedule,
     runMonitorNow,
     saveFavoriteGenres,
+    getReleaseTypes,
+    saveReleaseTypes,
     addWatchedArtist,
     addWatchedPlaylist,
     removeWatchedArtist,

@@ -216,6 +216,20 @@ export const registerWatchlistSocketHandlers = ({socket, io, watchlist}: WebSock
     socket.emit('favoriteGenres', watchlist.getFavoriteGenres());
   });
 
+  socket.on('getReleaseTypes', () => {
+    socket.emit('releaseTypes', {types: watchlist.getReleaseTypes()});
+  });
+
+  socket.on('saveReleaseTypes', ({types}) => {
+    try {
+      const state = watchlist.saveReleaseTypes(Array.isArray(types) ? types : []);
+      io.emit('releaseTypes', {types: watchlist.getReleaseTypes()});
+      broadcastState(state);
+    } catch (error: any) {
+      socket.emit('watchlistError', {message: error.message || 'Unable to save release types'});
+    }
+  });
+
   socket.on('saveFavoriteGenres', async ({genreIds}) => {
     try {
       await watchlist.loadAvailableGenres();
