@@ -1,0 +1,247 @@
+import {Download, Music2, X, Play, Pause} from 'lucide-react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import {formatDuration} from '@/shared/lib/utils';
+import {useAlbumTracks} from '@/shared/lib/api';
+import {usePlayerStore, makeTrack} from '@/store/player-store';
+import {useDownload} from '@/shared/hooks/useDownload';
+import {Button} from '@/shared/components/ui/Button';
+import {TrackRowSkeleton} from '@/shared/components/ui/Skeleton';
+import type {Service} from '@/types';
+import type {AlbumCardData} from './AlbumCard';
+
+interface AlbumModalProps {
+  album: AlbumCardData & {service: Service};
+  open: boolean;
+  onClose: () => void;
+}
+
+export function AlbumModal({album, open, onClose}: AlbumModalProps) {
+  const {data, isLoading, isError} = useAlbumTracks(album.id, album.service, open);
+  const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
+  const {download} = useDownload();
+
+  const tracks = data?.tracks ?? [];
+
+  const handleDownloadAlbum = () => {
+    download({
+      id: album.id,
+      type: 'album',
+      title: album.title,
+      artist: album.artist,
+      cover: album.cover,
+      service: album.service,
+    });
+    onClose();
+  };
+
+  const handlePlayTrack = (trackId: string, trackIndex: number) => {
+    const allTracks = tracks.map((t) =>
+      makeTrack({
+        id: t.id,
+        title: t.title,
+        artist: t.artist ?? album.artist,
+        album: album.title,
+        cover: album.cover,
+        duration: typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : t.duration ?? 0,
+        trackNumber: t.track_number,
+        service: album.service,
+        previewUrl: t.rawData?.preview as string | undefined,
+      }),
+    );
+    const track = allTracks[trackIndex];
+    if (!track) return;
+
+    if (currentTrack?.id === trackId) {
+      isPlaying ? pause() : resume();
+    } else {
+      setTrack(track, allTracks);
+    }
+  };
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in" />
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 flex flex-col rounded-2xl border border-border bg-card-bg shadow-2xl animate-fade-in">
+          {/* Header */}
+          <div className="flex items-start gap-4 p-5 border-b border-border shrink-0">
+            <div className="h-20 w-20 rounded-xl overflow-hidden shrink-0 bg-surface-bg">
+              {album.cover ? (
+                <img src={album.cover} alt={album.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Music2 size={24} className="text-text-muted" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 pt-1">
+              <p className="text-xs text-text-muted uppercase tracking-wide mb-1">
+                {album.type ?? 'Album'} · {album.service === 'deezer' ? 'Deezer' : 'Qobuz'}
+              </p>
+              <h2 className="text-lg font-bold text-text-primary leading-tight">{album.title}</h2>
+              <p className="text-sm text-text-secondary mt-0.5">{album.artist}</p>
+              {album.year && <p className="text-xs text-text-muted mt-1">{album.year}</p>}
+            </div>
+            <div className="flex items-center gap-2 shrink-0 pt-1">
+              <Button size="sm" onClick={handleDownloadAlbum}>
+                <Download size={14} />
+                Download
+              </Button>
+              <DialogPrimitive.Close asChild>
+                <Button variant="ghost" size="icon-sm">
+                  <X size={16} />
+                </Button>
+              </DialogPrimitive.Close>
+            </div>
+          </div>
+
+          {/* Track list */}
+          <div className="flex-1 overflow-y-auto">
+            {isLoading && (
+              <div className="py-4 space-y-1">
+                {Array.from({length: 8}).map((_, i) => (
+                  <TrackRowSkeleton key={i} />
+                ))}
+              </div>
+            )}
+            {isError && (
+              <div className="flex items-center justify-center py-16 text-text-muted text-sm">
+                Could not load tracks — check your credentials in Settings
+              </div>
+            )}
+            {!isLoading && !isError && tracks.length > 0 && (
+              <div className="py-2">
+                {tracks.map((t, i) => {
+                  const isActive = currentTrack?.id === t.id;
+                  const dur = typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : t.duration ?? 0;
+                  return (
+                    <div
+                      key={t.id}
+                      className="group flex items-center gap-3 px-5 py-2.5 hover:bg-surface-bg transition-colors cursor-pointer"
+                      onClick={() => handlePlayTrack(t.id, i)}
+                    >
+                      {/* Track number / play indicator */}
+                      <div className="w-5 flex items-center justify-center shrink-0">
+                        {isActive && isPlaying ? (
+                          <span className="flex gap-0.5 items-end h-4">
+                            {[0, 1, 2].map((j) => (
+                              <span
+                                key={j}
+                                className="w-0.5 bg-accent rounded-full animate-pulse"
+                                style={{height: `${50 + j * 25}%`, animationDelay: `${j * 150}ms`}}
+                              />
+                            ))}
+                          </span>
+                        ) : (
+                          <>
+                            <span
+                              className={`text-xs group-hover:hidden ${isActive ? 'text-accent' : 'text-text-muted'}`}
+                            >
+                              {t.track_number ?? i + 1}
+                            </span>
+                            <Play
+                              size={13}
+                              className={`hidden group-hover:block ${isActive ? 'text-accent' : 'text-text-primary'}`}
+                            />
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${isActive ? 'text-accent' : 'text-text-primary'}`}>
+                          {t.title}
+                        </p>
+                        {t.artist && t.artist !== album.artist && (
+                          <p className="text-xs text-text-muted truncate">{t.artist}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {dur > 0 && (
+                          <span className="text-xs text-text-muted tabular-nums hidden sm:block">
+                            {formatDuration(dur)}
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Download track"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            download({
+                              id: t.id,
+                              type: 'track',
+                              title: t.title,
+                              artist: t.artist ?? album.artist,
+                              cover: album.cover,
+                              service: album.service,
+                            });
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Download size={13} />
+                        </Button>
+                        {isActive && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              isPlaying ? pause() : resume();
+                            }}
+                          >
+                            {isPlaying ? <Pause size={13} /> : <Play size={13} />}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          {!isLoading && tracks.length > 0 && (
+            <div className="px-5 py-3 border-t border-border shrink-0 flex items-center justify-between">
+              <p className="text-xs text-text-muted">
+                {tracks.length} track{tracks.length > 1 ? 's' : ''}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const allTracks = tracks.map((t, i) =>
+                      makeTrack({
+                        id: t.id,
+                        title: t.title,
+                        artist: t.artist ?? album.artist,
+                        album: album.title,
+                        cover: album.cover,
+                        duration: typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : t.duration ?? 0,
+                        trackNumber: t.track_number ?? i + 1,
+                        service: album.service,
+                      }),
+                    );
+                    if (allTracks[0]) {
+                      setTrack(allTracks[0], allTracks);
+                      onClose();
+                    }
+                  }}
+                >
+                  <Play size={14} />
+                  Play all
+                </Button>
+                <Button size="sm" onClick={handleDownloadAlbum}>
+                  <Download size={14} />
+                  Download all
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}

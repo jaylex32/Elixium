@@ -1,0 +1,208 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme: Ember Signal (default) ── */
+:root,
+[data-theme='ember-signal'] {
+  --primary-bg: #0f0e0d;
+  --secondary-bg: #1a1816;
+  --card-bg: #221f1c;
+  --surface-bg: #2a2522;
+  --accent-bg: #332e29;
+  --border-color: #3d3730;
+  --primary-accent: #d4824a;
+  --secondary-accent: #e8a87c;
+  --text-primary: #f5ede4;
+  --text-secondary: #c4b5a6;
+  --text-muted: #7d6d60;
+  --success-color: #5cb85c;
+  --warning-color: #e8a87c;
+  --error-color: #d9534f;
+  --info-color: #5bc0de;
+  --sidebar-width: 272px;
+  --header-height: 64px;
+  --player-height: 80px;
+}
+
+/* ── Theme: Nocturne Pulse ── */
+[data-theme='nocturne-pulse'] {
+  --primary-bg: #050a0a;
+  --secondary-bg: #0a1414;
+  --card-bg: #0f1e1e;
+  --surface-bg: #142828;
+  --accent-bg: #1a3232;
+  --border-color: #1e3c3c;
+  --primary-accent: #00d4c8;
+  --secondary-accent: #a0e040;
+  --text-primary: #e0f5f4;
+  --text-secondary: #8ecfcc;
+  --text-muted: #3d7070;
+  --success-color: #a0e040;
+  --warning-color: #f0c040;
+  --error-color: #f05050;
+  --info-color: #00d4c8;
+}
+
+/* ── Theme: Sterling Deck ── */
+[data-theme='sterling-deck'] {
+  --primary-bg: #0d0f11;
+  --secondary-bg: #141820;
+  --card-bg: #1b2030;
+  --surface-bg: #212840;
+  --accent-bg: #282e48;
+  --border-color: #2e3550;
+  --primary-accent: #8899bb;
+  --secondary-accent: #aabbdd;
+  --text-primary: #d4ddf0;
+  --text-secondary: #8899bb;
+  --text-muted: #4a5570;
+  --success-color: #5cb8a0;
+  --warning-color: #c0a060;
+  --error-color: #c06070;
+  --info-color: #6090c0;
+}
+
+/* ── Theme: Verdant Luxe ── */
+[data-theme='verdant-luxe'] {
+  --primary-bg: #050f08;
+  --secondary-bg: #0a1a10;
+  --card-bg: #0f2518;
+  --surface-bg: #142f20;
+  --accent-bg: #1a3a28;
+  --border-color: #1e4430;
+  --primary-accent: #2ecc71;
+  --secondary-accent: #f0c040;
+  --text-primary: #e0f5e8;
+  --text-secondary: #8ecfaa;
+  --text-muted: #3d7050;
+  --success-color: #2ecc71;
+  --warning-color: #f0c040;
+  --error-color: #e05050;
+  --info-color: #40b0f0;
+}
+
+/* ── Theme: Crimson Noir ── */
+[data-theme='crimson-noir'] {
+  --primary-bg: #0f0507;
+  --secondary-bg: #1a0a0d;
+  --card-bg: #220f13;
+  --surface-bg: #2a1418;
+  --accent-bg: #33191e;
+  --border-color: #3d1f25;
+  --primary-accent: #c0392b;
+  --secondary-accent: #e07060;
+  --text-primary: #f5e4e8;
+  --text-secondary: #c4a0a6;
+  --text-muted: #7d5060;
+  --success-color: #5cb85c;
+  --warning-color: #e07060;
+  --error-color: #c0392b;
+  --info-color: #5bc0de;
+}
+
+/* ── Theme: Hi-Fi Current ── */
+[data-theme='hifi-current'] {
+  --primary-bg: #05080f;
+  --secondary-bg: #0a1020;
+  --card-bg: #0f182e;
+  --surface-bg: #141e3c;
+  --accent-bg: #192448;
+  --border-color: #1e2a55;
+  --primary-accent: #3b82f6;
+  --secondary-accent: #06b6d4;
+  --text-primary: #e0eaf5;
+  --text-secondary: #8aaccc;
+  --text-muted: #3a5070;
+  --success-color: #22c55e;
+  --warning-color: #eab308;
+  --error-color: #ef4444;
+  --info-color: #06b6d4;
+}
+
+/* ── Theme: Daylight Modern ── */
+[data-theme='daylight-modern'] {
+  --primary-bg: #f8fafc;
+  --secondary-bg: #f0f4f8;
+  --card-bg: #ffffff;
+  --surface-bg: #e8eef4;
+  --accent-bg: #dde6ee;
+  --border-color: #c4d4e0;
+  --primary-accent: #2563eb;
+  --secondary-accent: #0ea5e9;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #94a3b8;
+  --success-color: #16a34a;
+  --warning-color: #d97706;
+  --error-color: #dc2626;
+  --info-color: #0ea5e9;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--primary-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  #root {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--card-bg) 25%,
+      var(--surface-bg) 50%,
+      var(--card-bg) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+
+  .glass {
+    background: color-mix(in srgb, var(--card-bg) 80%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .accent-glow {
+    box-shadow: 0 0 20px color-mix(in srgb, var(--primary-accent) 30%, transparent);
+  }
+}

@@ -9,6 +9,8 @@
     "prepublishOnly": "eslint . && tsc",
     "prebuild": "eslint .",
     "build": "tsc && node sync-public.js",
+    "ui:dev": "cd elixium-ui && npm run dev",
+    "ui:build": "cd elixium-ui && npm run build",
     "postinstall": "node setup-termux.js",
     "dev": "ts-node src/elixium.ts",
     "test": "cross-env SIMULATE=true ava",
