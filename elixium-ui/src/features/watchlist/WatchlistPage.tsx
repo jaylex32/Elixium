@@ -9,6 +9,7 @@ import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/
 import {useWatchlistStore, toWatchedPlaylist, type WatchlistTab} from '@/store/watchlist-store';
 import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
+import {socketSend} from '@/shared/lib/socket-client';
 import {ScheduleEditor} from './ScheduleEditor';
 import {FavoriteGenres} from './FavoriteGenres';
 
@@ -224,19 +225,44 @@ export function WatchlistPage() {
       </div>
 
       {failingPlaylists.length > 0 && (
-        <div className="flex items-start gap-3 rounded-md border border-danger/30 bg-danger/8 p-4" role="alert">
-          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-danger" />
+        <div className="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/8 p-4" role="alert">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warning" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-text-primary">
-              {failingPlaylists.length} watched playlist{failingPlaylists.length > 1 ? 's are' : ' is'} failing to scan
+              {failingPlaylists.length} watched playlist{failingPlaylists.length > 1 ? 's' : ''} failed on the last scan
             </p>
-            <p className="mt-0.5 text-xs text-text-muted">
-              {failingPlaylists.map((p) => p.name).join(', ')}
-            </p>
-            <p className="mt-1.5 text-xs text-danger">{failingPlaylists[0].lastError}</p>
-            <Button variant="secondary" size="sm" className="mt-3" onClick={() => setPage('settings')}>
-              Open Settings
-            </Button>
+            <p className="mt-0.5 text-xs text-text-muted">{failingPlaylists.map((p) => p.name).join(', ')}</p>
+            <p className="mt-1.5 text-xs text-warning">{failingPlaylists[0].lastError}</p>
+
+            {/*
+              This status is whatever the last scan recorded, not a live check.
+              Renewing an expired cookie does not clear it until something scans
+              again — so the banner says when it was observed and offers the
+              retry, rather than implying the credential is broken right now.
+            */}
+            {failingPlaylists[0].lastCheckedAt && (
+              <p className="mt-1 text-xs text-text-muted">
+                Recorded {new Date(failingPlaylists[0].lastCheckedAt).toLocaleString()}. If you have updated your
+                Spotify cookie since, re-check to clear this.
+              </p>
+            )}
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={isScanning}
+                onClick={() => {
+                  socketSend('refreshAllWatchedPlaylists', {});
+                  toast.info('Re-checking watched playlists…');
+                }}
+              >
+                <RefreshCw size={13} />
+                Re-check now
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setPage('settings')}>
+                Open Settings
+              </Button>
+            </div>
           </div>
         </div>
       )}

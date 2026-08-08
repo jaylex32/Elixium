@@ -21,6 +21,7 @@ export type ApiErrorCode =
   | 'service_unavailable'
   | 'upstream_error'
   | 'not_configured'
+  | 'rate_limited'
   | 'internal_error';
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
@@ -30,6 +31,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   service_unavailable: 503,
   upstream_error: 502,
   not_configured: 409,
+  rate_limited: 429,
   internal_error: 500,
 };
 
@@ -77,6 +79,89 @@ export const sendData = <T>(res: Response, data: T, meta?: ApiMeta): Response =>
   return res.json(meta ? {ok: true, data, meta} : {ok: true, data});
 };
 
+/**
+ * Extract a usable message from anything that was thrown.
+ *
+ * Not every throw site constructs a real Error — some pass an object straight
+ * to `new Error(...)`, which stringifies to the famously unhelpful
+ * "[object Object]". This digs for a message before falling back to a JSON
+ * rendering, so a client is never handed that string.
+ */
+/** spotify-web-api-node's WebapiError carries the real detail off the message. */
+interface WebapiErrorLike {
+  statusCode?: number;
+  headers?: Record<string, string | undefined>;
+  body?: {error?: {message?: string; status?: number}} | unknown;
+}
+
+/** Seconds to wait, if the upstream told us. */
+export const retryAfterSeconds = (error: unknown): number | undefined => {
+  const header = (error as WebapiErrorLike)?.headers?.['retry-after'];
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+};
+
+export const upstreamStatus = (error: unknown): number | undefined => {
+  const status = (error as WebapiErrorLike)?.statusCode;
+  return Number.isFinite(status) ? (status as number) : undefined;
+};
+
+const toMessage = (error: unknown): string => {
+  if (typeof error === 'string') return error;
+
+  /*
+   * WebapiError sets its message from the response body object, so it
+   * stringifies to "[object Object]" and hides the actual cause. The status
+   * code and Retry-After header are where the real information is — a 429
+   * here was indistinguishable from a genuine failure.
+   */
+  const status = upstreamStatus(error);
+  if (status) {
+    const retry = retryAfterSeconds(error);
+    const nested = (error as WebapiErrorLike)?.body as {error?: {message?: string}} | undefined;
+    const detail = nested?.error?.message;
+
+    if (status === 429) {
+      return `Spotify is rate limiting this server${retry ? ` — retry in ${retry}s` : ''}.`;
+    }
+    if (status === 401 || status === 403) {
+      return detail ?? 'Spotify rejected the request — the sp_dc cookie may need renewing.';
+    }
+    if (detail) return `Spotify error ${status}: ${detail}`;
+  }
+
+  if (error instanceof Error) {
+    if (error.message && error.message !== '[object Object]') return error.message;
+    // A message of "[object Object]" means the real detail is on the cause or
+    // an attached payload rather than the message itself.
+    const cause = (error as {cause?: unknown}).cause;
+    if (cause) return toMessage(cause);
+  }
+
+  if (error && typeof error === 'object') {
+    const asRecord = error as Record<string, unknown>;
+    for (const key of ['message', 'error', 'description', 'reason']) {
+      const value = asRecord[key];
+      // Skip the placeholder itself, or we hand back what we set out to avoid.
+      if (typeof value === 'string' && value && value !== '[object Object]') return value;
+    }
+    try {
+      const json = JSON.stringify(error);
+      if (json && json !== '{}') return json.slice(0, 300);
+    } catch {
+      // Circular or otherwise unserializable — fall through.
+    }
+  }
+
+  return 'Internal error';
+};
+
+/**
+ * Failures that are really "we looked and there is nothing", not server
+ * faults. Reporting these as 500 makes an ordinary miss look like a crash.
+ */
+const NOT_FOUND_PATTERNS = /no match|not found|no tracks found|could not find|unavailable/i;
+
 /** Send a failure envelope, inferring the HTTP status from the error code. */
 export const sendError = (res: Response, error: unknown): Response => {
   if (error instanceof ApiError) {
@@ -86,7 +171,23 @@ export const sendError = (res: Response, error: unknown): Response => {
     });
   }
 
-  const message = error instanceof Error ? error.message : 'Internal error';
+  const message = toMessage(error);
+
+  // Surface throttling as 429 with the wait time, so a client can back off
+  // instead of treating it as a hard failure.
+  if (upstreamStatus(error) === 429) {
+    const retry = retryAfterSeconds(error);
+    if (retry) res.setHeader('Retry-After', String(retry));
+    return res.status(429).json({
+      ok: false,
+      error: {code: 'rate_limited', message, ...(retry ? {details: {retryAfterSeconds: retry}} : {})},
+    });
+  }
+
+  if (NOT_FOUND_PATTERNS.test(message)) {
+    return res.status(404).json({ok: false, error: {code: 'not_found', message}});
+  }
+
   return res.status(500).json({ok: false, error: {code: 'internal_error', message}});
 };
 

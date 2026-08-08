@@ -41,6 +41,7 @@ only use the envelope for errors.
 | `not_found` | 404 | No such track, item, or endpoint |
 | `not_configured` | 409 | Server lacks the credentials for this action |
 | `upstream_error` | 502 | Deezer/Qobuz failed or the stream dropped |
+| `rate_limited` | 429 | Upstream is throttling; see `details.retryAfterSeconds` and the `Retry-After` header |
 | `service_unavailable` | 503 | Feature disabled on this server |
 | `internal_error` | 500 | Unhandled failure |
 
