@@ -131,7 +131,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                     <li
                       key={`${track.id}-${index}`}
                       className={cn(
-                        'group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-bg sm:px-5',
+                        'rows-track group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-bg sm:px-5',
                         isActive && 'bg-accent/8',
                       )}
                     >

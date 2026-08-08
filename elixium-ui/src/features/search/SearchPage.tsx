@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 import {Search, X, Users} from 'lucide-react';
 import {useSearch} from '@/shared/lib/api';
 import {extractCover} from '@/shared/lib/cover';
@@ -8,6 +8,8 @@ import {useDownload} from '@/shared/hooks/useDownload';
 import {Input} from '@/shared/components/ui/Input';
 import {Spinner} from '@/shared/components/ui/Spinner';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
+import {useSearchHistoryStore} from '@/store/search-history-store';
+import {Clock, Trash2} from 'lucide-react';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
 import {AlbumModal} from '@/shared/components/AlbumModal';
 import {TrackRow} from '@/shared/components/TrackRow';
@@ -49,12 +51,26 @@ export function SearchPage() {
   const {data = [], isLoading, isFetching} = useSearch(query, service, type);
   const spinning = isLoading || isFetching;
 
+  const {entries: recentSearches, record, remove, clear} = useSearchHistoryStore();
+
+  /*
+   * Record only once results have actually arrived.
+   *
+   * Recording on keystroke would store every prefix of what the user typed
+   * ("d", "da", "daf"…); recording on a resolved, non-empty result set means
+   * history holds searches that actually went somewhere.
+   */
+  useEffect(() => {
+    if (!spinning && query.trim().length >= 2 && data.length > 0) record(query, type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinning, query, type, data.length]);
+
   const handleTypeChange = (t: string) => setType(t as SearchType);
 
   const isEmpty = query.trim().length >= 2 && !spinning && data.length === 0;
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl mx-auto animate-fade-in">
+    <div className="mx-auto max-w-5xl animate-fade-in space-y-5 p-4 sm:p-6">
       {/* Search bar */}
       <Input
         icon={spinning ? <Spinner size="sm" /> : <Search size={16} />}
@@ -71,6 +87,48 @@ export function SearchPage() {
         className="h-12 text-base pl-10 pr-10"
         autoFocus
       />
+
+      {query.trim().length < 2 && recentSearches.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <Clock size={12} />
+              Recent searches
+            </h2>
+            <button
+              onClick={clear}
+              className="text-xs text-text-muted transition-colors hover:text-text-primary"
+            >
+              Clear all
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {recentSearches.map((entry) => (
+              <span
+                key={entry.query}
+                className="group flex items-center rounded-full border border-border bg-card-bg transition-colors hover:border-accent/40"
+              >
+                <button
+                  onClick={() => {
+                    setQuery(entry.query);
+                    setType(entry.type as SearchType);
+                  }}
+                  className="min-h-9 rounded-l-full py-1 pl-3.5 pr-2 text-sm text-text-secondary transition-colors group-hover:text-text-primary"
+                >
+                  {entry.query}
+                </button>
+                <button
+                  onClick={() => remove(entry.query)}
+                  aria-label={`Remove ${entry.query} from recent searches`}
+                  className="flex h-9 w-8 items-center justify-center rounded-r-full text-text-muted transition-colors hover:text-danger"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       <TabsRoot value={type} onValueChange={handleTypeChange}>
         <TabsList className="w-fit">

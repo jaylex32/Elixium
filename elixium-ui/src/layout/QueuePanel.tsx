@@ -103,7 +103,7 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
                       <li
                         key={`${track.id}-${index}`}
                         className={cn(
-                          'group flex items-center gap-2 px-3 py-2 transition-colors hover:bg-surface-bg',
+                          'rows-queue group flex items-center gap-2 px-3 py-2 transition-colors hover:bg-surface-bg',
                           isCurrent && 'bg-accent/10',
                           isPast && 'opacity-45',
                         )}

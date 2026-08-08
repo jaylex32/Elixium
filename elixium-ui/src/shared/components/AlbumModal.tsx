@@ -136,7 +136,7 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                   return (
                     <div
                       key={t.id}
-                      className="group flex items-center gap-3 px-5 py-2.5 hover:bg-surface-bg transition-colors cursor-pointer"
+                      className="rows-track group flex cursor-pointer items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-bg"
                       onClick={() => handlePlayTrack(t.id, i)}
                     >
                       {/* Track number / play indicator */}

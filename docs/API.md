@@ -188,6 +188,28 @@ Both are listed in `Access-Control-Expose-Headers`, so browser clients can read
 them too. **Check `X-Elixium-Stream` and surface "Preview only — check server
 credentials" rather than letting the track end at 0:30 unexplained.**
 
+### Lyrics
+
+```
+GET /api/v1/tracks/:id/lyrics?service=deezer
+```
+
+```json
+{"ok": true,
+ "data": {"text": "…", "synced": [{"timeMs": 3580, "durationMs": 8660, "text": "…"}],
+          "writers": null, "copyright": null},
+ "meta": {"hasSynced": true, "source": "deezer"}}
+```
+
+`synced` is empty when the source has no timestamps — check `meta.hasSynced`
+before building a karaoke view. **404 is an ordinary outcome**: many tracks
+simply have no lyrics. Do not treat it as an error.
+
+Deezer serves its own lyrics (with timestamps) for tracks that have them and
+otherwise falls back to a Musixmatch text lookup; Qobuz has no lyrics API, so
+it always uses that fallback. Both paths therefore need either a valid Deezer
+ARL or a reachable Musixmatch.
+
 ### Server-side caching
 
 Deezer tracks must be downloaded and decrypted in full before any byte can be
@@ -319,6 +341,7 @@ GET    /api/v1/qualities                    ?service
 GET    /api/v1/genres
 GET    /api/v1/tracks/:id/stream            ?service&quality   (GET + HEAD, Range)
 GET    /api/v1/tracks/:id/file              ?service&quality
+GET    /api/v1/tracks/:id/lyrics            ?service
 POST   /api/v1/downloads/archive            {service, trackIds[], quality?}
 GET    /api/v1/downloads
 POST   /api/v1/downloads                    {service, tracks[], quality?}

@@ -389,4 +389,30 @@
     min-width: 44px;
     min-height: 44px;
   }
+
+  /*
+   * Off-screen rows skip layout, style and paint.
+   *
+   * Every list in this app is bounded server-side — search 50, discovery 18,
+   * album/playlist tracks 100 (hard cap 500) — so a windowing library's
+   * measurement and scroll-sync machinery would cost more than it saves. This
+   * gets the same "don't render what nobody can see" win in one declaration,
+   * with no dependency and no scroll-position edge cases.
+   *
+   * contain-intrinsic-size is the placeholder height used while a row is
+   * skipped; without it the scrollbar jumps as rows enter the viewport. The
+   * values match the real row heights below.
+   */
+  .rows-track {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 56px;
+  }
+  .rows-queue {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 60px;
+  }
+  .rows-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
+  }
 }

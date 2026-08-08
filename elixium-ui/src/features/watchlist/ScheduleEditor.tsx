@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {Clock, Save, Eye, ListMusic} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
-import {getSocket} from '@/shared/lib/socket';
+import {useSocketEvent, socketSend} from '@/shared/lib/socket-client';
 import {Button} from '@/shared/components/ui/Button';
 import {Switch} from '@/shared/components/ui/Switch';
 import {Select} from '@/shared/components/ui/Select';
@@ -244,24 +244,19 @@ export function ScheduleEditor() {
     playlists: DEFAULT_SCHEDULE,
   });
 
-  useEffect(() => {
-    const socket = getSocket();
-    const onSchedules = (data: Partial<Record<Kind, MonitorSchedule>>) => {
-      setSchedules({
-        artists: {...DEFAULT_SCHEDULE, ...(data?.artists ?? {})},
-        playlists: {...DEFAULT_SCHEDULE, ...(data?.playlists ?? {})},
-      });
-    };
+  useSocketEvent<Partial<Record<Kind, MonitorSchedule>>>('monitorSchedules', (data) => {
+    setSchedules({
+      artists: {...DEFAULT_SCHEDULE, ...(data?.artists ?? {})},
+      playlists: {...DEFAULT_SCHEDULE, ...(data?.playlists ?? {})},
+    });
+  });
 
-    socket.on('monitorSchedules', onSchedules);
-    socket.emit('getMonitorSchedules');
-    return () => {
-      socket.off('monitorSchedules', onSchedules);
-    };
+  useEffect(() => {
+    socketSend('getMonitorSchedules');
   }, []);
 
   const save = (kind: Kind) => (schedule: MonitorSchedule) => {
-    getSocket().emit('saveMonitorSchedule', {kind, schedule});
+    socketSend('saveMonitorSchedule', {kind, schedule});
     toast.success(`${kind === 'artists' ? 'Artist' : 'Playlist'} schedule saved`);
   };
 

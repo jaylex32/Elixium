@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {Sparkles, Check} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
-import {getSocket} from '@/shared/lib/socket';
+import {useSocketEvent, socketSend} from '@/shared/lib/socket-client';
 import {Button} from '@/shared/components/ui/Button';
 
 interface Genre {
@@ -23,10 +23,7 @@ export function FavoriteGenres() {
   const [dirty, setDirty] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    const socket = getSocket();
-
-    const onGenres = (data: {genres?: unknown; availableGenres?: Genre[]}) => {
+  useSocketEvent<{genres?: unknown; availableGenres?: Genre[]}>('favoriteGenres', (data) => {
       setAvailable(Array.isArray(data?.availableGenres) ? data.availableGenres : []);
       // The server returns either ids or objects depending on how they were saved.
       const raw: unknown[] = Array.isArray(data?.genres) ? data.genres : [];
@@ -35,15 +32,12 @@ export function FavoriteGenres() {
           .map((g) => (typeof g === 'string' ? g : String((g as {id?: unknown})?.id ?? '')))
           .filter((id): id is string => Boolean(id)),
       );
-      setLoaded(true);
-      setDirty(false);
-    };
+    setLoaded(true);
+    setDirty(false);
+  });
 
-    socket.on('favoriteGenres', onGenres);
-    socket.emit('getFavoriteGenres');
-    return () => {
-      socket.off('favoriteGenres', onGenres);
-    };
+  useEffect(() => {
+    socketSend('getFavoriteGenres');
   }, []);
 
   const toggle = (id: string) => {
@@ -52,7 +46,7 @@ export function FavoriteGenres() {
   };
 
   const save = () => {
-    getSocket().emit('saveFavoriteGenres', {genres: selected});
+    socketSend('saveFavoriteGenres', {genres: selected});
     setDirty(false);
     toast.success(selected.length ? `Saved ${selected.length} genres` : 'Cleared genre preferences');
   };
