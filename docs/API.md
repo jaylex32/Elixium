@@ -205,10 +205,11 @@ GET /api/v1/tracks/:id/lyrics?service=deezer
 before building a karaoke view. **404 is an ordinary outcome**: many tracks
 simply have no lyrics. Do not treat it as an error.
 
-Deezer serves its own lyrics (with timestamps) for tracks that have them and
-otherwise falls back to a Musixmatch text lookup; Qobuz has no lyrics API, so
-it always uses that fallback. Both paths therefore need either a valid Deezer
-ARL or a reachable Musixmatch.
+Provider order: Deezer's own timestamped lyrics when an authenticated session
+is available, then **LRCLIB** — a free, key-less lyrics API queried by
+artist/title/album/duration, so it works identically for both services and
+returns LRC-synced lines. The old Musixmatch HTML scraper is no longer used;
+it returns 403.
 
 ### Server-side caching
 

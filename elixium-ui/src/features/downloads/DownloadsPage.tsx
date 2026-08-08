@@ -3,6 +3,28 @@ import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 import {Progress} from '@/shared/components/ui/Progress';
 import {useDownloadStore, type ActiveDownload} from '@/store/download-store';
+import {useEffect, useState} from 'react';
+
+/** Compact elapsed time: 42s, 3m 07s, 1h 02m. */
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(sec).padStart(2, '0')}s`;
+  return `${sec}s`;
+}
+
+/** Ticks once a second while anything is running, so elapsed time advances. */
+function useElapsedTick(enabled: boolean) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [enabled]);
+}
 
 const STATUS_CONFIG = {
   starting: {label: 'Starting…', color: 'text-info', icon: Loader2, spin: true},
@@ -28,74 +50,78 @@ function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
     >
       <div className="flex items-start gap-3">
         {/* Cover / icon */}
-        <div className="shrink-0 relative h-12 w-12 rounded-xl overflow-hidden bg-surface-bg">
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-sm bg-surface-bg">
           {d.cover ? (
-            <img src={d.cover} alt={d.title} className="w-full h-full object-cover" />
+            <img src={d.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="flex h-full w-full items-center justify-center">
               <Music2 size={20} className="text-text-muted" />
             </div>
           )}
           {isActive && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/45">
               <Loader2 size={16} className="animate-spin text-white" />
             </div>
           )}
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-text-primary truncate">{d.title}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-text-primary">{d.title}</p>
+              {d.artist && <p className="truncate text-xs text-text-muted">{d.artist}</p>}
+            </div>
+            <span className={cn('flex shrink-0 items-center gap-1 text-xs font-medium', cfg.color)}>
+              <Icon size={13} className={cfg.spin ? 'animate-spin' : ''} />
+              {cfg.label}
+            </span>
           </div>
-          {d.artist && <p className="text-xs text-text-muted truncate">{d.artist}</p>}
 
-          {/* Progress */}
           {isActive && (
-            <div className="mt-2 space-y-1.5">
+            <div className="mt-2.5 space-y-1.5">
               <Progress value={d.percentage} className="h-1.5" />
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-text-muted truncate max-w-[70%]">{d.currentTrack ?? cfg.label}</p>
-                <div className="flex items-center gap-2 shrink-0">
+
+              {/* Track counter, elapsed time and percentage are each useful on
+                  their own: the counter shows how much is left, elapsed shows
+                  whether it is actually moving, and the bar alone showed
+                  neither. */}
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                <span className="truncate">{d.currentTrack ?? cfg.label}</span>
+                <span className="flex shrink-0 items-center gap-2 tabular-nums">
                   {d.total > 1 && (
-                    <span className="text-xs text-text-muted">
-                      {d.current}/{d.total}
+                    <span>
+                      {d.current} of {d.total}
                     </span>
                   )}
-                  <span className={cn('text-xs font-medium tabular-nums', cfg.color)}>{d.percentage}%</span>
-                </div>
+                  <span className="text-text-muted/60">·</span>
+                  <span>{formatElapsed(Date.now() - d.startedAt)}</span>
+                  <span className={cn('font-medium', cfg.color)}>{d.percentage}%</span>
+                </span>
               </div>
             </div>
           )}
 
-          {/* Error */}
-          {d.status === 'error' && d.error && <p className="mt-1 text-xs text-danger truncate">{d.error}</p>}
+          {d.status === 'error' && d.error && <p className="mt-1.5 text-xs text-danger">{d.error}</p>}
 
-          {/* Done */}
           {d.status === 'done' && (
-            <p className="mt-1 text-xs text-success">
-              {d.total > 1 ? `${d.total} tracks downloaded` : 'Download complete'}
+            <p className="mt-1.5 text-xs text-success">
+              {d.total > 1 ? `${d.total} tracks saved` : 'Saved'} in {formatElapsed(Date.now() - d.startedAt)}
             </p>
           )}
         </div>
 
-        {/* Status + close */}
-        <div className="flex items-center gap-2 shrink-0 pt-0.5">
-          <div className={cn('flex items-center gap-1 text-xs font-medium', cfg.color)}>
-            <Icon size={14} className={cfg.spin ? 'animate-spin' : ''} />
-            {!isActive && <span>{cfg.label}</span>}
-          </div>
-          {!isActive && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onClear}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-danger"
-            >
-              <X size={13} />
-            </Button>
-          )}
-        </div>
+        {!isActive && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Dismiss"
+            onClick={onClear}
+            className="shrink-0 text-text-muted transition-opacity hover:text-danger lg:opacity-0 lg:group-hover:opacity-100"
+          >
+            <X size={13} />
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -103,6 +129,8 @@ function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
 
 export function DownloadsPage() {
   const {active, history, clear, clearDone} = useDownloadStore();
+  const isRunning = useDownloadStore((s) => s.isRunning);
+  useElapsedTick(isRunning);
 
   const downloads = Object.values(active).sort((a, b) => {
     const order = {downloading: 0, converting: 1, starting: 2, error: 3, done: 4};

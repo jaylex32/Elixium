@@ -384,7 +384,80 @@ export const createWebData = ({
       await ensureQobuzSearchReady();
 
       const qobuzConfig = getQobuzConfig();
+
+      /*
+       * Qobuz exposes a family of editorial feeds through the same two
+       * endpoints, differing only by `type`. The mapping below was duplicated
+       * per case; pulling it out is what makes adding a feed a one-line change
+       * rather than another fifteen-line copy.
+       */
+      const mapQobuzAlbum = (album: any): SearchResult => ({
+        id: String(album.id),
+        title: album.title || 'Unknown Album',
+        artist: album.artist?.name || 'Unknown Artist',
+        album: album.title || '',
+        type: 'album',
+        year: album.release_date_original ? new Date(album.release_date_original).getFullYear() : null,
+        duration: `${album.tracks_count || 0} tracks`,
+        rawData: album,
+      });
+
+      const pushQobuzFeaturedAlbums = async (featuredType: string) => {
+        if (!qobuzConfig) return;
+        const apiUrl =
+          `https://www.qobuz.com/api.json/0.2/album/getFeatured?type=${featuredType}` +
+          `&offset=0&limit=${normalizedLimit}&app_id=${qobuzConfig.app_id}&user_auth_token=${qobuzConfig.token}`;
+        const apiResponse = await makeHttpRequest(apiUrl);
+        for (const album of (apiResponse.albums?.items || []).slice(0, normalizedLimit)) {
+          results.push(mapQobuzAlbum(album));
+        }
+      };
+
+      const pushQobuzFeaturedPlaylists = async (featuredType: string) => {
+        if (!qobuzConfig) return;
+        const apiUrl =
+          `https://www.qobuz.com/api.json/0.2/playlist/getFeatured?type=${featuredType}` +
+          `&offset=0&limit=${normalizedLimit}&app_id=${qobuzConfig.app_id}&user_auth_token=${qobuzConfig.token}`;
+        const apiResponse = await makeHttpRequest(apiUrl);
+        for (const playlist of (apiResponse.playlists?.items || []).slice(0, normalizedLimit)) {
+          results.push({
+            id: String(playlist.id),
+            title: playlist.name || 'Unknown Playlist',
+            artist: playlist.owner?.name || 'Qobuz',
+            type: 'playlist',
+            year: playlist.created_at ? new Date(playlist.created_at * 1000).getFullYear() : null,
+            duration: `${playlist.tracks_count || playlist.users_count || 0} tracks`,
+            rawData: playlist,
+          });
+        }
+      };
+
       switch (normalizedType) {
+        // Additional Qobuz editorial feeds.
+        case 'best-sellers': {
+          await pushQobuzFeaturedAlbums('best-sellers');
+          break;
+        }
+        case 'most-streamed': {
+          await pushQobuzFeaturedAlbums('most-streamed');
+          break;
+        }
+        case 'qobuzissims': {
+          await pushQobuzFeaturedAlbums('qobuzissims');
+          break;
+        }
+        case 'ideal-discography': {
+          await pushQobuzFeaturedAlbums('ideal-discography');
+          break;
+        }
+        case 'recent-releases': {
+          await pushQobuzFeaturedAlbums('recent-releases');
+          break;
+        }
+        case 'latest-playlists': {
+          await pushQobuzFeaturedPlaylists('last-created');
+          break;
+        }
         case 'new-releases': {
           if (qobuzConfig) {
             const apiUrl = `https://www.qobuz.com/api.json/0.2/album/getFeatured?type=new-releases-full&offset=0&limit=${normalizedLimit}&app_id=${qobuzConfig.app_id}&user_auth_token=${qobuzConfig.token}`;

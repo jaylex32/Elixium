@@ -12,6 +12,11 @@ import {
   Music2,
   Eye,
   Link2,
+  Users,
+  Award,
+  Flame,
+  Headphones,
+  Library,
 } from 'lucide-react';
 import {useDiscovery} from '@/shared/lib/api';
 import {cn} from '@/shared/lib/utils';
@@ -25,11 +30,41 @@ import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {ErrorState} from '@/shared/components/States';
 import type {RawDiscoveryItem, Service} from '@/types';
 
-const SECTIONS = [
+interface Section {
+  type: string;
+  title: string;
+  subtitle: string;
+  icon: React.ElementType;
+}
+
+/** Rows both services can serve. */
+const COMMON_SECTIONS: Section[] = [
   {type: 'new-releases', title: 'New Releases', subtitle: 'Fresh this week', icon: Sparkles},
   {type: 'trending-albums', title: 'Trending', subtitle: 'What people are playing', icon: TrendingUp},
   {type: 'popular-playlists', title: 'Popular Playlists', subtitle: 'Curated collections', icon: ListMusic},
+  {type: 'top-artists', title: 'Top Artists', subtitle: 'Names worth following', icon: Users},
 ];
+
+/*
+ * Service-specific rows. Qobuz and Deezer expose different editorial feeds,
+ * and asking one for the other's feed returns an empty row — so the home page
+ * only requests what the selected service can actually answer.
+ */
+const SERVICE_SECTIONS: Record<string, Section[]> = {
+  qobuz: [
+    {type: 'qobuzissims', title: 'Qobuzissims', subtitle: "Qobuz's own selection", icon: Award},
+    {type: 'best-sellers', title: 'Best Sellers', subtitle: 'Most bought on Qobuz', icon: Flame},
+    {type: 'most-streamed', title: 'Most Streamed', subtitle: 'Played the most right now', icon: Headphones},
+    {type: 'ideal-discography', title: 'Ideal Discography', subtitle: 'Essential albums to own', icon: Library},
+    {type: 'latest-playlists', title: 'Newest Playlists', subtitle: 'Freshly curated', icon: ListMusic},
+  ],
+  deezer: [
+    {type: 'top-tracks', title: 'Top Tracks', subtitle: 'The current chart', icon: Flame},
+    {type: 'genre-pop', title: 'Pop', subtitle: 'Popular right now', icon: Headphones},
+    {type: 'genre-rap', title: 'Hip-Hop & Rap', subtitle: 'Popular right now', icon: Headphones},
+    {type: 'genre-jazz', title: 'Jazz', subtitle: 'Popular right now', icon: Library},
+  ],
+};
 
 const QUICK_LINKS: {page: Page; label: string; icon: React.ElementType}[] = [
   {page: 'genres', label: 'Browse genres', icon: Music2},
@@ -152,6 +187,11 @@ function DiscoverySection({
 
   const items = data.slice(skip).map((item) => toAlbum(item, service));
 
+  // A feed that resolves to nothing should disappear entirely rather than
+  // leave a heading with blank space under it. Errors still render, since a
+  // failure is worth telling the user about.
+  if (!isLoading && !isError && items.length === 0) return null;
+
   const scrollBy = (direction: 1 | -1) => (event: React.MouseEvent<HTMLButtonElement>) => {
     const row = event.currentTarget.closest('section')?.querySelector('[data-row]');
     row?.scrollBy({left: direction * (row.clientWidth * 0.8), behavior: 'smooth'});
@@ -249,6 +289,8 @@ export function HomePage() {
   const {data: newReleases = []} = useDiscovery(service, 'new-releases');
   const featured = newReleases.length > 0 ? toAlbum(newReleases[0], service) : null;
 
+  const sections = [...COMMON_SECTIONS, ...(SERVICE_SECTIONS[service] ?? [])];
+
   return (
     <div className="animate-fade-in space-y-8 px-4 pb-8 pt-5 sm:space-y-10 sm:px-6 sm:pt-6">
       {featured && <Hero item={featured} service={service} onOpen={() => setSelected({...featured, service})} />}
@@ -269,7 +311,7 @@ export function HomePage() {
         ))}
       </div>
 
-      {SECTIONS.map((section, index) => (
+      {sections.map((section, index) => (
         <DiscoverySection
           key={`${section.type}-${service}`}
           {...section}

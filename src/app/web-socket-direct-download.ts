@@ -60,7 +60,7 @@ export const registerDirectDownloadSocketHandler = ({
           current,
           total,
           currentTrack: progress.message,
-          itemId: 'url-conversion',
+          itemId: data.itemId ?? 'url-conversion',
           itemStatus: 'downloading',
           itemProgress: percentage,
         });

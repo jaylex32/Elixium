@@ -13,6 +13,7 @@ import {
   safeFilename,
 } from '../quality';
 import {parseRange, trackBufferCache} from '../track-cache';
+import {fetchLrclib, type LyricsResult} from '../lyrics';
 
 export interface MediaRouteDependencies {
   app: Express;
@@ -390,12 +391,12 @@ export const registerMediaRoutes = ({
   /**
    * GET /tracks/:id/lyrics?service=
    *
-   * Returns plain text plus, when the source has them, timestamped lines for a
-   * synced/karaoke display.
+   * Returns plain text plus timestamped lines when the source has them.
    *
-   * Deezer exposes its own lyrics for tracks that have them and falls back to a
-   * Musixmatch lookup by "artist - title". Qobuz has no lyrics API, so it
-   * always uses that text lookup.
+   * Provider order: Deezer's own lyrics first when available (they are
+   * authoritative and already timestamped), then LRCLIB, which needs no
+   * credentials and covers both services. The former Musixmatch HTML scraper
+   * is no longer reachable — it returns 403 — so it is not consulted.
    */
   app.get(
     `${basePath}/tracks/:id/lyrics`,
@@ -403,47 +404,72 @@ export const registerMediaRoutes = ({
       const service = parseService(req.query.service);
       const id = requireString(req.params.id, 'id');
 
+      let result: LyricsResult | null = null;
+      let meta: {artist?: string; title?: string; album?: string; durationSec?: number} = {};
+
       if (service === 'deezer') {
         await initDeezerForDownload().catch(() => undefined);
-        const trackInfo = await deezer.getTrackInfo(id).catch(() => undefined);
-        if (!trackInfo) throw ApiError.notFound('Track not found');
+        const info = await deezer.getTrackInfo(id).catch(() => undefined);
 
-        const lyrics = await deezer.getTrackLyrics(trackInfo).catch(() => null);
-        if (!lyrics?.LYRICS_TEXT) throw ApiError.notFound('No lyrics available for this track');
+        if (info) {
+          meta = {
+            artist: info.ART_NAME,
+            title: info.SNG_TITLE,
+            album: info.ALB_TITLE,
+            durationSec: Number(info.DURATION) || undefined,
+          };
 
-        const synced = Array.isArray(lyrics.LYRICS_SYNC_JSON)
-          ? lyrics.LYRICS_SYNC_JSON.filter((line: any) => line?.line).map((line: any) => ({
-              // Timestamps arrive as strings; a client should not have to parse them.
-              timeMs: Number(line.milliseconds) || 0,
-              durationMs: Number(line.duration) || 0,
-              text: String(line.line),
-            }))
-          : [];
-
-        return sendData(
-          res,
-          {
-            text: lyrics.LYRICS_TEXT,
-            synced,
-            writers: lyrics.LYRICS_WRITERS ?? null,
-            copyright: lyrics.LYRICS_COPYRIGHTS ?? null,
-          },
-          {service, id, hasSynced: synced.length > 0, source: 'deezer'},
-        );
+          const native = await deezer.getTrackLyrics(info).catch(() => null);
+          if (native?.LYRICS_TEXT) {
+            const synced = Array.isArray(native.LYRICS_SYNC_JSON)
+              ? native.LYRICS_SYNC_JSON.filter((line: any) => line?.line).map((line: any) => ({
+                  timeMs: Number(line.milliseconds) || 0,
+                  durationMs: Number(line.duration) || 0,
+                  text: String(line.line),
+                }))
+              : [];
+            result = {text: native.LYRICS_TEXT, synced, source: 'deezer'};
+          }
+        } else {
+          // Without an authenticated session the private API is unavailable;
+          // the public one still gives us enough to query LRCLIB.
+          const pub = await deezer.getTrackInfoPublicApi(id).catch(() => undefined);
+          if (pub) {
+            meta = {
+              artist: (pub as any).artist?.name,
+              title: (pub as any).title,
+              album: (pub as any).album?.title,
+              durationSec: Number((pub as any).duration) || undefined,
+            };
+          }
+        }
+      } else {
+        await initQobuzForSearch();
+        const track = await qobuz.getTrackInfo(Number(id)).catch(() => undefined);
+        if (!track) throw ApiError.notFound('Track not found');
+        meta = {
+          artist: track?.performer?.name ?? track?.album?.artist?.name,
+          title: track?.title,
+          album: track?.album?.title,
+          durationSec: Number(track?.duration) || undefined,
+        };
       }
 
-      await initQobuzForSearch();
-      const meta = await qobuz.getTrackInfo(Number(id)).catch(() => undefined);
-      if (!meta) throw ApiError.notFound('Track not found');
+      if (!result && meta.artist && meta.title) {
+        result = await fetchLrclib({
+          artist: meta.artist,
+          title: meta.title,
+          album: meta.album,
+          durationSec: meta.durationSec,
+        });
+      }
 
-      const query = `${meta?.performer?.name ?? ''} - ${meta?.title ?? ''}`.trim();
-      const text = await deezer.getLyricsMusixmatch(query).catch(() => '');
-      if (!text) throw ApiError.notFound('No lyrics available for this track');
+      if (!result) throw ApiError.notFound('No lyrics available for this track');
 
       return sendData(
         res,
-        {text, synced: [], writers: null, copyright: null},
-        {service, id, hasSynced: false, source: 'musixmatch'},
+        {text: result.text, synced: result.synced, writers: null, copyright: null},
+        {service, id, hasSynced: result.synced.length > 0, source: result.source},
       );
     }),
   );
