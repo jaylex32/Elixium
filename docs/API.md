@@ -83,8 +83,11 @@ Recommended client flow:
    `services[x].configured` to warn before the user hits a dead path.
 
 > **`configured` means a credential is present, not that it is valid.** An
-> expired Deezer ARL still reports `configured: true`. See §4 for how to detect
-> the resulting degradation at stream time.
+> expired Deezer ARL still reports `configured: true`. Use
+> `POST /api/v1/services/:service/verify` to actually test it — that performs
+> a real authenticated call and returns
+> `{ok, reason, message, account?}`, with `reason: "expired_credential"` for
+> the common expired-ARL case. See §4 for detecting degradation at stream time.
 
 `GET /api/v1` returns a machine-readable index of every route — handy while
 building a client.
@@ -348,6 +351,7 @@ GET    /api/v1/downloads
 POST   /api/v1/downloads                    {service, tracks[], quality?}
 GET    /api/v1/settings
 PATCH  /api/v1/settings
+POST   /api/v1/services/:service/verify     test stored credentials
 GET    /api/v1/watchlist
 POST   /api/v1/watchlist/scan
 GET    /api/v1/cache/stats

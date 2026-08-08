@@ -97,6 +97,7 @@ export const registerApiV1 = (deps: ApiV1Dependencies): void => {
           downloads: `GET ${basePath}/downloads`,
           startDownload: `POST ${basePath}/downloads`,
           settings: `GET|PATCH ${basePath}/settings`,
+          verifyService: `POST ${basePath}/services/:service/verify`,
           watchlist: `GET ${basePath}/watchlist`,
           watchlistScan: `POST ${basePath}/watchlist/scan`,
         },

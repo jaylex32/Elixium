@@ -166,3 +166,28 @@ export function useLyrics(id: string | undefined, service: Service | undefined, 
     staleTime: 1000 * 60 * 30,
   });
 }
+
+// ── Service credential verification ─────────────────────────────────────────
+export interface VerifyResult {
+  service: Service;
+  ok: boolean;
+  account?: string | null;
+  reason?: string;
+  message: string;
+}
+
+/**
+ * Exercise a service's stored credentials.
+ *
+ * /health reports whether a credential is *present*, which stays true for an
+ * expired Deezer ARL — the cause of silent 30-second previews and missing
+ * lyrics. This performs a real authenticated call and reports what happened.
+ */
+export function useVerifyService() {
+  return useMutation<VerifyResult, Error, Service>({
+    mutationFn: async (service: Service) => {
+      const res = await http.post(`/v1/services/${service}/verify`);
+      return (res.data?.data ?? res.data) as VerifyResult;
+    },
+  });
+}

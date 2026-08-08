@@ -1,4 +1,5 @@
-import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2} from 'lucide-react';
+import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2, Ban} from 'lucide-react';
+import {socketSend} from '@/shared/lib/socket-client';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 import {Progress} from '@/shared/components/ui/Progress';
@@ -111,7 +112,20 @@ function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
           )}
         </div>
 
-        {!isActive && (
+        {/* A running download previously had no stop control at all, even
+            though the server has handled cancelDownload all along. */}
+        {isActive ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Cancel ${d.title}`}
+            title="Cancel download"
+            onClick={() => socketSend('cancelDownload', {id: d.itemId})}
+            className="shrink-0 text-text-muted hover:text-danger"
+          >
+            <Ban size={14} />
+          </Button>
+        ) : (
           <Button
             variant="ghost"
             size="icon-sm"

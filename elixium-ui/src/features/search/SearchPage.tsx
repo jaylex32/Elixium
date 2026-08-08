@@ -1,5 +1,5 @@
 import {useState, useEffect, useMemo} from 'react';
-import {Search, X, Clock, Trash2, Play, Pause, Download, Music2, ArrowUpDown} from 'lucide-react';
+import {Search, X, Clock, Trash2, Play, Pause, Music2, ArrowUpDown} from 'lucide-react';
 import {useSearch} from '@/shared/lib/api';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
@@ -15,6 +15,7 @@ import {Input} from '@/shared/components/ui/Input';
 import {Button} from '@/shared/components/ui/Button';
 import {Spinner} from '@/shared/components/ui/Spinner';
 import {GridSkeleton, ListSkeleton, EmptyState} from '@/shared/components/States';
+import {TrackActions} from '@/shared/components/TrackActions';
 import type {RawSearchResult, Service} from '@/types';
 
 type SearchType = 'track' | 'album' | 'artist' | 'playlist';
@@ -115,15 +116,20 @@ function ResultRow({
         <span className="shrink-0 text-xs tabular-nums text-text-muted">{formatDuration(seconds)}</span>
       )}
 
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={`Download ${result.title}`}
-        onClick={onDownload}
-        className="shrink-0 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
-      >
-        <Download size={14} />
-      </Button>
+      <TrackActions
+        track={{
+          id: result.id,
+          title: result.title,
+          artist: result.artist,
+          album: result.album,
+          cover,
+          duration: seconds,
+          service,
+        }}
+        onPlay={onPlay}
+        onDownload={onDownload}
+        className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+      />
     </div>
   );
 }

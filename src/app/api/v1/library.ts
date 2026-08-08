@@ -6,6 +6,10 @@ export interface LibraryRouteDependencies {
   app: Express;
   basePath: string;
   conf: any;
+  deezer: any;
+  qobuz: any;
+  initDeezerForDownload: () => Promise<void>;
+  initQobuzForDownload: () => Promise<void>;
   settingsHooks: SettingsInvalidationHooks;
   watchlist?: any;
   activeDownloads: Map<string, any> | any;
@@ -35,6 +39,10 @@ export const registerLibraryRoutes = ({
   app,
   basePath,
   conf,
+  deezer,
+  qobuz,
+  initDeezerForDownload,
+  initQobuzForDownload,
   settingsHooks,
   watchlist,
   activeDownloads,
@@ -57,6 +65,69 @@ export const registerLibraryRoutes = ({
     route(async (req, res) => {
       const changed = applySettings(conf, req.body, settingsHooks);
       return sendData(res, readRedactedSettings(conf), {changed, count: changed.length});
+    }),
+  );
+
+  /**
+   * POST /services/:service/verify
+   *
+   * Actually exercises the stored credentials instead of reporting whether a
+   * value is present. /health can only say "configured", which stays true for
+   * an expired Deezer ARL — the symptom of which is silent 30-second previews
+   * and missing lyrics, with nothing in the UI explaining why.
+   */
+  app.post(
+    `${basePath}/services/:service/verify`,
+    route(async (req, res) => {
+      const service = parseService(req.params.service);
+
+      if (service === 'deezer') {
+        const arl = conf.get('cookies.arl');
+        if (!arl) {
+          return sendData(res, {service, ok: false, reason: 'missing_credential', message: 'No ARL cookie is set.'});
+        }
+        try {
+          await initDeezerForDownload();
+          const user = await deezer.getUser();
+          return sendData(res, {
+            service,
+            ok: true,
+            account: user?.BLOG_NAME ?? null,
+            message: 'Deezer session is valid.',
+          });
+        } catch (error: any) {
+          const message = String(error?.message ?? error);
+          // The private API answers with this when the cookie no longer
+          // authenticates, which is by far the most common failure here.
+          const expired = /NEED_USER_AUTH|user auth/i.test(message);
+          return sendData(res, {
+            service,
+            ok: false,
+            reason: expired ? 'expired_credential' : 'auth_failed',
+            message: expired
+              ? 'Your ARL cookie has expired. Get a fresh one from deezer.com and paste it above.'
+              : message,
+          });
+        }
+      }
+
+      const token = conf.get('qobuz.token');
+      if (!token) {
+        return sendData(res, {service, ok: false, reason: 'missing_credential', message: 'No Qobuz token is set.'});
+      }
+      try {
+        await initQobuzForDownload();
+        // A cheap authenticated read: succeeds only with a usable session.
+        await qobuz.getTrackInfo(Number(5966783)).catch(() => undefined);
+        return sendData(res, {service, ok: true, account: null, message: 'Qobuz session is valid.'});
+      } catch (error: any) {
+        return sendData(res, {
+          service,
+          ok: false,
+          reason: 'auth_failed',
+          message: String(error?.message ?? error),
+        });
+      }
     }),
   );
 

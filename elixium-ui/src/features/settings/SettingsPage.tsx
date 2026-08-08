@@ -9,6 +9,7 @@ import {Badge} from '@/shared/components/ui/Badge';
 import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS} from '@/store/settings-store';
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
+import {ConnectionTest} from './ConnectionTest';
 import {cn} from '@/shared/lib/utils';
 
 function Section({title, icon: Icon, children}: {title: string; icon: React.ElementType; children: React.ReactNode}) {
@@ -173,6 +174,8 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Authentication" icon={Shield}>
+        <ConnectionTest />
+        <div className="h-px bg-border" />
         <Field label="Deezer ARL" description="From browser cookies (deezer.com)">
           <SecretInput
             value={settings.deezerArl}

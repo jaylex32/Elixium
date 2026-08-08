@@ -6,6 +6,7 @@ import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {Button} from '@/shared/components/ui/Button';
 import {TrackRowSkeleton} from '@/shared/components/ui/Skeleton';
+import {TrackActions} from '@/shared/components/TrackActions';
 import type {Service} from '@/types';
 import type {AlbumCardData} from './AlbumCard';
 
@@ -181,12 +182,18 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                             {formatDuration(dur)}
                           </span>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          title="Download track"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                        <TrackActions
+                          track={{
+                            id: t.id,
+                            title: t.title,
+                            artist: t.artist ?? album.artist,
+                            album: album.title,
+                            cover: album.cover,
+                            duration: dur,
+                            service: album.service,
+                          }}
+                          onPlay={() => handlePlayTrack(t.id, i)}
+                          onDownload={() =>
                             download({
                               id: t.id,
                               type: 'track',
@@ -194,12 +201,10 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                               artist: t.artist ?? album.artist,
                               cover: album.cover,
                               service: album.service,
-                            });
-                          }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Download size={13} />
-                        </Button>
+                            })
+                          }
+                          className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
+                        />
                         {isActive && (
                           <Button
                             variant="ghost"
