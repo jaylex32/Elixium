@@ -5,6 +5,7 @@ import {Sidebar, NavDrawer} from './Sidebar';
 import {BottomNav} from './BottomNav';
 import {Header} from './Header';
 import {PlayerBar} from './PlayerBar';
+import {QueuePanel} from './QueuePanel';
 import {CommandPalette} from '@/shared/components/CommandPalette';
 import {useAppStore} from '@/store/app-store';
 import {useTheme} from '@/shared/hooks/useTheme';
@@ -54,6 +55,9 @@ export function AppShell() {
 
   const [cmdOpen, setCmdOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  // Owned here, not in PlayerBar: PlayerBar only mounts once a track is
+  // playing, which left no way to reach the queue from a cold start.
+  const [queueOpen, setQueueOpen] = useState(false);
 
   // Leaving mobile with the drawer open would strand an invisible dialog that
   // still traps Escape and holds the body scroll lock.
@@ -88,7 +92,7 @@ export function AppShell() {
       <NavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header onOpenPalette={openPalette} onOpenNav={() => setNavOpen(true)} />
+        <Header onOpenPalette={openPalette} onOpenNav={() => setNavOpen(true)} onOpenQueue={() => setQueueOpen(true)} />
 
         {/*
           The only scroll container in the app. `.pb-shell` reserves the exact
@@ -119,7 +123,8 @@ export function AppShell() {
         </main>
       </div>
 
-      {hasTrack && <PlayerBar />}
+      {hasTrack && <PlayerBar onOpenQueue={() => setQueueOpen(true)} />}
+      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
       {isMobile && <BottomNav onOpenMore={() => setNavOpen(true)} moreOpen={navOpen} />}
 
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />

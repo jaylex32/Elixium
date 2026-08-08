@@ -25,7 +25,6 @@ import {useMediaSession} from '@/shared/hooks/useMediaSession';
 import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {PlayerFullscreen} from './PlayerFullscreen';
-import {QueuePanel} from './QueuePanel';
 
 /** Map stored quality preferences onto the ids the stream endpoint expects. */
 const resolveQuality = (service: string | undefined, deezerQuality: string, qobuzQuality: string): string => {
@@ -34,7 +33,7 @@ const resolveQuality = (service: string | undefined, deezerQuality: string, qobu
   return deezerQuality === 'MP3_320' ? '320' : '128';
 };
 
-export function PlayerBar() {
+export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
   const {
     currentTrack,
     isPlaying,
@@ -64,7 +63,6 @@ export function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isMobile = useIsMobile();
   const warnedPreviewFor = useRef<string | null>(null);
-  const [queueOpen, setQueueOpen] = useState(false);
 
   // Lock-screen / notification / media-key controls.
   useMediaSession(audioRef);
@@ -171,7 +169,6 @@ export function PlayerBar() {
       />
 
       <AnimatePresence>{isFullscreen && <PlayerFullscreen audioRef={audioRef} />}</AnimatePresence>
-      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
 
       <motion.div
         initial={{y: 100}}
@@ -266,7 +263,7 @@ export function PlayerBar() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setQueueOpen(true)}
+            onClick={onOpenQueue}
             aria-label={`Open queue (${queue.length} tracks)`}
             className="relative shrink-0"
           >

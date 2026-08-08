@@ -111,13 +111,15 @@ export function Sidebar() {
         transition={{duration: 0.24, ease: [0.22, 1, 0.36, 1]}}
         className="relative hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-secondary-bg lg:flex"
       >
-        <div className="flex h-header shrink-0 items-center border-b border-border px-4">
-          <div className="flex min-w-0 items-center gap-3">
+        {/* Centred brand. Left-aligned it sat off-axis against the centred
+            nav labels below it. */}
+        <div className="flex h-header shrink-0 items-center justify-center border-b border-border px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-accent/20">
               <Disc3 size={18} className="text-accent" />
             </div>
             {!sidebarCollapsed && (
-              <span className="truncate text-base font-bold text-text-primary">Elixium</span>
+              <span className="truncate text-base font-bold tracking-tight text-text-primary">Elixium</span>
             )}
           </div>
         </div>

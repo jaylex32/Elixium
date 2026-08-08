@@ -1,6 +1,6 @@
 import {Download, Music2, X, Play, Pause} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import {formatDuration} from '@/shared/lib/utils';
+import {formatDuration, toSeconds} from '@/shared/lib/utils';
 import {useItemTracks, type ItemType} from '@/shared/lib/api';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
@@ -48,7 +48,7 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
         artist: t.artist ?? album.artist,
         album: album.title,
         cover: album.cover,
-        duration: typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : t.duration ?? 0,
+        duration: toSeconds(t.duration),
         trackNumber: t.track_number,
         service: album.service,
         previewUrl: t.rawData?.preview as string | undefined,
@@ -132,7 +132,7 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
               <div className="py-2">
                 {tracks.map((t, i) => {
                   const isActive = currentTrack?.id === t.id;
-                  const dur = typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : t.duration ?? 0;
+                  const dur = toSeconds(t.duration);
                   return (
                     <div
                       key={t.id}
@@ -239,7 +239,7 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                         artist: t.artist ?? album.artist,
                         album: album.title,
                         cover: album.cover,
-                        duration: typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : t.duration ?? 0,
+                        duration: toSeconds(t.duration),
                         trackNumber: t.track_number ?? i + 1,
                         service: album.service,
                       }),

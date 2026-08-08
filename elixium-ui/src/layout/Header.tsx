@@ -1,19 +1,24 @@
-import {Search, Wifi, WifiOff, Menu} from 'lucide-react';
+import {Search, Wifi, WifiOff, Menu, ListMusic, Disc3} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {useAppStore} from '@/store/app-store';
 import {PAGE_TITLES} from './nav-items';
 import {useDownloadStore} from '@/store/download-store';
+import {usePlayerStore} from '@/store/player-store';
 
 
 interface HeaderProps {
   onOpenPalette: () => void;
   onOpenNav: () => void;
+  onOpenQueue: () => void;
 }
 
-export function Header({onOpenPalette, onOpenNav}: HeaderProps) {
+export function Header({onOpenPalette, onOpenNav, onOpenQueue}: HeaderProps) {
   const currentPage = useAppStore((s) => s.currentPage);
   const connected = useAppStore((s) => s.connected);
   const setPage = useAppStore((s) => s.setPage);
+  const queueLength = usePlayerStore((s) => s.queue.length);
+  const hasTrack = usePlayerStore((s) => s.currentTrack !== null);
+  const toggleFullscreen = usePlayerStore((s) => s.toggleFullscreen);
   const activeDownloads = useDownloadStore(
     (s) => Object.values(s.active).filter((d) => d.status !== 'done' && d.status !== 'error').length,
   );
@@ -53,6 +58,35 @@ export function Header({onOpenPalette, onOpenNav}: HeaderProps) {
             className="touch-target flex items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface-bg hover:text-text-primary sm:hidden"
           >
             <Search size={19} />
+          </button>
+
+          {/* Player + queue are reachable from every page. Previously both
+              lived only on the player bar, which is not mounted until
+              something is already playing — so from a cold start there was no
+              way in. */}
+          {hasTrack && (
+            <button
+              onClick={toggleFullscreen}
+              aria-label="Open player"
+              title="Open player"
+              className="touch-target flex items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface-bg hover:text-text-primary"
+            >
+              <Disc3 size={19} className="text-accent" />
+            </button>
+          )}
+
+          <button
+            onClick={onOpenQueue}
+            aria-label={`Open queue (${queueLength} tracks)`}
+            title="Queue"
+            className="touch-target relative flex items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface-bg hover:text-text-primary"
+          >
+            <ListMusic size={19} />
+            {queueLength > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-primary-bg">
+                {queueLength > 99 ? '99' : queueLength}
+              </span>
+            )}
           </button>
 
           {activeDownloads > 0 && (

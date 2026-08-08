@@ -1,7 +1,7 @@
 import {X, User, Music2, Play, Pause, Download, Eye} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {toast} from 'sonner';
-import {cn, formatDuration} from '@/shared/lib/utils';
+import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {useArtistTopTracks} from '@/shared/lib/api';
 import {extractCover} from '@/shared/lib/cover';
 import {useDownload} from '@/shared/hooks/useDownload';
@@ -39,7 +39,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
       artist: t.artist ?? artist.name,
       album: typeof t.album === 'string' ? t.album : undefined,
       cover: t.rawData ? extractCover(t.rawData, artist.service) : undefined,
-      duration: typeof t.duration === 'string' ? parseInt(t.duration, 10) || 0 : (t.duration ?? 0),
+      duration: toSeconds(t.duration),
       service: artist.service,
       previewUrl: t.rawData?.preview as string | undefined,
     }),
