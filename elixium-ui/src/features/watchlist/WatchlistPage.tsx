@@ -9,6 +9,7 @@ import {Spinner} from '@/shared/components/ui/Spinner';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
 import {useWatchlistStore, toWatchedPlaylist, type WatchlistTab} from '@/store/watchlist-store';
 import {useAppStore} from '@/store/app-store';
+import {useDownload} from '@/shared/hooks/useDownload';
 import {getSocket} from '@/shared/lib/socket';
 import {socketSend} from '@/shared/lib/socket-client';
 import {ScheduleEditor} from './ScheduleEditor';
@@ -90,6 +91,8 @@ export function WatchlistPage() {
     selectAllPlaylistWanted,
   } = useWatchlistStore();
   const setPage = useAppStore((s) => s.setPage);
+  const service = useAppStore((s) => s.service);
+  const {download} = useDownload();
 
   // A watched playlist that cannot be scanned silently produces nothing. The
   // usual cause is an expired Spotify sp_dc cookie returning 401, which was
@@ -419,9 +422,13 @@ export function WatchlistPage() {
                       {p.service ? ` · ${p.service}` : ''}
                       {p.trackCount ? ` · ${p.trackCount} tracks` : ''}
                     </p>
-                    {p.status === 'error' && (
+                    {p.status === 'error' ? (
                       <p className="mt-0.5 truncate text-xs text-warning">Last scan failed — re-check above.</p>
-                    )}
+                    ) : newTracks.length === 0 ? (
+                      <p className="mt-0.5 truncate text-xs text-text-muted">
+                        Nothing new — every track has been collected before.
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -438,22 +445,52 @@ export function WatchlistPage() {
                       <span className={p.rules?.autoQueueTracks ? 'text-accent' : 'text-text-muted'}>Auto</span>
                     </label>
                     {newTracks.length > 0 && <Badge variant="warning">{newTracks.length} new</Badge>}
-                    <Button
-                      size="sm"
-                      disabled={newTracks.length === 0}
-                      onClick={() => {
-                        getSocket().emit('queueWatchedPlaylistTracks', {
-                          playlistId: p.id,
-                          trackIds: newTracks.map((t) => t.id),
-                          autoStart: true,
-                        });
-                        toast.info(`Queueing ${newTracks.length} new tracks…`, {description: p.name});
-                        setPage('downloads');
-                      }}
-                    >
-                      <Download size={14} />
-                      {newTracks.length > 0 ? `Download ${newTracks.length} new` : 'Nothing new'}
-                    </Button>
+
+                    {newTracks.length > 0 ? (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          getSocket().emit('queueWatchedPlaylistTracks', {
+                            playlistId: p.id,
+                            trackIds: newTracks.map((t) => t.id),
+                            autoStart: true,
+                          });
+                          toast.info(`Queueing ${newTracks.length} new tracks…`, {description: p.name});
+                          setPage('downloads');
+                        }}
+                      >
+                        <Download size={14} />
+                        Download {newTracks.length} new
+                      </Button>
+                    ) : (
+                      /*
+                       * "Nothing new" means every track is already recorded as
+                       * processed — not that the playlist is unavailable. A
+                       * disabled button left no way to re-fetch one, so this
+                       * downloads the whole thing through its original URL,
+                       * which also handles cross-service conversion.
+                       */
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          download({
+                            id: p.id,
+                            url: p.url,
+                            type: 'playlist',
+                            title: p.name,
+                            artist: p.owner ?? 'Playlist',
+                            cover: p.image,
+                            service,
+                          });
+                          toast.info('Downloading the full playlist…', {description: p.name});
+                          setPage('downloads');
+                        }}
+                      >
+                        <Download size={14} />
+                        Download all{p.trackCount ? ` ${p.trackCount}` : ''}
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
