@@ -23,14 +23,19 @@ function Section({title, icon: Icon, children}: {title: string; icon: React.Elem
   );
 }
 
+/*
+ * Stacks on phones. Side-by-side, the fixed 224px control column left the
+ * label roughly 88px on a 360px screen, so "Deezer ARL" wrapped to two lines
+ * and its helper text collapsed into a one-word-per-line ribbon.
+ */
 function Field({label, description, children}: {label: string; description?: string; children: React.ReactNode}) {
   return (
-    <div className="flex items-start gap-4 py-1">
-      <div className="flex-1 min-w-0 pt-0.5">
+    <div className="flex flex-col gap-1.5 py-1 sm:flex-row sm:items-start sm:gap-4">
+      <div className="min-w-0 flex-1 sm:pt-0.5">
         <p className="text-sm font-medium text-text-primary">{label}</p>
-        {description && <p className="text-xs text-text-muted mt-0.5">{description}</p>}
+        {description && <p className="mt-0.5 text-xs text-text-muted">{description}</p>}
       </div>
-      <div className="shrink-0 w-56">{children}</div>
+      <div className="w-full shrink-0 sm:w-56">{children}</div>
     </div>
   );
 }
@@ -52,14 +57,17 @@ function SecretInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder ?? '···'}
-        className="pr-9 font-mono text-xs"
+        className="pr-11 font-mono text-xs"
       />
+      {/* Padded to a real tap target: the bare 14px icon was a 14x14 hit area. */}
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+        aria-label={show ? 'Hide value' : 'Show value'}
+        aria-pressed={show}
+        className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-sm text-text-muted transition-colors hover:text-text-primary"
       >
-        {show ? <EyeOff size={14} /> : <Eye size={14} />}
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
       </button>
     </div>
   );

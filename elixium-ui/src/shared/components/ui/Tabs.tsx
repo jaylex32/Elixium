@@ -10,7 +10,12 @@ interface TabsListProps {
 
 export function TabsList({children, className}: TabsListProps) {
   return (
-    <TabsPrimitive.List className={cn('flex gap-1 rounded-xl bg-secondary-bg p-1 border border-border', className)}>
+    // scroll-row (index.css) hides the scrollbar and enables momentum scrolling;
+    // four tab labels do not fit 360px, so the strip scrolls instead of
+    // overflowing the viewport.
+    <TabsPrimitive.List
+      className={cn('scroll-row flex gap-1 rounded-md border border-border bg-secondary-bg p-1', className)}
+    >
       {children}
     </TabsPrimitive.List>
   );
@@ -27,7 +32,9 @@ export function TabsTrigger({value, children, className}: TabsTriggerProps) {
     <TabsPrimitive.Trigger
       value={value}
       className={cn(
-        'flex-1 rounded-lg px-3 py-1.5 text-sm font-medium text-text-muted transition-all',
+        // min-h keeps the tab a usable tap target on touch; py alone left it
+        // at 32px, under every platform's 44px guidance.
+        'flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium text-text-muted transition-all lg:min-h-0 lg:flex-1 lg:shrink',
         'data-[state=active]:bg-card-bg data-[state=active]:text-text-primary data-[state=active]:shadow-sm',
         'hover:text-text-secondary',
         className,

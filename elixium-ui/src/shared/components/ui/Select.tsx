@@ -21,7 +21,7 @@ export function Select({value, onValueChange, options, placeholder, disabled, cl
     <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectPrimitive.Trigger
         className={cn(
-          'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-surface-bg px-3 text-sm text-text-primary',
+          'flex h-11 w-full items-center justify-between gap-2 rounded-sm border border-border bg-surface-bg px-3 text-sm text-text-primary lg:h-9',
           'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           className,
@@ -36,7 +36,7 @@ export function Select({value, onValueChange, options, placeholder, disabled, cl
         <SelectPrimitive.Content
           position="popper"
           sideOffset={4}
-          className="z-50 min-w-[8rem] overflow-hidden rounded-xl border border-border bg-card-bg shadow-xl animate-fade-in"
+          className="z-modal min-w-[8rem] overflow-hidden rounded-xl border border-border bg-card-bg shadow-xl animate-fade-in"
         >
           <SelectPrimitive.Viewport className="p-1">
             {options.map((opt) => (

@@ -15,11 +15,14 @@ const buttonVariants = cva(
         link: 'text-accent underline-offset-4 hover:underline p-0 h-auto',
       },
       size: {
-        sm: 'h-8 px-3 text-xs',
-        default: 'h-9 px-4',
-        lg: 'h-11 px-6 text-base',
-        icon: 'h-9 w-9 p-0',
-        'icon-sm': 'h-7 w-7 p-0',
+        // Touch-friendly below lg:, dense from lg: up. The boundary matches
+        // where the shell swaps its mobile layout for the desktop rail, so
+        // control density and layout change together rather than at 640px.
+        sm: 'h-10 px-3 text-xs lg:h-8',
+        default: 'h-10 px-4 lg:h-9',
+        lg: 'h-12 px-6 text-base lg:h-11',
+        icon: 'h-10 w-10 p-0 lg:h-9 lg:w-9',
+        'icon-sm': 'h-10 w-10 p-0 lg:h-7 lg:w-7',
       },
     },
     defaultVariants: {
