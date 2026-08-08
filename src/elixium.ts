@@ -26,6 +26,7 @@ import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
+import {registerApiV1} from './app/api/v1';
 import {registerCatalogSocketHandlers} from './app/web-socket-catalog';
 import {registerDirectDownloadSocketHandler} from './app/web-socket-direct-download';
 import {registerDiscoverySocketHandler} from './app/web-socket-discovery';
@@ -289,6 +290,50 @@ const setupWebServer = () => {
     initQobuzForSearch,
     initQobuzForDownload,
     startDownloadProcess,
+  });
+
+  // Versioned API. The unversioned routes above stay for the existing web UI;
+  // external clients (the Android app) target /api/v1, which has a stable
+  // response envelope, Range-aware streaming, and a discovery/health endpoint.
+  registerApiV1({
+    app,
+    io,
+    conf,
+    appVersion: pkg.version,
+    appBrand: APP_BRAND,
+    deezer,
+    qobuz,
+    performDeezerSearch,
+    performQobuzSearch,
+    getDiscoveryContentRest,
+    getItemTracksRest,
+    getAvailableGenres: () => qobuzWatchlist.getAvailableGenres(),
+    initDeezerForDownload,
+    initQobuzForSearch,
+    initQobuzForDownload,
+    startDownloadProcess,
+    normalizeQuality,
+    watchlist: qobuzWatchlist,
+    activeDownloads,
+    getCurrentDownloadQueue: () => currentDownloadQueue,
+    getIsDownloading: () => isDownloading,
+    parseToQobuz,
+    parseDeezerUrl: parseInfo,
+    ensureQobuzSearchReady: () => initQobuzForSearch(),
+    settingsHooks: {
+      setIsDeezerDownloadReady: (value) => {
+        isDeezerDownloadReady = value;
+      },
+      setIsQobuzInitialized: (value) => {
+        isQobuzInitialized = value;
+      },
+      setIsQobuzDownloadReady: (value) => {
+        isQobuzDownloadReady = value;
+      },
+      setConcurrency: (value) => {
+        queue.concurrency = value;
+      },
+    },
   });
 
   // Socket.IO handlers
