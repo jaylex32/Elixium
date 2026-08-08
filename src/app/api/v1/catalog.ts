@@ -96,8 +96,12 @@ export const registerCatalogRoutes = ({
     });
 
   app.get(`${basePath}/albums/:id/tracks`, expandItem('album', 100));
-  app.get(`${basePath}/artists/:id/albums`, expandItem('artist', 50));
   app.get(`${basePath}/playlists/:id/tracks`, expandItem('playlist', 200));
+
+  // Expanding an artist yields their top tracks on both services (Deezer's
+  // /artist/:id/top, Qobuz's artist/get?extra=tracks) — not their albums. The
+  // route is named for what it actually returns.
+  app.get(`${basePath}/artists/:id/top-tracks`, expandItem('artist', 50));
 
   /** Generic form, for clients that build the type dynamically. */
   app.get(

@@ -105,7 +105,12 @@ export function useItemTracks(itemType: ItemType, id: string, service: Service, 
 export const useAlbumTracks = (albumId: string, service: Service, enabled = true) =>
   useItemTracks('album', albumId, service, enabled);
 
-export const useArtistAlbums = (artistId: string, service: Service, enabled = true) =>
+/**
+ * An artist expands to their TOP TRACKS, not their albums — both services
+ * return tracks for this item type. Named accordingly; the previous
+ * `useArtistAlbums` caused the artist view to render tracks as album cards.
+ */
+export const useArtistTopTracks = (artistId: string, service: Service, enabled = true) =>
   useItemTracks('artist', artistId, service, enabled);
 
 export const usePlaylistTracks = (playlistId: string, service: Service, enabled = true) =>

@@ -126,7 +126,7 @@ Editorial rows for a home screen. Valid `type` values depend on the service.
 
 ```
 GET /api/v1/albums/:id/tracks?service=qobuz
-GET /api/v1/artists/:id/albums?service=qobuz
+GET /api/v1/artists/:id/top-tracks?service=qobuz
 GET /api/v1/playlists/:id/tracks?service=qobuz
 GET /api/v1/items/:itemType/:id?service=qobuz     # generic form
 ```
@@ -311,7 +311,7 @@ GET    /api/v1                              route index
 GET    /api/v1/search                       ?service&q&type&limit&offset
 GET    /api/v1/discovery                    ?service&type&limit
 GET    /api/v1/albums/:id/tracks            ?service
-GET    /api/v1/artists/:id/albums           ?service
+GET    /api/v1/artists/:id/top-tracks       ?service
 GET    /api/v1/playlists/:id/tracks         ?service
 GET    /api/v1/items/:itemType/:id          ?service
 POST   /api/v1/parse-url                    {url, service?}

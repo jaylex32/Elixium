@@ -84,7 +84,7 @@ export const registerApiV1 = (deps: ApiV1Dependencies): void => {
           search: `GET ${basePath}/search?service=&q=&type=&limit=&offset=`,
           discovery: `GET ${basePath}/discovery?service=&type=&limit=`,
           albumTracks: `GET ${basePath}/albums/:id/tracks?service=`,
-          artistAlbums: `GET ${basePath}/artists/:id/albums?service=`,
+          artistTopTracks: `GET ${basePath}/artists/:id/top-tracks?service=`,
           playlistTracks: `GET ${basePath}/playlists/:id/tracks?service=`,
           item: `GET ${basePath}/items/:itemType/:id?service=`,
           parseUrl: `POST ${basePath}/parse-url`,
