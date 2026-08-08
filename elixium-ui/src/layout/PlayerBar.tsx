@@ -1,5 +1,19 @@
 import {useRef, useEffect, useCallback, useState} from 'react';
-import {Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ChevronUp, Music2, Loader2} from 'lucide-react';
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  ChevronUp,
+  Music2,
+  Loader2,
+  ListMusic,
+  Shuffle,
+  Repeat,
+  Repeat1,
+} from 'lucide-react';
 import {motion, AnimatePresence} from 'framer-motion';
 import {toast} from 'sonner';
 import {cn, formatDuration} from '@/shared/lib/utils';
@@ -11,6 +25,7 @@ import {useMediaSession} from '@/shared/hooks/useMediaSession';
 import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {PlayerFullscreen} from './PlayerFullscreen';
+import {QueuePanel} from './QueuePanel';
 
 /** Map stored quality preferences onto the ids the stream endpoint expects. */
 const resolveQuality = (service: string | undefined, deezerQuality: string, qobuzQuality: string): string => {
@@ -39,11 +54,17 @@ export function PlayerBar() {
     setCurrentTime,
     setDuration,
     setPlaying,
+    shuffle,
+    repeat,
+    toggleShuffle,
+    cycleRepeat,
+    queue,
   } = usePlayerStore();
   const {settings} = useSettingsStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isMobile = useIsMobile();
   const warnedPreviewFor = useRef<string | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
 
   // Lock-screen / notification / media-key controls.
   useMediaSession(audioRef);
@@ -135,7 +156,14 @@ export function PlayerBar() {
         onPlaying={() => setIsBuffering(false)}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-        onEnded={next}
+        onEnded={() => {
+          if (repeat === 'one' && audioRef.current) {
+            audioRef.current.currentTime = 0;
+            void audioRef.current.play().catch(() => setPlaying(false));
+            return;
+          }
+          next();
+        }}
         onError={() => {
           setIsBuffering(false);
           setPlaying(false);
@@ -143,6 +171,7 @@ export function PlayerBar() {
       />
 
       <AnimatePresence>{isFullscreen && <PlayerFullscreen audioRef={audioRef} />}</AnimatePresence>
+      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
 
       <motion.div
         initial={{y: 100}}
@@ -231,6 +260,45 @@ export function PlayerBar() {
               <SkipForward size={18} />
             </Button>
           </div>
+
+          {/* Queue is reachable at every width — it is the only way to see or
+              change what plays next. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setQueueOpen(true)}
+            aria-label={`Open queue (${queue.length} tracks)`}
+            className="relative shrink-0"
+          >
+            <ListMusic size={18} />
+            {queue.length > 1 && (
+              <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+            )}
+          </Button>
+
+          {!isMobile && (
+            <div className="hidden shrink-0 items-center gap-1 md:flex">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={toggleShuffle}
+                aria-label="Shuffle"
+                aria-pressed={shuffle}
+                className={shuffle ? 'text-accent' : undefined}
+              >
+                <Shuffle size={16} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={cycleRepeat}
+                aria-label={`Repeat: ${repeat}`}
+                className={repeat !== 'off' ? 'text-accent' : undefined}
+              >
+                {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
+              </Button>
+            </div>
+          )}
 
           {!isMobile && (
             <div className="hidden shrink-0 items-center gap-3 md:flex">
