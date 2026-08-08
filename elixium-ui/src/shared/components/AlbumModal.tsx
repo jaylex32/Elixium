@@ -1,7 +1,7 @@
 import {Download, Music2, X, Play, Pause} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {formatDuration} from '@/shared/lib/utils';
-import {useAlbumTracks} from '@/shared/lib/api';
+import {useItemTracks, type ItemType} from '@/shared/lib/api';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {Button} from '@/shared/components/ui/Button';
@@ -15,8 +15,12 @@ interface AlbumModalProps {
   onClose: () => void;
 }
 
+/** Playlists expand through a different endpoint than albums; anything else reads as an album. */
+const toItemType = (type: string | undefined): ItemType => (type === 'playlist' ? 'playlist' : 'album');
+
 export function AlbumModal({album, open, onClose}: AlbumModalProps) {
-  const {data, isLoading, isError} = useAlbumTracks(album.id, album.service, open);
+  const itemType = toItemType(album.type);
+  const {data, isLoading, isError} = useItemTracks(itemType, album.id, album.service, open);
   const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
   const {download} = useDownload();
 
@@ -25,7 +29,9 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
   const handleDownloadAlbum = () => {
     download({
       id: album.id,
-      type: 'album',
+      // Sending 'album' for a playlist makes the backend resolve the wrong
+      // upstream collection, so the type has to follow the item.
+      type: itemType,
       title: album.title,
       artist: album.artist,
       cover: album.cover,
@@ -52,7 +58,8 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
     if (!track) return;
 
     if (currentTrack?.id === trackId) {
-      isPlaying ? pause() : resume();
+      if (isPlaying) pause();
+      else resume();
     } else {
       setTrack(track, allTracks);
     }
@@ -61,34 +68,46 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 flex flex-col rounded-2xl border border-border bg-card-bg shadow-2xl animate-fade-in">
+        <DialogPrimitive.Overlay className="fixed inset-0 z-overlay bg-black/60 backdrop-blur-sm animate-fade-in" />
+        {/* Bottom sheet on phones, centred dialog from sm up. A centred box at
+            360px leaves the header controls fighting the title for width. */}
+        <DialogPrimitive.Content
+          className="fixed inset-x-0 bottom-0 z-modal flex max-h-[88dvh] flex-col rounded-t-xl border border-border bg-card-bg shadow-xl animate-slide-up pb-safe
+                     sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85dvh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:animate-fade-in sm:pb-0"
+        >
+          {/* Drag affordance — signals the sheet is dismissible on touch. */}
+          <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden />
+
           {/* Header */}
-          <div className="flex items-start gap-4 p-5 border-b border-border shrink-0">
-            <div className="h-20 w-20 rounded-xl overflow-hidden shrink-0 bg-surface-bg">
+          <div className="flex shrink-0 items-start gap-3 border-b border-border p-4 sm:gap-4 sm:p-5">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-sm bg-surface-bg sm:h-20 sm:w-20">
               {album.cover ? (
-                <img src={album.cover} alt={album.title} className="w-full h-full object-cover" />
+                <img src={album.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
+                <div className="flex h-full w-full items-center justify-center">
                   <Music2 size={24} className="text-text-muted" />
                 </div>
               )}
             </div>
-            <div className="flex-1 min-w-0 pt-1">
-              <p className="text-xs text-text-muted uppercase tracking-wide mb-1">
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="mb-1 text-xs uppercase tracking-wide text-text-muted">
                 {album.type ?? 'Album'} · {album.service === 'deezer' ? 'Deezer' : 'Qobuz'}
               </p>
-              <h2 className="text-lg font-bold text-text-primary leading-tight">{album.title}</h2>
-              <p className="text-sm text-text-secondary mt-0.5">{album.artist}</p>
-              {album.year && <p className="text-xs text-text-muted mt-1">{album.year}</p>}
+              <h2 className="line-clamp-2 text-base font-bold leading-tight text-text-primary sm:text-lg">
+                {album.title}
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-text-secondary">{album.artist}</p>
+              {album.year && <p className="mt-1 text-xs text-text-muted">{album.year}</p>}
             </div>
-            <div className="flex items-center gap-2 shrink-0 pt-1">
-              <Button size="sm" onClick={handleDownloadAlbum}>
+            <div className="flex shrink-0 items-center gap-2 pt-0.5">
+              {/* Labelled action collapses to an icon on phones; the footer
+                  keeps a full-width equivalent so nothing is lost. */}
+              <Button size="sm" onClick={handleDownloadAlbum} className="hidden sm:inline-flex">
                 <Download size={14} />
                 Download
               </Button>
               <DialogPrimitive.Close asChild>
-                <Button variant="ghost" size="icon-sm">
+                <Button variant="ghost" size="icon-sm" aria-label="Close">
                   <X size={16} />
                 </Button>
               </DialogPrimitive.Close>
@@ -187,7 +206,8 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                             size="icon-sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              isPlaying ? pause() : resume();
+                              if (isPlaying) pause();
+                              else resume();
                             }}
                           >
                             {isPlaying ? <Pause size={13} /> : <Play size={13} />}
@@ -203,11 +223,11 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
 
           {/* Footer */}
           {!isLoading && tracks.length > 0 && (
-            <div className="px-5 py-3 border-t border-border shrink-0 flex items-center justify-between">
+            <div className="flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <p className="text-xs text-text-muted">
                 {tracks.length} track{tracks.length > 1 ? 's' : ''}
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 [&>button]:flex-1 sm:[&>button]:flex-none">
                 <Button
                   variant="secondary"
                   size="sm"

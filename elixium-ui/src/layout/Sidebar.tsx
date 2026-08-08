@@ -1,170 +1,218 @@
+import {useEffect, useRef} from 'react';
 import {motion, AnimatePresence} from 'framer-motion';
-import {
-  Home,
-  Search,
-  Download,
-  Eye,
-  Music2,
-  Link2,
-  ListMusic,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Disc3,
-} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Disc3, X} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
-import {useAppStore, type Page, type Service} from '@/store/app-store';
+import {useAppStore, type Page} from '@/store/app-store';
 import {useDownloadStore} from '@/store/download-store';
 import {Tooltip, TooltipProvider} from '@/shared/components/ui/Tooltip';
 import {Badge} from '@/shared/components/ui/Badge';
+import {NAV_ITEMS, SERVICE_ITEMS, type NavItem} from './nav-items';
 
-const NAV_ITEMS: {id: Page; icon: React.ElementType; label: string}[] = [
-  {id: 'home', icon: Home, label: 'Home'},
-  {id: 'search', icon: Search, label: 'Search'},
-  {id: 'downloads', icon: Download, label: 'Downloads'},
-  {id: 'watchlist', icon: Eye, label: 'Watchlist'},
-  {id: 'genres', icon: Music2, label: 'Genres'},
-  {id: 'url-download', icon: Link2, label: 'URL Download'},
-  {id: 'playlists', icon: ListMusic, label: 'Playlists'},
-  {id: 'settings', icon: Settings, label: 'Settings'},
-];
+/** Shared row rendering so the desktop rail and the mobile drawer stay identical. */
+function NavButton({
+  item,
+  collapsed,
+  badge,
+  onSelect,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  badge: number | null;
+  onSelect: (id: Page) => void;
+}) {
+  const currentPage = useAppStore((s) => s.currentPage);
+  const isActive = currentPage === item.id;
+  const Icon = item.icon;
 
-const SERVICE_ITEMS: {id: Service; label: string; color: string}[] = [
-  {id: 'deezer', label: 'Deezer', color: '#a259ff'},
-  {id: 'qobuz', label: 'Qobuz', color: '#0067b3'},
-];
+  return (
+    <button
+      onClick={() => onSelect(item.id)}
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(
+        'relative mx-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+        isActive ? 'text-accent' : 'text-text-secondary hover:bg-surface-bg hover:text-text-primary',
+        collapsed ? 'w-12 justify-center' : 'w-[calc(100%-1rem)]',
+      )}
+    >
+      {isActive && (
+        <motion.span
+          layoutId="nav-indicator"
+          className="absolute inset-0 rounded-md border border-accent/25 bg-accent/12"
+          transition={{type: 'spring', stiffness: 380, damping: 32}}
+        />
+      )}
+      <Icon size={18} className="relative shrink-0" strokeWidth={isActive ? 2.3 : 2} />
+      {!collapsed && <span className="relative flex-1 truncate text-left">{item.label}</span>}
+      {badge !== null && !collapsed && (
+        <Badge variant="warning" className="relative">
+          {badge}
+        </Badge>
+      )}
+      {badge !== null && collapsed && (
+        <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-warning" aria-hidden />
+      )}
+    </button>
+  );
+}
 
-export function Sidebar({onOpenPalette: _onOpenPalette}: {onOpenPalette?: () => void}) {
-  const {currentPage, setPage, sidebarCollapsed, toggleSidebar, service, setService} = useAppStore();
+function SidebarContent({collapsed, onNavigate}: {collapsed: boolean; onNavigate: (id: Page) => void}) {
+  const {service, setService} = useAppStore();
   const active = useDownloadStore((s) => s.active);
-  const activeDownloads = Object.values(active).filter((d) => d.status === 'downloading').length;
-  const startingCount = Object.values(active).filter(
-    (d) => d.status === 'starting' || d.status === 'converting',
-  ).length;
-  const queuedCount = startingCount;
+  const downloading = Object.values(active).filter((d) => d.status === 'downloading').length;
+  const pending = Object.values(active).filter((d) => d.status === 'starting' || d.status === 'converting').length;
+
+  return (
+    <>
+      {!collapsed && (
+        <div className="flex shrink-0 gap-1.5 border-b border-border px-3 py-2.5">
+          {SERVICE_ITEMS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setService(s.id)}
+              aria-pressed={service === s.id}
+              className={cn(
+                'flex-1 rounded-sm py-2 text-xs font-semibold transition-all duration-fast',
+                service === s.id ? 'text-white shadow-sm' : 'text-text-muted hover:bg-surface-bg hover:text-text-primary',
+              )}
+              style={service === s.id ? {backgroundColor: s.color} : undefined}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <nav className="flex-1 space-y-0.5 overflow-y-auto py-2" aria-label="Main">
+        {NAV_ITEMS.map((item) => {
+          const count = downloading > 0 ? downloading : pending;
+          const badge = item.id === 'downloads' && count > 0 ? count : null;
+
+          return collapsed ? (
+            <Tooltip key={item.id} content={item.label} side="right">
+              <NavButton item={item} collapsed badge={badge} onSelect={onNavigate} />
+            </Tooltip>
+          ) : (
+            <NavButton key={item.id} item={item} collapsed={false} badge={badge} onSelect={onNavigate} />
+          );
+        })}
+      </nav>
+    </>
+  );
+}
+
+/** Persistent rail. Desktop only — below 1024px the drawer takes over. */
+export function Sidebar() {
+  const {sidebarCollapsed, toggleSidebar, setPage} = useAppStore();
 
   return (
     <TooltipProvider>
       <motion.aside
-        animate={{width: sidebarCollapsed ? 64 : 272}}
-        transition={{duration: 0.22, ease: [0.4, 0, 0.2, 1]}}
-        className="relative flex flex-col h-full bg-secondary-bg border-r border-border overflow-hidden shrink-0"
+        animate={{width: sidebarCollapsed ? 68 : 264}}
+        transition={{duration: 0.24, ease: [0.22, 1, 0.36, 1]}}
+        className="relative hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-secondary-bg lg:flex"
       >
-        {/* Logo */}
-        <div className="flex items-center h-header px-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 h-8 w-8 rounded-xl bg-accent/20 flex items-center justify-center">
+        <div className="flex h-header shrink-0 items-center border-b border-border px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-accent/20">
               <Disc3 size={18} className="text-accent" />
             </div>
-            <AnimatePresence>
-              {!sidebarCollapsed && (
-                <motion.span
-                  initial={{opacity: 0, x: -8}}
-                  animate={{opacity: 1, x: 0}}
-                  exit={{opacity: 0, x: -8}}
-                  transition={{duration: 0.15}}
-                  className="font-bold text-base text-text-primary whitespace-nowrap"
-                >
-                  Elixium
-                </motion.span>
-              )}
-            </AnimatePresence>
+            {!sidebarCollapsed && (
+              <span className="truncate text-base font-bold text-text-primary">Elixium</span>
+            )}
           </div>
         </div>
 
-        {/* Service switcher */}
-        {!sidebarCollapsed && (
-          <div className="flex gap-1.5 px-3 py-2.5 border-b border-border shrink-0">
-            {SERVICE_ITEMS.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setService(s.id)}
-                className={cn(
-                  'flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all',
-                  service === s.id ? 'text-white shadow-sm' : 'text-text-muted hover:text-text-primary bg-transparent',
-                )}
-                style={service === s.id ? {backgroundColor: s.color} : {}}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <SidebarContent collapsed={sidebarCollapsed} onNavigate={setPage} />
 
-        {/* Nav */}
-        <nav className="flex-1 py-2 overflow-y-auto">
-          {NAV_ITEMS.map(({id, icon: Icon, label}) => {
-            const isActive = currentPage === id;
-            const badge =
-              id === 'downloads' && (activeDownloads > 0 || queuedCount > 0)
-                ? activeDownloads > 0
-                  ? activeDownloads
-                  : queuedCount
-                : null;
-
-            const item = (
-              <button
-                key={id}
-                onClick={() => setPage(id)}
-                className={cn(
-                  'relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl mx-1 transition-all text-sm font-medium',
-                  isActive
-                    ? 'bg-accent/15 text-accent'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-bg',
-                  sidebarCollapsed && 'justify-center mx-1',
-                )}
-                style={{width: sidebarCollapsed ? 48 : 'calc(100% - 8px)'}}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="nav-indicator"
-                    className="absolute inset-0 rounded-xl bg-accent/10 border border-accent/20"
-                    transition={{duration: 0.2}}
-                  />
-                )}
-                <Icon size={18} className="relative shrink-0" />
-                <AnimatePresence>
-                  {!sidebarCollapsed && (
-                    <motion.span
-                      initial={{opacity: 0}}
-                      animate={{opacity: 1}}
-                      exit={{opacity: 0}}
-                      transition={{duration: 0.12}}
-                      className="relative flex-1 text-left whitespace-nowrap"
-                    >
-                      {label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                {badge !== null && !sidebarCollapsed && (
-                  <Badge variant={activeDownloads > 0 ? 'warning' : 'secondary'} className="relative text-xs">
-                    {badge}
-                  </Badge>
-                )}
-                {badge !== null && sidebarCollapsed && (
-                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-warning" />
-                )}
-              </button>
-            );
-
-            return sidebarCollapsed ? (
-              <Tooltip key={id} content={label} side="right">
-                {item}
-              </Tooltip>
-            ) : (
-              item
-            );
-          })}
-        </nav>
-
-        {/* Collapse toggle */}
         <button
           onClick={toggleSidebar}
-          className="flex items-center justify-center h-10 w-full border-t border-border text-text-muted hover:text-text-primary hover:bg-surface-bg transition-colors shrink-0"
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="flex h-10 w-full shrink-0 items-center justify-center border-t border-border text-text-muted transition-colors hover:bg-surface-bg hover:text-text-primary"
         >
           {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </motion.aside>
     </TooltipProvider>
+  );
+}
+
+/** Off-canvas navigation for mobile, opened from the header or the More button. */
+export function NavDrawer({open, onClose}: {open: boolean; onClose: () => void}) {
+  const setPage = useAppStore((s) => s.setPage);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Escape closes, and the page behind must not scroll while the drawer is up.
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+
+    window.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
+    panelRef.current?.focus();
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, onClose]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{opacity: 0}}
+            animate={{opacity: 1}}
+            exit={{opacity: 0}}
+            transition={{duration: 0.2}}
+            onClick={onClose}
+            className="fixed inset-0 z-overlay bg-black/60 backdrop-blur-sm lg:hidden"
+            aria-hidden
+          />
+          <motion.div
+            ref={panelRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation"
+            initial={{x: '-100%'}}
+            animate={{x: 0}}
+            exit={{x: '-100%'}}
+            transition={{type: 'spring', stiffness: 400, damping: 40}}
+            className="fixed inset-y-0 left-0 z-drawer flex w-[min(84vw,320px)] flex-col border-r border-border bg-secondary-bg pt-safe outline-none lg:hidden"
+          >
+            <div className="flex h-header shrink-0 items-center justify-between border-b border-border px-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-accent/20">
+                  <Disc3 size={18} className="text-accent" />
+                </div>
+                <span className="text-base font-bold text-text-primary">Elixium</span>
+              </div>
+              <button
+                onClick={onClose}
+                aria-label="Close navigation"
+                className="touch-target -mr-2 flex items-center justify-center rounded-sm text-text-muted transition-colors hover:text-text-primary"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col pb-safe">
+              <SidebarContent
+                collapsed={false}
+                onNavigate={(id) => {
+                  setPage(id);
+                  onClose();
+                }}
+              />
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

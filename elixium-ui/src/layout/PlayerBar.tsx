@@ -1,13 +1,21 @@
-import {useRef, useEffect, useCallback} from 'react';
+import {useRef, useEffect, useCallback, useState} from 'react';
 import {Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ChevronUp, Music2, Loader2} from 'lucide-react';
 import {motion, AnimatePresence} from 'framer-motion';
 import {cn, formatDuration} from '@/shared/lib/utils';
 import {getStreamUrl} from '@/shared/lib/api';
 import {usePlayerStore} from '@/store/player-store';
 import {useSettingsStore} from '@/store/settings-store';
+import {useIsMobile} from '@/shared/hooks/useMediaQuery';
 import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {PlayerFullscreen} from './PlayerFullscreen';
+
+/** Map stored quality preferences onto the ids the stream endpoint expects. */
+const resolveQuality = (service: string | undefined, deezerQuality: string, qobuzQuality: string): string => {
+  if (service === 'qobuz') return qobuzQuality === '7' ? '96khz' : '44khz';
+  if (deezerQuality === 'FLAC') return 'flac';
+  return deezerQuality === 'MP3_320' ? '320' : '128';
+};
 
 export function PlayerBar() {
   const {
@@ -32,34 +40,22 @@ export function PlayerBar() {
   } = usePlayerStore();
   const {settings} = useSettingsStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const loadingRef = useRef(false);
+  const isMobile = useIsMobile();
 
-  // Derive quality string for /api/stream
-  const quality =
-    currentTrack?.service === 'qobuz'
-      ? settings.qobuzQuality === '27'
-        ? '44khz'
-        : settings.qobuzQuality === '7'
-        ? '96khz'
-        : '44khz'
-      : settings.deezerQuality === 'FLAC'
-      ? 'flac'
-      : settings.deezerQuality === 'MP3_320'
-      ? '320'
-      : '128';
+  // State, not a ref: the buffering spinner is rendered output, and a ref
+  // mutation never triggers the re-render that would reveal it.
+  const [isBuffering, setIsBuffering] = useState(false);
 
-  // Load new track whenever the track id/service changes
+  const quality = resolveQuality(currentTrack?.service, settings.deezerQuality, settings.qobuzQuality);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
 
-    // Prefer the backend stream; fall back to Deezer 30-sec preview if available
-    const src = getStreamUrl(currentTrack.id, currentTrack.service, quality);
-    loadingRef.current = true;
-    audio.src = src;
+    setIsBuffering(true);
+    audio.src = getStreamUrl(currentTrack.id, currentTrack.service, quality);
     audio.load();
     audio.play().catch(() => {
-      // If full quality stream fails and there's a preview, try that
       if (currentTrack.previewUrl && audio.src !== currentTrack.previewUrl) {
         audio.src = currentTrack.previewUrl;
         audio.play().catch(() => setPlaying(false));
@@ -70,26 +66,26 @@ export function PlayerBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?.id, currentTrack?.service]);
 
-  // Sync play/pause without reloading
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || loadingRef.current) return;
+    if (!audio || isBuffering) return;
     if (isPlaying) audio.play().catch(() => setPlaying(false));
     else audio.pause();
-  }, [isPlaying, setPlaying]);
+  }, [isPlaying, isBuffering, setPlaying]);
 
-  // Volume / mute
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = isMuted ? 0 : volume;
   }, [volume, isMuted]);
 
-  const handleSeek = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  /** Seek from either a click or a touch, so the bar is draggable on a phone. */
+  const seekFromPointer = useCallback(
+    (clientX: number, element: HTMLElement) => {
       if (!duration) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const t = ((e.clientX - rect.left) / rect.width) * duration;
-      seek(t);
-      if (audioRef.current) audioRef.current.currentTime = t;
+      const rect = element.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      const time = ratio * duration;
+      seek(time);
+      if (audioRef.current) audioRef.current.currentTime = time;
     },
     [duration, seek],
   );
@@ -102,98 +98,128 @@ export function PlayerBar() {
     <>
       <audio
         ref={audioRef}
-        onCanPlay={() => {
-          loadingRef.current = false;
-        }}
+        onCanPlay={() => setIsBuffering(false)}
+        onWaiting={() => setIsBuffering(true)}
+        onPlaying={() => setIsBuffering(false)}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onEnded={next}
-        onError={() => setPlaying(false)}
+        onError={() => {
+          setIsBuffering(false);
+          setPlaying(false);
+        }}
       />
 
       <AnimatePresence>{isFullscreen && <PlayerFullscreen audioRef={audioRef} />}</AnimatePresence>
 
       <motion.div
-        initial={{y: 80}}
+        initial={{y: 100}}
         animate={{y: 0}}
-        className="fixed bottom-0 left-0 right-0 z-40 h-player glass border-t border-border"
+        transition={{type: 'spring', stiffness: 320, damping: 34}}
+        // Sits directly above the mobile bottom nav. --bottom-nav-height is 0
+        // on desktop, so the same expression parks it flush to the viewport
+        // floor there without a breakpoint.
+        style={{bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom))'}}
+        className="fixed left-0 right-0 z-player h-player border-t border-border glass px-safe"
       >
-        {/* Clickable seek bar at top edge */}
-        <div className="absolute -top-2 left-0 right-0 h-4 cursor-pointer group" onClick={handleSeek}>
+        {/* Seek strip. Inside the bar rather than overhanging it, so it cannot
+            intercept taps meant for the content scrolling behind. */}
+        <div
+          role="slider"
+          aria-label="Seek"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration) || 0}
+          aria-valuenow={Math.round(currentTime) || 0}
+          tabIndex={0}
+          className="group absolute inset-x-0 top-0 h-3 cursor-pointer"
+          onClick={(e) => seekFromPointer(e.clientX, e.currentTarget)}
+          onTouchStart={(e) => seekFromPointer(e.touches[0].clientX, e.currentTarget)}
+          onTouchMove={(e) => seekFromPointer(e.touches[0].clientX, e.currentTarget)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight') seek(Math.min(duration, currentTime + 5));
+            if (e.key === 'ArrowLeft') seek(Math.max(0, currentTime - 5));
+          }}
+        >
           <Progress
             value={progress}
-            className="h-1 group-hover:h-1.5 transition-all rounded-none mt-1.5"
+            className="mt-0.5 h-1 rounded-none transition-all group-hover:h-1.5"
             indicatorClassName="transition-none"
           />
         </div>
 
-        <div className="flex items-center h-full px-4 gap-4">
-          {/* Track info → opens fullscreen */}
-          <button onClick={toggleFullscreen} className="flex items-center gap-3 min-w-0 flex-1 text-left group">
+        <div className="flex h-full items-center gap-2 px-3 pt-1 sm:gap-4 sm:px-4">
+          <button
+            onClick={toggleFullscreen}
+            aria-label="Open full player"
+            className="group flex min-w-0 flex-1 items-center gap-3 text-left"
+          >
             <div className="relative h-11 w-11 shrink-0">
               {currentTrack.cover ? (
                 <img
                   src={currentTrack.cover}
-                  alt={currentTrack.album ?? currentTrack.title}
-                  className="h-11 w-11 rounded-lg object-cover shadow-md group-hover:scale-105 transition-transform"
+                  alt=""
+                  loading="lazy"
+                  className="h-11 w-11 rounded-sm object-cover shadow-md transition-transform group-hover:scale-105"
                 />
               ) : (
-                <div className="h-11 w-11 rounded-lg bg-surface-bg flex items-center justify-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-sm bg-surface-bg">
                   <Music2 size={18} className="text-text-muted" />
                 </div>
               )}
-              {loadingRef.current && (
-                <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-black/40">
+              {isBuffering && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/50">
                   <Loader2 size={14} className="animate-spin text-white" />
                 </div>
               )}
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-text-primary truncate">{currentTrack.title}</p>
-              <p className="text-xs text-text-muted truncate">{currentTrack.artist}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-text-primary">{currentTrack.title}</p>
+              <p className="truncate text-xs text-text-muted">{currentTrack.artist}</p>
             </div>
-            <ChevronUp
-              size={14}
-              className="text-text-muted ml-1 shrink-0 group-hover:text-text-primary transition-colors"
-            />
+            <ChevronUp size={14} className="ml-1 hidden shrink-0 text-text-muted group-hover:text-text-primary sm:block" />
           </button>
 
-          {/* Controls */}
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="icon" onClick={prev}>
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+            {/* Previous/next are desktop-only on the bar: at phone widths the
+                three-button cluster crowds the title into ellipsis. Both remain
+                available in the fullscreen player. */}
+            <Button variant="ghost" size="icon" onClick={prev} aria-label="Previous track" className="hidden sm:flex">
               <SkipBack size={18} />
             </Button>
             <Button
               variant="default"
               size="icon"
               onClick={isPlaying ? pause : resume}
-              className="rounded-full h-10 w-10"
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+              className="h-11 w-11 rounded-full sm:h-10 sm:w-10"
             >
               {isPlaying ? <Pause size={18} /> : <Play size={18} />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={next}>
+            <Button variant="ghost" size="icon" onClick={next} aria-label="Next track" className="hidden sm:flex">
               <SkipForward size={18} />
             </Button>
           </div>
 
-          {/* Time + volume */}
-          <div className="hidden sm:flex items-center gap-3 shrink-0">
-            <span className="text-xs text-text-muted tabular-nums">
-              {formatDuration(currentTime)} / {formatDuration(duration)}
-            </span>
-            <Button variant="ghost" size="icon-sm" onClick={toggleMute}>
-              {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </Button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={isMuted ? 0 : volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className={cn('w-20 h-1 rounded-full appearance-none cursor-pointer accent-[var(--primary-accent)]')}
-            />
-          </div>
+          {!isMobile && (
+            <div className="hidden shrink-0 items-center gap-3 md:flex">
+              <span className="text-xs tabular-nums text-text-muted">
+                {formatDuration(currentTime)} / {formatDuration(duration)}
+              </span>
+              <Button variant="ghost" size="icon-sm" onClick={toggleMute} aria-label={isMuted ? 'Unmute' : 'Mute'}>
+                {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </Button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                aria-label="Volume"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className={cn('h-1 w-20 cursor-pointer appearance-none rounded-full accent-[var(--primary-accent)]')}
+              />
+            </div>
+          )}
         </div>
       </motion.div>
     </>

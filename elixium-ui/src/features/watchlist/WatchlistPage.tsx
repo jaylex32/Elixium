@@ -6,7 +6,7 @@ import {Button} from '@/shared/components/ui/Button';
 import {Badge} from '@/shared/components/ui/Badge';
 import {Spinner} from '@/shared/components/ui/Spinner';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
-import {useWatchlistStore, type WatchlistTab} from '@/store/watchlist-store';
+import {useWatchlistStore, toWatchedPlaylist, type WatchlistTab} from '@/store/watchlist-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
@@ -20,6 +20,7 @@ interface WatchlistState {
     addedAt?: string;
     lastChecked?: string;
   }>;
+  watchedPlaylists?: Array<Record<string, unknown>>;
   wantedAlbums?: Array<{
     id: string;
     title: string;
@@ -56,6 +57,7 @@ export function WatchlistPage() {
     setActiveTab,
     setScanning,
     setLastScan,
+    setWatchedPlaylists,
   } = useWatchlistStore();
   const {download} = useDownload();
   const setPage = useAppStore((s) => s.setPage);
@@ -75,6 +77,11 @@ export function WatchlistPage() {
             lastChecked: a.lastChecked,
           })),
         );
+      }
+      // The server has monitored playlists too; the UI previously dropped them
+      // on the floor, which is why the Playlists page had nothing to show.
+      if (state.watchedPlaylists) {
+        setWatchedPlaylists(state.watchedPlaylists.map(toWatchedPlaylist));
       }
       if (state.wantedAlbums) {
         setWanted(

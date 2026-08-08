@@ -1,23 +1,34 @@
-import {useState, useEffect} from 'react';
+import {useState, useEffect, useCallback, lazy, Suspense} from 'react';
 import {AnimatePresence, motion} from 'framer-motion';
 import {Toaster} from 'sonner';
-import {Sidebar} from './Sidebar';
+import {Sidebar, NavDrawer} from './Sidebar';
+import {BottomNav} from './BottomNav';
 import {Header} from './Header';
 import {PlayerBar} from './PlayerBar';
 import {CommandPalette} from '@/shared/components/CommandPalette';
 import {useAppStore} from '@/store/app-store';
 import {useTheme} from '@/shared/hooks/useTheme';
 import {useSocket} from '@/shared/hooks/useSocket';
+import {useIsMobile, usePrefersReducedMotion} from '@/shared/hooks/useMediaQuery';
 import {usePlayerStore} from '@/store/player-store';
 
 import {HomePage} from '@/features/discovery/HomePage';
-import {SearchPage} from '@/features/search/SearchPage';
-import {DownloadsPage} from '@/features/downloads/DownloadsPage';
-import {WatchlistPage} from '@/features/watchlist/WatchlistPage';
-import {GenresPage} from '@/features/genres/GenresPage';
-import {UrlDownloadPage} from '@/features/url-download/UrlDownloadPage';
-import {PlaylistsPage} from '@/features/playlists/PlaylistsPage';
-import {SettingsPage} from '@/features/settings/SettingsPage';
+import {PageFallback} from '@/shared/components/PageFallback';
+
+/*
+ * Home is imported eagerly — it is the landing page, and lazy-loading it would
+ * put a network round-trip in front of first paint. Every other page is split
+ * out, so a cold visit parses one page instead of eight.
+ */
+const SearchPage = lazy(() => import('@/features/search/SearchPage').then((m) => ({default: m.SearchPage})));
+const DownloadsPage = lazy(() => import('@/features/downloads/DownloadsPage').then((m) => ({default: m.DownloadsPage})));
+const WatchlistPage = lazy(() => import('@/features/watchlist/WatchlistPage').then((m) => ({default: m.WatchlistPage})));
+const GenresPage = lazy(() => import('@/features/genres/GenresPage').then((m) => ({default: m.GenresPage})));
+const UrlDownloadPage = lazy(() =>
+  import('@/features/url-download/UrlDownloadPage').then((m) => ({default: m.UrlDownloadPage})),
+);
+const PlaylistsPage = lazy(() => import('@/features/playlists/PlaylistsPage').then((m) => ({default: m.PlaylistsPage})));
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then((m) => ({default: m.SettingsPage})));
 
 const PAGE_MAP = {
   home: HomePage,
@@ -34,11 +45,26 @@ export function AppShell() {
   useTheme();
   useSocket();
 
-  const {currentPage} = useAppStore();
+  const currentPage = useAppStore((s) => s.currentPage);
   const hasTrack = usePlayerStore((s) => s.currentTrack !== null);
-  const [cmdOpen, setCmdOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const reducedMotion = usePrefersReducedMotion();
 
-  // Cmd+K / Ctrl+K to open command palette
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Leaving mobile with the drawer open would strand an invisible dialog that
+  // still traps Escape and holds the body scroll lock.
+  useEffect(() => {
+    if (!isMobile) setNavOpen(false);
+  }, [isMobile]);
+
+  // Route changes come from many places (nav, palette, cards) — close here so
+  // every one of them dismisses the drawer.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [currentPage]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -51,46 +77,57 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const openPalette = useCallback(() => setCmdOpen(true), []);
   const PageComponent = PAGE_MAP[currentPage];
 
   return (
     <div className="flex h-dvh overflow-hidden bg-primary-bg">
-      <Sidebar onOpenPalette={() => setCmdOpen(true)} />
+      <Sidebar />
+      <NavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header onOpenPalette={() => setCmdOpen(true)} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <Header onOpenPalette={openPalette} onOpenNav={() => setNavOpen(true)} />
 
-        <main
-          className="flex-1 overflow-y-auto overflow-x-hidden"
-          style={{paddingBottom: hasTrack ? 'var(--player-height)' : 0}}
-        >
-          <AnimatePresence mode="wait">
+        {/*
+          The only scroll container in the app. `.pb-shell` reserves the exact
+          height of the fixed player plus bottom nav plus safe-area inset, so
+          the last row of content is always reachable instead of sitting under
+          the player — the overlap this layout previously had on mobile.
+        */}
+        <main className="scroll-container min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-shell">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={currentPage}
-              initial={{opacity: 0, y: 6}}
+              initial={reducedMotion ? false : {opacity: 0, y: 6}}
               animate={{opacity: 1, y: 0}}
-              exit={{opacity: 0, y: -6}}
-              transition={{duration: 0.18, ease: 'easeOut'}}
-              className="h-full"
+              exit={reducedMotion ? undefined : {opacity: 0, y: -6}}
+              transition={{duration: 0.18, ease: [0.22, 1, 0.36, 1]}}
+              className="mx-auto w-full max-w-content"
             >
-              <PageComponent />
+              <Suspense fallback={<PageFallback />}>
+                <PageComponent />
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>
       </div>
 
-      <PlayerBar />
+      {hasTrack && <PlayerBar />}
+      {isMobile && <BottomNav onOpenMore={() => setNavOpen(true)} moreOpen={navOpen} />}
 
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
 
       <Toaster
-        position="bottom-right"
+        position={isMobile ? 'top-center' : 'bottom-right'}
+        // Clear the fixed furniture so toasts never cover the player controls.
+        offset={isMobile ? 12 : 24}
         toastOptions={{
           style: {
             background: 'var(--card-bg)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-color)',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-lg)',
           },
         }}
       />

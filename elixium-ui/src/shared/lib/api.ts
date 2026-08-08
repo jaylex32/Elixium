@@ -46,56 +46,59 @@ export function useSearch(query: string, service: Service, type: string) {
 }
 
 // ── Album tracks ─────────────────────────────────────────────────────────────
-export function useAlbumTracks(albumId: string, service: Service, enabled = true) {
+export type ItemType = 'album' | 'artist' | 'playlist';
+
+const ITEM_DEFAULTS: Record<ItemType, {limit: number; staleTime: number}> = {
+  album: {limit: 100, staleTime: 1000 * 60 * 10},
+  artist: {limit: 30, staleTime: 1000 * 60 * 5},
+  playlist: {limit: 100, staleTime: 1000 * 60 * 5},
+};
+
+/**
+ * Expand any catalog item into its track/album list.
+ *
+ * The three per-type hooks below were byte-for-byte identical apart from the
+ * itemType and limit, which meant a component could only show the types
+ * someone had already written a hook for. Taking the type as an argument lets
+ * one modal render all three.
+ */
+export function useItemTracks(itemType: ItemType, id: string, service: Service, enabled = true) {
+  const {limit, staleTime} = ITEM_DEFAULTS[itemType];
+
   return useQuery<ItemTracksResponse>({
-    queryKey: ['item-tracks', service, 'album', albumId],
+    queryKey: ['item-tracks', service, itemType, id],
     queryFn: async () => {
-      const res = await http.get('/item-tracks', {
-        params: {service, itemType: 'album', id: albumId, limit: 100},
-      });
+      const res = await http.get('/item-tracks', {params: {service, itemType, id, limit}});
       return res.data as ItemTracksResponse;
     },
-    enabled: !!albumId && enabled,
-    staleTime: 1000 * 60 * 10,
+    enabled: !!id && enabled,
+    staleTime,
   });
 }
 
-// ── Artist albums ─────────────────────────────────────────────────────────────
-export function useArtistAlbums(artistId: string, service: Service, enabled = true) {
-  return useQuery<ItemTracksResponse>({
-    queryKey: ['item-tracks', service, 'artist', artistId],
-    queryFn: async () => {
-      const res = await http.get('/item-tracks', {
-        params: {service, itemType: 'artist', id: artistId, limit: 30},
-      });
-      return res.data as ItemTracksResponse;
-    },
-    enabled: !!artistId && enabled,
-    staleTime: 1000 * 60 * 5,
-  });
-}
+export const useAlbumTracks = (albumId: string, service: Service, enabled = true) =>
+  useItemTracks('album', albumId, service, enabled);
 
-// ── Playlist tracks ─────────────────────────────────────────────────────────
-export function usePlaylistTracks(playlistId: string, service: Service, enabled = true) {
-  return useQuery<ItemTracksResponse>({
-    queryKey: ['item-tracks', service, 'playlist', playlistId],
-    queryFn: async () => {
-      const res = await http.get('/item-tracks', {
-        params: {service, itemType: 'playlist', id: playlistId, limit: 100},
-      });
-      return res.data as ItemTracksResponse;
-    },
-    enabled: !!playlistId && enabled,
-    staleTime: 1000 * 60 * 5,
-  });
-}
+export const useArtistAlbums = (artistId: string, service: Service, enabled = true) =>
+  useItemTracks('artist', artistId, service, enabled);
+
+export const usePlaylistTracks = (playlistId: string, service: Service, enabled = true) =>
+  useItemTracks('playlist', playlistId, service, enabled);
 
 // ── URL parse (via REST — more reliable than socket for one-shot calls) ──────
+/**
+ * Resolves a share link to a track list.
+ *
+ * Targets /api/v1 explicitly: the unversioned surface has no parse-url route,
+ * so this previously posted to an endpoint that did not exist and 404'd.
+ */
 export function useParseUrl() {
   return useMutation({
-    mutationFn: async (url: string) => {
-      const res = await http.post('/parse-url', {url});
-      return res.data;
+    mutationFn: async (payload: string | {url: string; service?: Service}) => {
+      const body = typeof payload === 'string' ? {url: payload} : payload;
+      const res = await http.post('/v1/parse-url', body);
+      // v1 wraps every response in {ok, data}; unwrap to the parsed link.
+      return res.data?.data ?? res.data;
     },
   });
 }

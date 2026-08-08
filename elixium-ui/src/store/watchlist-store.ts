@@ -9,6 +9,35 @@ export interface WatchedArtist {
   newReleases?: number;
 }
 
+/**
+ * A playlist the backend is monitoring.
+ *
+ * Field names mirror the server's `watchedPlaylists` entries so the socket
+ * payload maps across without a translation layer.
+ */
+export interface WatchedPlaylist {
+  id: string;
+  name: string;
+  owner?: string;
+  image?: string;
+  service?: string;
+  trackCount?: number;
+  newTrackCount?: number;
+  lastCheckedAt?: string;
+}
+
+/** Normalize a raw server entry, which uses `title` where the UI wants `name`. */
+export const toWatchedPlaylist = (raw: Record<string, unknown>): WatchedPlaylist => ({
+  id: String(raw?.id ?? ''),
+  name: (raw?.title as string) ?? (raw?.name as string) ?? 'Untitled playlist',
+  owner: raw?.owner as string | undefined,
+  image: raw?.image as string | undefined,
+  service: raw?.service as string | undefined,
+  trackCount: (raw?.lastTrackCount as number) ?? (raw?.trackCount as number),
+  newTrackCount: raw?.newTrackCount as number | undefined,
+  lastCheckedAt: raw?.lastCheckedAt as string | undefined,
+});
+
 export interface WantedItem {
   id: string;
   title: string;
@@ -32,6 +61,7 @@ export type WatchlistTab = 'artists' | 'wanted' | 'history' | 'schedule';
 
 interface WatchlistState {
   artists: WatchedArtist[];
+  watchedPlaylists: WatchedPlaylist[];
   wanted: WantedItem[];
   history: WatchlistHistory[];
   activeTab: WatchlistTab;
@@ -42,6 +72,7 @@ interface WatchlistState {
   scheduleHour: number;
 
   setArtists: (artists: WatchedArtist[]) => void;
+  setWatchedPlaylists: (playlists: WatchedPlaylist[]) => void;
   setWanted: (items: WantedItem[]) => void;
   setHistory: (items: WatchlistHistory[]) => void;
   toggleWanted: (id: string) => void;
@@ -55,6 +86,7 @@ interface WatchlistState {
 
 export const useWatchlistStore = create<WatchlistState>()((set) => ({
   artists: [],
+  watchedPlaylists: [],
   wanted: [],
   history: [],
   activeTab: 'artists',
@@ -64,6 +96,7 @@ export const useWatchlistStore = create<WatchlistState>()((set) => ({
   scheduleHour: 8,
 
   setArtists: (artists) => set({artists}),
+  setWatchedPlaylists: (watchedPlaylists) => set({watchedPlaylists}),
   setWanted: (wanted) => set({wanted}),
   setHistory: (history) => set({history}),
 
