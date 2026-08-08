@@ -7,7 +7,7 @@ import {useDownloadStore} from '@/store/download-store';
 
 export function useSocket() {
   const setConnected = useAppStore((s) => s.setConnected);
-  const {onProgress, onConversionProgress, onComplete, onError, setRunning} = useDownloadStore();
+  const {onProgress, onConversionProgress, onBatchComplete, onError, setRunning, clearDone} = useDownloadStore();
 
   useEffect(() => {
     const s = getSocket();
@@ -35,12 +35,13 @@ export function useSocket() {
       onConversionProgress(data);
     });
 
-    s.on(ON.DOWNLOAD_COMPLETE, (data: {count?: number; itemId?: string; files?: string[]}) => {
-      const id = data.itemId ?? '__conversion__';
-      onComplete(id, data.count ?? data.files?.length ?? 1);
-      toast.success(
-        `Download complete — ${data.count ?? data.files?.length ?? 1} track${(data.count ?? 1) > 1 ? 's' : ''}`,
-      );
+    s.on(ON.DOWNLOAD_COMPLETE, (data: {count?: number; files?: string[]}) => {
+      const count = data.count ?? data.files?.length ?? 1;
+      onBatchComplete(count);
+      toast.success(`Download complete — ${count} track${count > 1 ? 's' : ''}`);
+      // Retire finished rows shortly after, so the list settles back to what
+      // is actually still running instead of accumulating completed entries.
+      window.setTimeout(() => clearDone(), 4000);
     });
 
     s.on(ON.DOWNLOAD_ERROR, (data: {message?: string; itemId?: string}) => {
@@ -60,5 +61,5 @@ export function useSocket() {
       s.off(ON.DOWNLOAD_ERROR);
       s.off(ON.DIRECT_DOWNLOAD_START);
     };
-  }, [setConnected, onProgress, onConversionProgress, onComplete, onError, setRunning]);
+  }, [setConnected, onProgress, onConversionProgress, onBatchComplete, onError, setRunning, clearDone]);
 }

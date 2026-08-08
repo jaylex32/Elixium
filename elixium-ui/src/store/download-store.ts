@@ -41,6 +41,7 @@ interface DownloadState {
   // Called on directUrlConversionProgress (pre-download phase)
   onConversionProgress: (data: {phase: string; message: string; percentage: number; itemId?: string}) => void;
   onComplete: (itemId: string, count: number) => void;
+  onBatchComplete: (count: number) => void;
   onError: (itemId: string, message: string) => void;
   clear: (itemId: string) => void;
   clearDone: () => void;
@@ -79,27 +80,84 @@ export const useDownloadStore = create<DownloadState>()((set) => ({
   onProgress: (data) => {
     const id = data.itemId;
     if (!id) return;
+
+    // The server reports per-item lifecycle through itemStatus. This used to
+    // hardcode 'downloading', so an item that finished, failed, or was
+    // cancelled stayed in the downloading state forever with a live spinner —
+    // even at 12/12 and 100%.
+    const status: ActiveDownload['status'] =
+      data.itemStatus === 'completed'
+        ? 'done'
+        : data.itemStatus === 'error'
+          ? 'error'
+          : data.itemStatus === 'cancelled'
+            ? 'error'
+            : 'downloading';
+
     set((s) => {
       const existing = s.active[id];
-      return {
-        active: {
-          ...s.active,
-          [id]: {
-            ...existing,
-            itemId: id,
-            title: existing?.title ?? data.currentTrack ?? 'Downloading…',
-            status: 'downloading',
-            percentage: Math.round(data.percentage ?? existing?.percentage ?? 0),
-            currentTrack: data.currentTrack ?? existing?.currentTrack,
-            current: data.current ?? existing?.current ?? 0,
-            total: data.total ?? existing?.total ?? 1,
-            startedAt: existing?.startedAt ?? Date.now(),
-          },
+      // itemProgress is the per-item figure; percentage is queue-wide. Prefer
+      // the per-item one, and pin a completed item to 100.
+      const percentage =
+        status === 'done'
+          ? 100
+          : Math.round(data.itemProgress ?? data.percentage ?? existing?.percentage ?? 0);
+
+      const updated = {
+        ...s.active,
+        [id]: {
+          ...existing,
+          itemId: id,
+          title: existing?.title ?? data.currentTrack ?? 'Downloading…',
+          status,
+          percentage,
+          currentTrack: data.currentTrack ?? existing?.currentTrack,
+          current: data.current ?? existing?.current ?? 0,
+          total: data.total ?? existing?.total ?? 1,
+          startedAt: existing?.startedAt ?? Date.now(),
         },
-        isRunning: true,
+      };
+
+      return {
+        active: updated,
+        isRunning: Object.values(updated).some((d) => d.status !== 'done' && d.status !== 'error'),
       };
     });
   },
+
+  /**
+   * Batch completion.
+   *
+   * The server's `downloadComplete` is queue-wide and carries no itemId — only
+   * {count, files}. The client was reading `data.itemId ?? '__conversion__'`,
+   * which created a phantom entry and left every real download running. Any
+   * item still in flight when the batch reports done is finished.
+   */
+  onBatchComplete: (count) =>
+    set((s) => {
+      const updated = {...s.active};
+      const finished: string[] = [];
+
+      for (const [id, entry] of Object.entries(updated)) {
+        if (entry.status !== 'done' && entry.status !== 'error') {
+          updated[id] = {...entry, status: 'done', percentage: 100};
+          finished.push(id);
+        }
+      }
+
+      const newHistory = finished.map((id) => ({
+        id,
+        title: updated[id].title,
+        count,
+        completedAt: Date.now(),
+      }));
+
+      return {
+        active: updated,
+        history: [...newHistory, ...s.history].slice(0, 50),
+        isRunning: false,
+      };
+    }),
 
   onConversionProgress: (data) => {
     const id = data.itemId ?? '__conversion__';

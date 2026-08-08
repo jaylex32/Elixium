@@ -111,9 +111,10 @@ export function Sidebar() {
         transition={{duration: 0.24, ease: [0.22, 1, 0.36, 1]}}
         className="relative hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-secondary-bg lg:flex"
       >
-        {/* Centred brand. Left-aligned it sat off-axis against the centred
-            nav labels below it. */}
-        <div className="flex h-header shrink-0 items-center justify-center border-b border-border px-4">
+        {/* Centred, then nudged slightly left — the extra right padding shifts
+            the block ~10px off true centre, which reads better against the
+            left-aligned nav labels below. */}
+        <div className="flex h-header shrink-0 items-center justify-center border-b border-border pl-4 pr-9">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-accent/20">
               <Disc3 size={18} className="text-accent" />

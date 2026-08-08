@@ -195,7 +195,7 @@ function DiscoverySection({
       {isError ? (
         <ErrorState title={`Could not load ${title}`} onRetry={() => refetch()} />
       ) : isLoading ? (
-        <div className="scroll-row flex gap-4 pb-1">
+        <div className="scroll-row flex gap-4 pb-4 pt-3">
           {Array.from({length: 8}).map((_, i) => (
             <div key={i} className="w-[46vw] shrink-0 sm:w-44">
               <CardSkeleton />
@@ -216,10 +216,12 @@ function DiscoverySection({
           ))}
         </div>
       ) : (
-        // pb-2 leaves room for the cards' hover shadow, which would otherwise
-        // be clipped by the scroll container. No negative-margin bleed: it
-        // made the row wider than its container at every breakpoint.
-        <div data-row className="scroll-row flex gap-3 pb-2 sm:gap-4">
+        // Vertical padding is load-bearing: .scroll-row sets overflow-x:auto,
+        // and CSS computes the other axis to auto too, so the row clips
+        // vertically. Without this the cards' hover lift and shadow are cut
+        // off at the top. No negative-margin bleed — it made the row wider
+        // than its container at every breakpoint.
+        <div data-row className="scroll-row flex gap-3 pb-4 pt-3 sm:gap-4">
           {items.map((album) => (
             <AlbumCard
               key={album.id}
@@ -251,7 +253,7 @@ export function HomePage() {
     <div className="animate-fade-in space-y-8 px-4 pb-8 pt-5 sm:space-y-10 sm:px-6 sm:pt-6">
       {featured && <Hero item={featured} service={service} onOpen={() => setSelected({...featured, service})} />}
 
-      <div className="scroll-row flex gap-2 pb-1">
+      <div className="scroll-row flex gap-2 pb-3 pt-2">
         {QUICK_LINKS.map(({page, label, icon: Icon}) => (
           <button
             key={page}
