@@ -124,7 +124,7 @@ export function DownloadsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl mx-auto animate-fade-in">
+    <div className="mx-auto max-w-3xl animate-fade-in space-y-5 p-4 sm:space-y-6 sm:p-6">
       {/* Stats bar */}
       {downloads.length > 0 && (
         <div className="flex items-center gap-4 flex-wrap">

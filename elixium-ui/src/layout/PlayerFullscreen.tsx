@@ -37,7 +37,7 @@ export function PlayerFullscreen({audioRef}: PlayerFullscreenProps) {
       animate={{opacity: 1, y: 0}}
       exit={{opacity: 0, y: 40}}
       transition={{duration: 0.25, ease: [0.4, 0, 0.2, 1]}}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center glass"
+      className="fixed inset-0 z-modal flex flex-col items-center justify-center overflow-y-auto glass px-safe py-safe"
     >
       {/* Blurred background art */}
       {currentTrack.cover && (
@@ -53,20 +53,21 @@ export function PlayerFullscreen({audioRef}: PlayerFullscreenProps) {
         />
       )}
 
-      <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="absolute top-6 right-6 z-10">
+      <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="absolute right-4 z-10 sm:right-6"
+        style={{top: 'calc(var(--safe-top) + 1rem)'}}>
         <X size={20} />
       </Button>
 
-      <div className="relative z-10 flex flex-col items-center gap-8 px-8 max-w-sm w-full">
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-6 px-6 py-16 sm:gap-8 sm:px-8">
         {/* Album art */}
         {currentTrack.cover ? (
           <img
             src={currentTrack.cover}
             alt={currentTrack.album ?? currentTrack.title}
-            className="w-64 h-64 rounded-2xl object-cover shadow-2xl"
+            className="aspect-square w-[min(72vw,16rem)] rounded-lg object-cover shadow-xl"
           />
         ) : (
-          <div className="w-64 h-64 rounded-2xl bg-surface-bg flex items-center justify-center">
+          <div className="aspect-square w-[min(72vw,16rem)] rounded-lg flex items-center justify-center bg-surface-bg">
             <Music2 size={64} className="text-text-muted" />
           </div>
         )}

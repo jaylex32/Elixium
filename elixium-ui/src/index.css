@@ -345,6 +345,10 @@
     padding-left: var(--safe-left);
     padding-right: var(--safe-right);
   }
+  .py-safe {
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
 
   /* Total height the fixed bottom furniture occupies, including insets.
      Scroll containers pad by this so content is never trapped underneath. */
