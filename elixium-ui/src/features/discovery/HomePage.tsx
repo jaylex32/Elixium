@@ -24,6 +24,7 @@ import {extractCover} from '@/shared/lib/cover';
 import {useAppStore, type Page} from '@/store/app-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {ArtistCard} from '@/shared/components/ArtistCard';
 import {AlbumModal} from '@/shared/components/AlbumModal';
 import {Button} from '@/shared/components/ui/Button';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
@@ -187,6 +188,32 @@ function DiscoverySection({
 
   const items = data.slice(skip).map((item) => toAlbum(item, service));
 
+  /*
+   * Artist feeds return people, not releases. Rendering them as album cards
+   * meant a click opened the album expander with an artist id, which resolves
+   * to an unrelated album. ArtistCard opens the artist view instead.
+   */
+  const isArtistRow = items.length > 0 && items.every((item) => item.type === 'artist');
+
+  const renderCard = (album: AlbumCardData) =>
+    isArtistRow ? (
+      <ArtistCard
+        key={album.id}
+        artist={{id: album.id, name: album.title, picture: album.cover, service}}
+        className={expanded ? undefined : 'w-[46vw] shrink-0 sm:w-44'}
+      />
+    ) : (
+      <AlbumCard
+        key={album.id}
+        album={album}
+        className={expanded ? undefined : 'w-[46vw] shrink-0 sm:w-44'}
+        onClick={() => onSelect(album)}
+        onDownload={() =>
+          download({id: album.id, type: 'album', title: album.title, artist: album.artist, cover: album.cover, service})
+        }
+      />
+    );
+
   // A feed that resolves to nothing should disappear entirely rather than
   // leave a heading with blank space under it. Errors still render, since a
   // failure is worth telling the user about.
@@ -244,16 +271,7 @@ function DiscoverySection({
         </div>
       ) : expanded ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {items.map((album) => (
-            <AlbumCard
-              key={album.id}
-              album={album}
-              onClick={() => onSelect(album)}
-              onDownload={() =>
-                download({id: album.id, type: 'album', title: album.title, artist: album.artist, cover: album.cover, service})
-              }
-            />
-          ))}
+          {items.map(renderCard)}
         </div>
       ) : (
         // Vertical padding is load-bearing: .scroll-row sets overflow-x:auto,
@@ -262,17 +280,7 @@ function DiscoverySection({
         // off at the top. No negative-margin bleed — it made the row wider
         // than its container at every breakpoint.
         <div data-row className="scroll-row flex gap-3 pb-4 pt-3 sm:gap-4">
-          {items.map((album) => (
-            <AlbumCard
-              key={album.id}
-              album={album}
-              className="w-[46vw] shrink-0 sm:w-44"
-              onClick={() => onSelect(album)}
-              onDownload={() =>
-                download({id: album.id, type: 'album', title: album.title, artist: album.artist, cover: album.cover, service})
-              }
-            />
-          ))}
+          {items.map(renderCard)}
         </div>
       )}
     </section>

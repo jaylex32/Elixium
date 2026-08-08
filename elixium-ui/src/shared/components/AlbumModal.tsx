@@ -16,8 +16,19 @@ interface AlbumModalProps {
   onClose: () => void;
 }
 
-/** Playlists expand through a different endpoint than albums; anything else reads as an album. */
-const toItemType = (type: string | undefined): ItemType => (type === 'playlist' ? 'playlist' : 'album');
+/**
+ * Album, artist and playlist each expand through a different upstream call.
+ *
+ * This previously mapped everything that was not a playlist to "album", so an
+ * artist id was fetched as an album id — which silently returns whichever
+ * unrelated album happens to share that number. A "Bad Bunny" card listed
+ * three tracks by a different artist entirely.
+ */
+const toItemType = (type: string | undefined): ItemType => {
+  if (type === 'playlist') return 'playlist';
+  if (type === 'artist') return 'artist';
+  return 'album';
+};
 
 export function AlbumModal({album, open, onClose}: AlbumModalProps) {
   const itemType = toItemType(album.type);

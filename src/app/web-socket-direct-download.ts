@@ -47,7 +47,11 @@ export const registerDirectDownloadSocketHandler = ({
             ? Math.round((percentage / 100) * total)
             : 0;
 
+        // Without the itemId the client files conversion progress under a
+        // synthetic '__conversion__' key, producing a second row for the same
+        // job alongside the real download.
         socket.emit('directUrlConversionProgress', {
+          itemId: data.itemId,
           phase: progress.phase,
           message: progress.message,
           current,
