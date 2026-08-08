@@ -277,6 +277,14 @@ export function WatchlistPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="playlists">
+            Playlists{' '}
+            {watchedPlaylists.length > 0 && (
+              <Badge variant="secondary" className="ml-1">
+                {watchedPlaylists.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="wanted">
             Wanted{' '}
             {wanted.length + playlistWanted.length > 0 && (
@@ -326,6 +334,72 @@ export function WatchlistPage() {
                 </div>
               ))}
             </div>
+          )}
+        </TabsContent>
+
+        {/*
+          Watched playlists had no home in this page at all — they were only
+          visible on the Playlists page, with no way to grab just their new
+          tracks. Each row here downloads exactly what the last scan found.
+        */}
+        <TabsContent value="playlists" className="mt-5 space-y-2">
+          {watchedPlaylists.length === 0 ? (
+            <div className="py-20 text-center text-text-muted">
+              <ListMusic size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="font-medium text-text-secondary">No playlists being watched</p>
+              <p className="mt-1 text-sm">Add one from the Watchlist to track its new tracks.</p>
+            </div>
+          ) : (
+            watchedPlaylists.map((p) => {
+              const newTracks = playlistWanted.filter((t) => t.playlistId === p.id);
+
+              return (
+                <div
+                  key={p.id}
+                  className="flex flex-col gap-3 rounded-md border border-border bg-card-bg p-4 sm:flex-row sm:items-center"
+                >
+                  {p.image ? (
+                    <img src={p.image} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-sm object-cover" />
+                  ) : (
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-sm bg-surface-bg">
+                      <ListMusic size={18} className="text-text-muted" />
+                    </span>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text-primary">{p.name}</p>
+                    <p className="truncate text-xs text-text-muted">
+                      {p.owner ?? 'Playlist'}
+                      {p.service ? ` · ${p.service}` : ''}
+                      {p.trackCount ? ` · ${p.trackCount} tracks` : ''}
+                    </p>
+                    {p.status === 'error' && (
+                      <p className="mt-0.5 truncate text-xs text-warning">Last scan failed — re-check above.</p>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    {newTracks.length > 0 && <Badge variant="warning">{newTracks.length} new</Badge>}
+                    <Button
+                      size="sm"
+                      disabled={newTracks.length === 0}
+                      onClick={() => {
+                        getSocket().emit('queueWatchedPlaylistTracks', {
+                          playlistId: p.id,
+                          trackIds: newTracks.map((t) => t.id),
+                          autoStart: true,
+                        });
+                        toast.info(`Queueing ${newTracks.length} new tracks…`, {description: p.name});
+                        setPage('downloads');
+                      }}
+                    >
+                      <Download size={14} />
+                      {newTracks.length > 0 ? `Download ${newTracks.length} new` : 'Nothing new'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </TabsContent>
 
