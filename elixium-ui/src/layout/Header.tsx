@@ -1,18 +1,9 @@
 import {Search, Wifi, WifiOff, Menu} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
-import {useAppStore, type Page} from '@/store/app-store';
+import {useAppStore} from '@/store/app-store';
+import {PAGE_TITLES} from './nav-items';
 import {useDownloadStore} from '@/store/download-store';
 
-const PAGE_TITLES: Record<Page, string> = {
-  home: 'Discover',
-  search: 'Search',
-  downloads: 'Downloads',
-  watchlist: 'Watchlist',
-  genres: 'Genres',
-  'url-download': 'URL Download',
-  playlists: 'Playlists',
-  settings: 'Settings',
-};
 
 interface HeaderProps {
   onOpenPalette: () => void;

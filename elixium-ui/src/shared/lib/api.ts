@@ -10,10 +10,36 @@ http.interceptors.response.use(
 );
 
 // ── Stream URL constructor ────────────────────────────────────────────────────
-/** Constructs the URL for the backend audio streaming endpoint */
+/**
+ * URL for the backend audio streaming endpoint.
+ *
+ * Targets v1 rather than the legacy /api/stream: v1 serves Deezer tracks from
+ * a decrypted-buffer cache (so seeking does not re-download the track) and
+ * reports whether the audio is the real thing via X-Elixium-Stream.
+ */
 export function getStreamUrl(id: string, service: Service, quality?: string): string {
   const q = quality ?? (service === 'deezer' ? 'flac' : '44khz');
-  return `/api/stream?service=${service}&id=${encodeURIComponent(id)}&quality=${q}`;
+  return `/api/v1/tracks/${encodeURIComponent(id)}/stream?service=${service}&quality=${q}`;
+}
+
+export type StreamKind = 'full' | 'preview' | 'unknown';
+
+/**
+ * Ask the server whether a track will stream in full, using a HEAD request so
+ * no audio is transferred.
+ *
+ * An <audio> element gives no access to response headers, so the only way for
+ * the UI to distinguish a real track from Deezer's silent 30-second preview
+ * fallback is to ask separately.
+ */
+export async function probeStreamKind(id: string, service: Service, quality?: string): Promise<StreamKind> {
+  try {
+    const res = await fetch(getStreamUrl(id, service, quality), {method: 'HEAD'});
+    const kind = res.headers.get('X-Elixium-Stream');
+    return kind === 'full' || kind === 'preview' ? kind : 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 // ── Discovery ────────────────────────────────────────────────────────────────

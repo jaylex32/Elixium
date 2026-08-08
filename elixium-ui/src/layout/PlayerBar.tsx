@@ -1,11 +1,13 @@
 import {useRef, useEffect, useCallback, useState} from 'react';
 import {Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ChevronUp, Music2, Loader2} from 'lucide-react';
 import {motion, AnimatePresence} from 'framer-motion';
+import {toast} from 'sonner';
 import {cn, formatDuration} from '@/shared/lib/utils';
-import {getStreamUrl} from '@/shared/lib/api';
+import {getStreamUrl, probeStreamKind} from '@/shared/lib/api';
 import {usePlayerStore} from '@/store/player-store';
 import {useSettingsStore} from '@/store/settings-store';
 import {useIsMobile} from '@/shared/hooks/useMediaQuery';
+import {useMediaSession} from '@/shared/hooks/useMediaSession';
 import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {PlayerFullscreen} from './PlayerFullscreen';
@@ -41,6 +43,10 @@ export function PlayerBar() {
   const {settings} = useSettingsStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isMobile = useIsMobile();
+  const warnedPreviewFor = useRef<string | null>(null);
+
+  // Lock-screen / notification / media-key controls.
+  useMediaSession(audioRef);
 
   // State, not a ref: the buffering spinner is rendered output, and a ref
   // mutation never triggers the re-render that would reveal it.
@@ -76,6 +82,32 @@ export function PlayerBar() {
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = isMuted ? 0 : volume;
   }, [volume, isMuted]);
+
+  /*
+   * Tell the user when they are hearing a 30-second preview.
+   *
+   * Deezer falls back to one silently when auth is unavailable (usually an
+   * expired ARL), so the track just stops at 0:30 with no explanation. Warned
+   * once per track id, since the fallback reason does not change mid-track.
+   */
+  useEffect(() => {
+    if (!currentTrack) return;
+    let cancelled = false;
+
+    probeStreamKind(currentTrack.id, currentTrack.service, quality).then((kind) => {
+      if (cancelled || kind !== 'preview') return;
+      if (warnedPreviewFor.current === currentTrack.id) return;
+      warnedPreviewFor.current = currentTrack.id;
+      toast.warning('Preview only (30s)', {
+        description: `${currentTrack.service === 'deezer' ? 'Deezer' : 'Qobuz'} credentials unavailable — check Settings.`,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack?.id, currentTrack?.service, quality]);
 
   /** Seek from either a click or a touch, so the bar is draggable on a phone. */
   const seekFromPointer = useCallback(

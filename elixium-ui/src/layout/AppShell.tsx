@@ -14,6 +14,8 @@ import {usePlayerStore} from '@/store/player-store';
 
 import {HomePage} from '@/features/discovery/HomePage';
 import {PageFallback} from '@/shared/components/PageFallback';
+import {ErrorBoundary} from '@/shared/components/ErrorBoundary';
+import {PAGE_TITLES} from './nav-items';
 
 /*
  * Home is imported eagerly — it is the landing page, and lazy-loading it would
@@ -104,9 +106,14 @@ export function AppShell() {
               transition={{duration: 0.18, ease: [0.22, 1, 0.36, 1]}}
               className="mx-auto w-full max-w-content"
             >
-              <Suspense fallback={<PageFallback />}>
-                <PageComponent />
-              </Suspense>
+              {/* Scoped per page and reset on navigation: a page that throws
+                  during render takes only itself down, leaving the player,
+                  nav and socket connection intact. */}
+              <ErrorBoundary resetKey={currentPage} label={PAGE_TITLES[currentPage]}>
+                <Suspense fallback={<PageFallback />}>
+                  <PageComponent />
+                </Suspense>
+              </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </main>
