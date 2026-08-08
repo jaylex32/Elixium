@@ -24,6 +24,8 @@ export interface WatchedPlaylist {
   trackCount?: number;
   newTrackCount?: number;
   lastCheckedAt?: string;
+  status?: string;
+  lastError?: string;
 }
 
 /** Normalize a raw server entry, which uses `title` where the UI wants `name`. */
@@ -36,6 +38,8 @@ export const toWatchedPlaylist = (raw: Record<string, unknown>): WatchedPlaylist
   trackCount: (raw?.lastTrackCount as number) ?? (raw?.trackCount as number),
   newTrackCount: raw?.newTrackCount as number | undefined,
   lastCheckedAt: raw?.lastCheckedAt as string | undefined,
+  status: raw?.status as string | undefined,
+  lastError: raw?.lastError as string | undefined,
 });
 
 export interface WantedItem {
@@ -45,6 +49,24 @@ export interface WantedItem {
   cover: string;
   type: 'album' | 'ep' | 'single';
   releaseDate: string;
+  selected: boolean;
+}
+
+/**
+ * A track the watchlist found on a followed playlist.
+ *
+ * Kept separate from album candidates because queueing one goes through a
+ * different server call (queueWatchedPlaylistTracks, which needs the owning
+ * playlist id) than an artist release does.
+ */
+export interface WantedTrack {
+  id: string;
+  playlistId: string;
+  playlistTitle: string;
+  title: string;
+  artist: string;
+  album?: string;
+  cover?: string;
   selected: boolean;
 }
 
@@ -63,6 +85,7 @@ interface WatchlistState {
   artists: WatchedArtist[];
   watchedPlaylists: WatchedPlaylist[];
   wanted: WantedItem[];
+  playlistWanted: WantedTrack[];
   history: WatchlistHistory[];
   activeTab: WatchlistTab;
   isScanning: boolean;
@@ -74,6 +97,9 @@ interface WatchlistState {
   setArtists: (artists: WatchedArtist[]) => void;
   setWatchedPlaylists: (playlists: WatchedPlaylist[]) => void;
   setWanted: (items: WantedItem[]) => void;
+  setPlaylistWanted: (items: WantedTrack[]) => void;
+  togglePlaylistWanted: (id: string) => void;
+  selectAllPlaylistWanted: (selected: boolean) => void;
   setHistory: (items: WatchlistHistory[]) => void;
   toggleWanted: (id: string) => void;
   selectAllWanted: () => void;
@@ -88,6 +114,7 @@ export const useWatchlistStore = create<WatchlistState>()((set) => ({
   artists: [],
   watchedPlaylists: [],
   wanted: [],
+  playlistWanted: [],
   history: [],
   activeTab: 'artists',
   isScanning: false,
@@ -98,6 +125,13 @@ export const useWatchlistStore = create<WatchlistState>()((set) => ({
   setArtists: (artists) => set({artists}),
   setWatchedPlaylists: (watchedPlaylists) => set({watchedPlaylists}),
   setWanted: (wanted) => set({wanted}),
+  setPlaylistWanted: (playlistWanted) => set({playlistWanted}),
+
+  togglePlaylistWanted: (id) =>
+    set((s) => ({playlistWanted: s.playlistWanted.map((t) => (t.id === id ? {...t, selected: !t.selected} : t))})),
+
+  selectAllPlaylistWanted: (selected) =>
+    set((s) => ({playlistWanted: s.playlistWanted.map((t) => ({...t, selected}))})),
   setHistory: (history) => set({history}),
 
   toggleWanted: (id) =>

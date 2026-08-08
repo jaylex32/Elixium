@@ -1,0 +1,1 @@
+import{r as n}from"./react-DWRLRDDF.js";import{g as f}from"./index-4Eorb4LF.js";function a(t,r,e=!0){const o=n.useRef(r);o.current=r,n.useEffect(()=>{if(!e)return;const s=f(),c=u=>o.current(u);return s.on(t,c),()=>{s.off(t,c)}},[t,e])}function k(t,r){f().emit(t,r)}export{k as s,a as u};

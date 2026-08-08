@@ -1,5 +1,5 @@
 import {useEffect} from 'react';
-import {Eye, RefreshCw, Download, Plus, Clock, Trash2, CheckSquare, Square} from 'lucide-react';
+import {Eye, RefreshCw, Download, Plus, Clock, Trash2, CheckSquare, Square, ListMusic, AlertTriangle} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
@@ -7,7 +7,6 @@ import {Badge} from '@/shared/components/ui/Badge';
 import {Spinner} from '@/shared/components/ui/Spinner';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
 import {useWatchlistStore, toWatchedPlaylist, type WatchlistTab} from '@/store/watchlist-store';
-import {useDownload} from '@/shared/hooks/useDownload';
 import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ScheduleEditor} from './ScheduleEditor';
@@ -23,13 +22,31 @@ interface WatchlistState {
     lastChecked?: string;
   }>;
   watchedPlaylists?: Array<Record<string, unknown>>;
-  wantedAlbums?: Array<{
+  /*
+   * The server sends `candidates` (new albums from watched artists) and
+   * `playlistCandidates` (new tracks on watched playlists). This interface
+   * previously declared `wantedAlbums`, which the server has never sent — so
+   * the Wanted tab read undefined and rendered empty while hundreds of found
+   * items sat in state, and nothing could ever be queued from it.
+   */
+  candidates?: Array<{
     id: string;
+    artistId?: string;
+    artist?: string;
     title: string;
-    artist: {name: string};
-    image?: {large?: string};
-    release_date_original?: string;
-    product_type?: string;
+    year?: number | null;
+    image?: string;
+    service?: string;
+    reason?: string;
+  }>;
+  playlistCandidates?: Array<{
+    id: string;
+    playlistId: string;
+    playlistTitle?: string;
+    artist?: string;
+    title: string;
+    album?: string;
+    image?: string;
   }>;
   downloadHistory?: Array<{
     id: string;
@@ -60,9 +77,18 @@ export function WatchlistPage() {
     setScanning,
     setLastScan,
     setWatchedPlaylists,
+    watchedPlaylists,
+    playlistWanted,
+    setPlaylistWanted,
+    togglePlaylistWanted,
+    selectAllPlaylistWanted,
   } = useWatchlistStore();
-  const {download} = useDownload();
   const setPage = useAppStore((s) => s.setPage);
+
+  // A watched playlist that cannot be scanned silently produces nothing. The
+  // usual cause is an expired Spotify sp_dc cookie returning 401, which was
+  // invisible here — the playlist simply never yielded new tracks.
+  const failingPlaylists = watchedPlaylists.filter((p) => p.status === 'error');
 
   useEffect(() => {
     const socket = getSocket();
@@ -85,15 +111,29 @@ export function WatchlistPage() {
       if (state.watchedPlaylists) {
         setWatchedPlaylists(state.watchedPlaylists.map(toWatchedPlaylist));
       }
-      if (state.wantedAlbums) {
+      if (state.candidates) {
         setWanted(
-          state.wantedAlbums.map((a) => ({
+          state.candidates.map((a) => ({
             id: a.id,
             title: a.title,
-            artist: a.artist?.name ?? 'Unknown',
-            cover: a.image?.large ?? '',
-            type: (a.product_type as 'album' | 'ep' | 'single') ?? 'album',
-            releaseDate: a.release_date_original ?? '',
+            artist: a.artist ?? 'Unknown',
+            cover: a.image ?? '',
+            type: 'album' as const,
+            releaseDate: a.year ? String(a.year) : '',
+            selected: false,
+          })),
+        );
+      }
+      if (state.playlistCandidates) {
+        setPlaylistWanted(
+          state.playlistCandidates.map((t) => ({
+            id: t.id,
+            playlistId: t.playlistId,
+            playlistTitle: t.playlistTitle ?? 'Playlist',
+            title: t.title,
+            artist: t.artist ?? 'Unknown',
+            album: t.album,
+            cover: t.image,
             selected: false,
           })),
         );
@@ -135,16 +175,37 @@ export function WatchlistPage() {
   };
 
   const handleDownloadSelected = () => {
-    const selected = wanted.filter((i) => i.selected);
-    if (!selected.length) return;
-    selected.forEach((i) =>
-      download({id: i.id, type: 'album', title: i.title, artist: i.artist, cover: i.cover, service: 'qobuz'}),
-    );
-    toast.success(`Queued ${selected.length} release${selected.length > 1 ? 's' : ''}`);
+    const albums = wanted.filter((i) => i.selected);
+    const tracks = playlistWanted.filter((t) => t.selected);
+    if (!albums.length && !tracks.length) return;
+
+    const socket = getSocket();
+
+    /*
+     * Queue through the watchlist's own handlers, not the generic download
+     * path. These also mark the items processed server-side, so a finished
+     * release stops reappearing as "new" on the next scan.
+     */
+    if (albums.length) {
+      socket.emit('queueWatchedArtistReleases', {albumIds: albums.map((a) => a.id), autoStart: true});
+    }
+
+    // Playlist tracks are queued per playlist: the handler takes one
+    // playlistId plus the track ids belonging to it.
+    const byPlaylist = new Map<string, string[]>();
+    for (const t of tracks) {
+      byPlaylist.set(t.playlistId, [...(byPlaylist.get(t.playlistId) ?? []), t.id]);
+    }
+    for (const [playlistId, trackIds] of byPlaylist) {
+      socket.emit('queueWatchedPlaylistTracks', {playlistId, trackIds, autoStart: true});
+    }
+
+    const total = albums.length + tracks.length;
+    toast.success(`Queued ${total} item${total > 1 ? 's' : ''}`);
     setPage('downloads');
   };
 
-  const selectedCount = wanted.filter((i) => i.selected).length;
+  const selectedCount = wanted.filter((i) => i.selected).length + playlistWanted.filter((t) => t.selected).length;
 
   return (
     <div className="mx-auto max-w-6xl animate-fade-in space-y-5 p-4 sm:p-6">
@@ -162,6 +223,24 @@ export function WatchlistPage() {
         </Button>
       </div>
 
+      {failingPlaylists.length > 0 && (
+        <div className="flex items-start gap-3 rounded-md border border-danger/30 bg-danger/8 p-4" role="alert">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-danger" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-text-primary">
+              {failingPlaylists.length} watched playlist{failingPlaylists.length > 1 ? 's are' : ' is'} failing to scan
+            </p>
+            <p className="mt-0.5 text-xs text-text-muted">
+              {failingPlaylists.map((p) => p.name).join(', ')}
+            </p>
+            <p className="mt-1.5 text-xs text-danger">{failingPlaylists[0].lastError}</p>
+            <Button variant="secondary" size="sm" className="mt-3" onClick={() => setPage('settings')}>
+              Open Settings
+            </Button>
+          </div>
+        </div>
+      )}
+
       <TabsRoot value={activeTab} onValueChange={(v) => setActiveTab(v as WatchlistTab)}>
         <TabsList>
           <TabsTrigger value="artists">
@@ -174,9 +253,9 @@ export function WatchlistPage() {
           </TabsTrigger>
           <TabsTrigger value="wanted">
             Wanted{' '}
-            {wanted.length > 0 && (
+            {wanted.length + playlistWanted.length > 0 && (
               <Badge variant="warning" className="ml-1">
-                {wanted.length}
+                {wanted.length + playlistWanted.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -225,12 +304,26 @@ export function WatchlistPage() {
         </TabsContent>
 
         <TabsContent value="wanted" className="mt-5 space-y-4">
-          {wanted.length > 0 && (
+          {(wanted.length > 0 || playlistWanted.length > 0) && (
             <div className="flex items-center gap-3 flex-wrap">
-              <Button variant="ghost" size="sm" onClick={selectAllWanted}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  selectAllWanted();
+                  selectAllPlaylistWanted(true);
+                }}
+              >
                 <CheckSquare size={14} /> Select all
               </Button>
-              <Button variant="ghost" size="sm" onClick={deselectAllWanted}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  deselectAllWanted();
+                  selectAllPlaylistWanted(false);
+                }}
+              >
                 <Square size={14} /> Deselect all
               </Button>
               {selectedCount > 0 && (
@@ -240,8 +333,16 @@ export function WatchlistPage() {
               )}
             </div>
           )}
+          {wanted.length > 0 && (
+            <h3 className="flex items-center gap-2 pt-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <Eye size={13} className="text-accent" />
+              New releases from watched artists
+              <span className="font-normal normal-case tracking-normal"> ({wanted.length})</span>
+            </h3>
+          )}
+
           <div className="space-y-2">
-            {wanted.map((item) => (
+            {wanted.slice(0, 200).map((item) => (
               <div
                 key={item.id}
                 onClick={() => toggleWanted(item.id)}
@@ -280,6 +381,59 @@ export function WatchlistPage() {
               <p className="text-text-secondary font-medium">No new releases found yet</p>
               <p className="text-sm mt-1">Run a scan to check for new releases</p>
             </div>
+          )}
+
+          {playlistWanted.length > 0 && (
+            <section className="space-y-2 pt-2">
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                <ListMusic size={13} className="text-accent" />
+                New on your playlists
+                <span className="font-normal normal-case tracking-normal"> ({playlistWanted.length})</span>
+              </h3>
+
+              {playlistWanted.slice(0, 200).map((t) => (
+                <div
+                  key={t.id}
+                  onClick={() => togglePlaylistWanted(t.id)}
+                  className={cn(
+                    'rows-track flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors',
+                    t.selected ? 'border-accent/40 bg-accent/5' : 'border-border bg-card-bg hover:border-accent/20',
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors',
+                      t.selected ? 'border-accent bg-accent' : 'border-border',
+                    )}
+                  >
+                    {t.selected && <span className="text-xs text-white">✓</span>}
+                  </div>
+
+                  {t.cover ? (
+                    <img src={t.cover} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-xs object-cover" />
+                  ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xs bg-surface-bg">
+                      <ListMusic size={14} className="text-text-muted" />
+                    </span>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text-primary">{t.title}</p>
+                    <p className="truncate text-xs text-text-muted">{t.artist}</p>
+                  </div>
+
+                  <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
+                    {t.playlistTitle}
+                  </Badge>
+                </div>
+              ))}
+
+              {playlistWanted.length > 200 && (
+                <p className="pt-1 text-center text-xs text-text-muted">
+                  Showing the first 200 of {playlistWanted.length}. Queue these to reveal the rest.
+                </p>
+              )}
+            </section>
           )}
         </TabsContent>
 
