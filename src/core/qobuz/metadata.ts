@@ -4,6 +4,7 @@ import FastLRU from '../lib/fast-lru';
 import {trackType, albumType} from './types';
 import {getTrackInfo} from './index';
 import NodeID3 from 'node-id3';
+import {qobuzCoverUrl} from '../../lib/cover-art';
 
 interface ID3Tags {
   title: string;
@@ -135,14 +136,13 @@ export const downloadAlbumCover = async (album: albumType, albumCoverSize: cover
   }
 
   try {
-    let url = album.image.thumbnail;
-    if (albumCoverSize < 230) {
-      url = album.image.thumbnail;
-    } else if (albumCoverSize < 600) {
-      url = album.image.small;
-    } else {
-      url = album.image.large;
-    }
+    /*
+     * Previously this topped out at image.large (600px), so an embedded cover
+     * could never exceed 600 however the size was configured. Qobuz hosts a
+     * _max rung at 4000px that the album payload never links to; the URL has
+     * to be rebuilt to reach it.
+     */
+    const url = qobuzCoverUrl(album.image, albumCoverSize) ?? album.image.large;
     const {data} = await axios.get<any>(url, {responseType: 'arraybuffer'});
     lru.set(album.id + albumCoverSize, data);
     return data;

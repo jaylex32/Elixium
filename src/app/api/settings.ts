@@ -7,6 +7,8 @@
  * service session.
  */
 
+import {resolveCoverSize} from '../../lib/cover-art';
+
 export interface SettingsInvalidationHooks {
   setIsDeezerDownloadReady: (value: boolean) => void;
   setIsQobuzInitialized: (value: boolean) => void;
@@ -57,7 +59,9 @@ export const readSettings = (conf: any): ElixiumSettings => ({
     token: conf.get('qobuz.token'),
   },
   saveLayout: conf.get('saveLayout'),
-  coverSize: conf.get('coverSize'),
+  // Flattened to a single width: the config keeps one per quality tier, but
+  // clients offer one control and would render "[object Object]".
+  coverSize: resolveCoverSize(conf.get('coverSize')),
   playlist: conf.get('playlist'),
   paths: {
     deezer: conf.get('paths.deezer') || './Music/Deezer',
@@ -147,7 +151,23 @@ export const applySettings = (conf: any, data: any, hooks: SettingsInvalidationH
   setIfPresent('embedLyrics', data.embedLyrics);
   setIfPresent('saveLrcFile', data.saveLrcFile);
   setIfPresent('saveLayout', data.saveLayout);
-  setIfPresent('coverSize', data.coverSize);
+  /*
+   * `coverSize` is stored per quality tier, but the UI offers one control.
+   * A bare number used to be written straight over the object, after which
+   * coverSizes['flac'] was undefined and covers silently downloaded at the
+   * wrong size (or not at all). Expand a scalar across all three tiers so both
+   * shapes stay valid on disk.
+   */
+  if (data.coverSize !== undefined && data.coverSize !== null) {
+    const scalar = Number(data.coverSize);
+    if (Number.isFinite(scalar) && scalar > 0) {
+      conf.set('coverSize', {'128': scalar, '320': scalar, flac: scalar});
+      changed.push('coverSize');
+    } else if (typeof data.coverSize === 'object') {
+      conf.set('coverSize', data.coverSize);
+      changed.push('coverSize');
+    }
+  }
   setIfPresent('createPlaylist', data.createPlaylist, 'playlist.createPlaylist');
 
   if (data.cookies) {

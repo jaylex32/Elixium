@@ -2,6 +2,7 @@ import got from 'got';
 import stream from 'stream';
 import {existsSync, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync, unlinkSync} from 'fs';
 import {applyLyrics, type LyricsOptions} from './lyrics-embed';
+import {resolveCoverSize, qobuzCoverUrl} from './cover-art';
 import {promisify} from 'util';
 import {dirname, isAbsolute, join, resolve} from 'path';
 import {qobuz} from '../core';
@@ -29,11 +30,8 @@ interface downloadTrackProps {
   track: qobuz.types.trackType;
   quality: string | number;
   info: {[key: string]: any};
-  coverSizes: {
-    '128': number;
-    '320': number;
-    flac: number;
-  };
+  /** Per-quality object (CLI config) or a single width (web UI). */
+  coverSizes: {'128': number; '320': number; flac: number} | number | string;
   path: string;
   totalTracks: number;
   trackNumber?: boolean;
@@ -74,7 +72,10 @@ async function downloadQobuzCover(album: qobuz.types.albumType, coverSize: numbe
 
   if (!existsSync(coverArtPath)) {
     try {
-      const coverArtUrl = album.image.large; // Ensure correct URL property
+      // Was hardcoded to image.large (600px), so the configured size was
+      // ignored outright. Qobuz only hosts fixed rungs, so this maps up.
+      const coverArtUrl = qobuzCoverUrl(album.image, coverSize);
+      if (!coverArtUrl) return;
       const response = await got(coverArtUrl, {responseType: 'buffer'});
       writeFileSync(coverArtPath, response.body);
       downloadedQobuzCovers.add(album.title); // Add to cache
@@ -115,7 +116,8 @@ const downloadTrack = async ({
     let ext = '.flac',
       fileSize = 0,
       downloaded = 0,
-      coverSize = 600;
+      // Was pinned at 600 regardless of configuration.
+      coverSize = resolveCoverSize(coverSizes, 'flac');
 
     switch (quality) {
       case 5:
@@ -124,6 +126,7 @@ const downloadTrack = async ({
       case '320kbps':
         quality = 5;
         ext = '.mp3';
+        coverSize = resolveCoverSize(coverSizes, '320');
         break;
       case 6:
       case '6':

@@ -335,7 +335,15 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Behaviour" icon={RefreshCw}>
-        <Field label="Cover art size" description="Pixel size of embedded and saved artwork">
+        {/*
+          Deezer renders any size on demand (capped at 1800 by its CDN). Qobuz
+          only hosts 230 / 600 / 4000, so a request lands on the smallest rung
+          that meets it — 1000 and 1500 both resolve to 4000px there.
+        */}
+        <Field
+          label="Cover art size"
+          description="Pixel size of embedded and saved artwork. Qobuz serves fixed sizes, so anything above 600 uses its 4000px original."
+        >
           <Select
             value={settings.coverSize}
             onValueChange={(v) => update({coverSize: v})}
