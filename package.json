@@ -15,7 +15,7 @@
     "dev": "ts-node src/elixium.ts",
     "test": "cross-env SIMULATE=true ava",
     "prepare-core": "eslint . && tsc",
-    "start": "node dist/src/elixium.js",
+    "start": "node --openssl-legacy-provider dist/src/elixium.js",
     "test-core": "ava"
   },
   "bin": {
