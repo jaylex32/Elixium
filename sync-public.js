@@ -24,5 +24,15 @@ if (!fs.existsSync(sourceDir)) {
   throw new Error(`Source public directory not found: ${sourceDir}`);
 }
 
+/*
+ * Clear the target first.
+ *
+ * Vite emits content-hashed filenames, so every rebuild produces new names
+ * while the old ones stay behind. Copying without clearing had accumulated 276
+ * files in dist against 21 actually in use — all of it dead weight that then
+ * gets baked into the packaged binaries.
+ */
+fs.rmSync(targetDir, {recursive: true, force: true});
+
 copyRecursive(sourceDir, targetDir);
 console.log(`Synced public assets to ${targetDir}`);
