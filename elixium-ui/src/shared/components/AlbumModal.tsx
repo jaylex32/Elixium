@@ -8,6 +8,7 @@ import {Button} from '@/shared/components/ui/Button';
 import {TrackRowSkeleton} from '@/shared/components/ui/Skeleton';
 import {TrackActions} from '@/shared/components/TrackActions';
 import type {Service} from '@/types';
+import {extractCover} from '@/shared/lib/cover';
 import type {AlbumCardData} from './AlbumCard';
 
 interface AlbumModalProps {
@@ -38,6 +39,22 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
 
   const tracks = data?.tracks ?? [];
 
+  /*
+   * Artwork for one row.
+   *
+   * Every track used to be given `album.cover`, which is right for an album —
+   * its tracks genuinely share one sleeve — but wrong for a playlist, where it
+   * stamped the playlist's image onto fifty unrelated songs. Each track
+   * carries its own album art in rawData, so prefer that and fall back to the
+   * container only when a track has none.
+   */
+  const coverFor = (track: (typeof tracks)[number]) =>
+    extractCover(track.rawData, album.service) ?? album.cover;
+
+  /** Same reasoning for the album name: a playlist is not the track's album. */
+  const albumTitleFor = (track: (typeof tracks)[number]) =>
+    itemType === 'album' ? album.title : (track.album ?? album.title);
+
   const handleDownloadAlbum = () => {
     download({
       id: album.id,
@@ -58,8 +75,8 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
         id: t.id,
         title: t.title,
         artist: t.artist ?? album.artist,
-        album: album.title,
-        cover: album.cover,
+        album: albumTitleFor(t),
+        cover: coverFor(t),
         duration: toSeconds(t.duration),
         trackNumber: t.track_number,
         service: album.service,
@@ -198,8 +215,8 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                             id: t.id,
                             title: t.title,
                             artist: t.artist ?? album.artist,
-                            album: album.title,
-                            cover: album.cover,
+                            album: albumTitleFor(t),
+                            cover: coverFor(t),
                             duration: dur,
                             service: album.service,
                           }}
@@ -210,7 +227,7 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                               type: 'track',
                               title: t.title,
                               artist: t.artist ?? album.artist,
-                              cover: album.cover,
+                              cover: coverFor(t),
                               service: album.service,
                             })
                           }
@@ -253,8 +270,8 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                         id: t.id,
                         title: t.title,
                         artist: t.artist ?? album.artist,
-                        album: album.title,
-                        cover: album.cover,
+                        album: albumTitleFor(t),
+                        cover: coverFor(t),
                         duration: toSeconds(t.duration),
                         trackNumber: t.track_number ?? i + 1,
                         service: album.service,
