@@ -90,7 +90,10 @@ export const qobuzCoverSuffix = (size: number): string =>
  * URL is rebuilt from whichever one is present — that is the only way to reach
  * _max, which the API never links directly.
  */
-export const qobuzCoverUrl = (image: {large?: string; small?: string; thumbnail?: string} | undefined, size: number): string | null => {
+export const qobuzCoverUrl = (
+  image: {large?: string; small?: string; thumbnail?: string} | undefined,
+  size: number,
+): string | null => {
   const source = image?.large || image?.small || image?.thumbnail;
   if (!source) return null;
 
