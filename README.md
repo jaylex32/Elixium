@@ -1,7 +1,7 @@
 <p align="center">
-  
+  <img src="public/assets/icons/elixium-icon.svg" alt="Elixium logo" width="128">
 </p>
-<img src="public/assets/icons/elixium-icon.svg" alt="Elixium logo" width="128">
+
 <h1 align="center">Elixium</h1>
 
 <p align="center">
