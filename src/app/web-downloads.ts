@@ -130,14 +130,18 @@ export const createWebDownloads = ({
     for (let i = 0; i < parsedData.tracks.length; i++) {
       const track = parsedData.tracks[i];
 
+      // The client keys its rows by the itemId it sent with the request.
+      // This used to emit the constant 'url-download', so the client created a
+      // second row for the same job — one from its own placeholder and one
+      // from the server — and neither ever resolved.
       socket.emit('downloadProgress', {
         percentage: ((i + 1) / parsedData.tracks.length) * 100,
         currentTrack: track.title,
         current: i + 1,
         total: parsedData.tracks.length,
-        itemId: 'url-download',
+        itemId: data.itemId ?? 'url-download',
         itemStatus: 'downloading',
-        itemProgress: 100,
+        itemProgress: Math.round(((i + 1) / parsedData.tracks.length) * 100),
       });
 
       try {
@@ -182,7 +186,18 @@ export const createWebDownloads = ({
 
     await createPlaylistFile(savedFiles, m3u8, parsedData, data, socket);
 
+    // Per-item terminal state first, so the row resolves even if a client
+    // joined late and never saw the batch event.
+    socket.emit('downloadProgress', {
+      itemId: data.itemId ?? 'url-download',
+      itemStatus: 'completed',
+      itemProgress: 100,
+      current: savedFiles.length,
+      total: parsedData.tracks.length,
+    });
+
     socket.emit('downloadComplete', {
+      itemId: data.itemId ?? 'url-download',
       count: savedFiles.length,
       files: savedFiles,
       playlistCreated: m3u8.length > 1,
@@ -212,6 +227,9 @@ export const createWebDownloads = ({
         currentTrack: track.SNG_TITLE,
         current: i + 1,
         total: parsedData.tracks.length,
+        itemId: data.itemId ?? 'url-download',
+        itemStatus: 'downloading',
+        itemProgress: Math.round(((i + 1) / parsedData.tracks.length) * 100),
       });
 
       try {
@@ -248,7 +266,18 @@ export const createWebDownloads = ({
 
     await createPlaylistFile(savedFiles, m3u8, parsedData, data, socket);
 
+    // Per-item terminal state first, so the row resolves even if a client
+    // joined late and never saw the batch event.
+    socket.emit('downloadProgress', {
+      itemId: data.itemId ?? 'url-download',
+      itemStatus: 'completed',
+      itemProgress: 100,
+      current: savedFiles.length,
+      total: parsedData.tracks.length,
+    });
+
     socket.emit('downloadComplete', {
+      itemId: data.itemId ?? 'url-download',
       count: savedFiles.length,
       files: savedFiles,
       playlistCreated: m3u8.length > 1,

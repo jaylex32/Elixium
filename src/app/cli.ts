@@ -1,13 +1,77 @@
 import {Command} from 'commander';
+import {createDecipheriv} from 'crypto';
+import {spawnSync} from 'child_process';
 import pc from 'picocolors';
 import {APP_BRAND, APP_COMMAND, DEFAULT_CONFIG_FILE, REPOSITORY_PLACEHOLDER} from './brand';
 import {formatBanner, formatCliError, terminalExamples, terminalNotes} from './terminal';
 
-export const ensureLegacyNodeOptions = () => {
-  const current = process.env.NODE_OPTIONS || '';
-  if (!current.includes('--openssl-legacy-provider')) {
-    process.env.NODE_OPTIONS = `${current} --openssl-legacy-provider`.trim();
+/** Set on the child so a failed relaunch cannot loop forever. */
+const RELAUNCH_SENTINEL = 'ELIXIUM_OPENSSL_RELAUNCHED';
+
+/** Whether this Node build can still do Blowfish, which Deezer streams need. */
+const canDecryptDeezer = (): boolean => {
+  try {
+    createDecipheriv('bf-cbc', Buffer.alloc(16), Buffer.alloc(8));
+    return true;
+  } catch {
+    return false;
   }
+};
+
+/**
+ * Make sure Blowfish is available, relaunching once if it is not.
+ *
+ * Deezer streams are Blowfish-CBC encrypted, and OpenSSL 3 (Node 17+) moved
+ * that cipher into the legacy provider, so `bf-cbc` throws
+ * ERR_OSSL_EVP_UNSUPPORTED unless Node starts with --openssl-legacy-provider.
+ *
+ * This previously assigned to process.env.NODE_OPTIONS, which cannot work:
+ * Node parses that variable once at startup, so setting it from inside the
+ * running process has no effect. Every Deezer download therefore failed on any
+ * modern Node with a cryptic OpenSSL error, while Qobuz — which is not
+ * encrypted — kept working and masked the problem.
+ *
+ * Re-exec is used rather than a pure-JS Blowfish because it keeps one code
+ * path and the native cipher; the sentinel stops a relaunch loop if the flag
+ * still does not help.
+ */
+export const ensureLegacyNodeOptions = () => {
+  if (canDecryptDeezer() || process.env[RELAUNCH_SENTINEL]) return;
+
+  /*
+   * Never re-exec from inside a packaged binary.
+   *
+   * Under pkg, process.execPath is the Elixium executable rather than node, so
+   * the relaunch would run the app again with an argument it does not
+   * understand instead of enabling the cipher. Today's target is node16, whose
+   * OpenSSL 1.x still has Blowfish, so this branch is unreachable there — but
+   * it would become a silent boot loop the moment that target moves to node18.
+   */
+  if ((process as any).pkg) {
+    console.warn(
+      'Blowfish is unavailable in this build, so Deezer downloads will fail. ' +
+        'Qobuz is unaffected. Please report this — the packaged Node version needs the legacy OpenSSL provider.',
+    );
+    return;
+  }
+
+  const result = spawnSync(
+    process.execPath,
+    ['--openssl-legacy-provider', ...process.execArgv, ...process.argv.slice(1)],
+    {stdio: 'inherit', env: {...process.env, [RELAUNCH_SENTINEL]: '1'}},
+  );
+
+  // If the relaunch could not start, carry on: Qobuz still works, and the
+  // Deezer path reports a clear error rather than dying here.
+  if (result.error) {
+    console.warn(
+      'Blowfish is unavailable and Elixium could not relaunch with --openssl-legacy-provider. ' +
+        'Deezer downloads will fail; start Node with that flag manually.',
+    );
+    return;
+  }
+
+  process.exit(result.status ?? 0);
 };
 
 export const printBanner = (version: string) => console.log(formatBanner(version));

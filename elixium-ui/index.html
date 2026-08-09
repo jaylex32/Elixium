@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="ember-signal">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Lives in elixium-ui/public/, which Vite copies into the output. The
+         previous /assets/icons/… path pointed at files the rebuild deletes,
+         because emptyOutDir wipes public/ on every build. -->
+    <link rel="icon" type="image/svg+xml" href="/elixium-icon.svg" />
+    <link rel="apple-touch-icon" href="/elixium-icon.svg" />
+
+    <!-- viewport-fit=cover is required for env(safe-area-inset-*) to report
+         real values on notched devices; without it the insets are always 0 and
+         the fixed player/nav sit under the home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <meta name="description" content="Elixium — high-quality music downloader for Deezer and Qobuz" />
+    <meta name="theme-color" content="#0f0e0d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f9fc" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+
+    <!-- Standalone/home-screen behaviour on iOS. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Elixium" />
+
+    <title>Elixium</title>
+
+    <!-- Inter is a progressive enhancement: the CSS stack falls back to
+         system-ui, so a server with no outbound internet still renders. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

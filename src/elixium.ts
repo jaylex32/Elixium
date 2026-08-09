@@ -26,6 +26,15 @@ import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
+import {registerApiV1} from './app/api/v1';
+import {
+  authorize,
+  buildCorsOptions,
+  createAuthMiddleware,
+  getOrCreateToken,
+  isAuthEnabled,
+  LOOPBACK_ADDRESSES,
+} from './app/api/auth';
 import {registerCatalogSocketHandlers} from './app/web-socket-catalog';
 import {registerDirectDownloadSocketHandler} from './app/web-socket-direct-download';
 import {registerDiscoverySocketHandler} from './app/web-socket-discovery';
@@ -237,15 +246,54 @@ const toStandardTrack = (track: any, service: 'deezer' | 'qobuz'): SearchResult 
 const setupWebServer = () => {
   const app = express();
   const server = createServer(app);
+
+  /*
+   * Socket.IO carries the same privileges as the REST API — downloads,
+   * settings, the watchlist — so it is authenticated identically. Guarding
+   * only HTTP would leave the whole thing reachable through the socket.
+   */
   io = new SocketIOServer(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-    },
+    cors: buildCorsOptions(conf),
   });
 
-  app.use(cors());
+  io.use((socket, next) => {
+    const handshake = socket.handshake;
+    const presented =
+      (typeof handshake.auth?.token === 'string' && handshake.auth.token) ||
+      (typeof handshake.query?.token === 'string' && handshake.query.token) ||
+      '';
+    const loopback = LOOPBACK_ADDRESSES.has(handshake.address);
+
+    const decision = authorize(conf, presented, loopback);
+    if (decision.ok) {
+      next();
+      return;
+    }
+    // The client checks this message to decide between prompting for a token
+    // and reporting a genuine connection failure.
+    next(new Error(decision.reason === 'missing_token' ? 'auth_required' : 'auth_invalid'));
+  });
+
+  app.use(cors(buildCorsOptions(conf)));
   app.use(express.json());
+
+  /*
+   * Guard the whole API surface, before any API route is registered.
+   *
+   * Two things were wrong. It was mounted on /api/v1, which left the older
+   * /api/* routes — search, discovery, item-tracks, stream, download,
+   * download-zip — completely unauthenticated, so anything on the network
+   * could stream the library and queue downloads without a token. And it was
+   * registered *after* those routes: Express matches handlers in registration
+   * order, so even mounting it at /api would have run too late to stop them.
+   *
+   * Mounted at /api rather than per-route so a route added later cannot sit
+   * outside the check. Static assets are not under /api, so an unpaired
+   * browser can still load the web UI shell — without that it could never
+   * fetch the pairing screen it needs to show. Loopback stays exempt, and
+   * /api/v1/health stays public for address discovery.
+   */
+  app.use('/api', createAuthMiddleware(conf, '/api'));
 
   const staticRoots = [
     path.join(process.cwd(), 'public'),
@@ -289,6 +337,50 @@ const setupWebServer = () => {
     initQobuzForSearch,
     initQobuzForDownload,
     startDownloadProcess,
+  });
+
+  // Versioned API. The unversioned routes above stay for the existing web UI;
+  // external clients (the Android app) target /api/v1, which has a stable
+  // response envelope, Range-aware streaming, and a discovery/health endpoint.
+  registerApiV1({
+    app,
+    io,
+    conf,
+    appVersion: pkg.version,
+    appBrand: APP_BRAND,
+    deezer,
+    qobuz,
+    performDeezerSearch,
+    performQobuzSearch,
+    getDiscoveryContentRest,
+    getItemTracksRest,
+    getAvailableGenres: () => qobuzWatchlist.getAvailableGenres(),
+    initDeezerForDownload,
+    initQobuzForSearch,
+    initQobuzForDownload,
+    startDownloadProcess,
+    normalizeQuality,
+    watchlist: qobuzWatchlist,
+    activeDownloads,
+    getCurrentDownloadQueue: () => currentDownloadQueue,
+    getIsDownloading: () => isDownloading,
+    parseToQobuz,
+    parseDeezerUrl: parseInfo,
+    ensureQobuzSearchReady: () => initQobuzForSearch(),
+    settingsHooks: {
+      setIsDeezerDownloadReady: (value) => {
+        isDeezerDownloadReady = value;
+      },
+      setIsQobuzInitialized: (value) => {
+        isQobuzInitialized = value;
+      },
+      setIsQobuzDownloadReady: (value) => {
+        isQobuzDownloadReady = value;
+      },
+      setConcurrency: (value) => {
+        queue.concurrency = value;
+      },
+    },
   });
 
   // Socket.IO handlers

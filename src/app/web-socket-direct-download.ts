@@ -47,7 +47,11 @@ export const registerDirectDownloadSocketHandler = ({
             ? Math.round((percentage / 100) * total)
             : 0;
 
+        // Without the itemId the client files conversion progress under a
+        // synthetic '__conversion__' key, producing a second row for the same
+        // job alongside the real download.
         socket.emit('directUrlConversionProgress', {
+          itemId: data.itemId,
           phase: progress.phase,
           message: progress.message,
           current,
@@ -60,9 +64,25 @@ export const registerDirectDownloadSocketHandler = ({
           current,
           total,
           currentTrack: progress.message,
-          itemId: 'url-conversion',
+          itemId: data.itemId ?? 'url-conversion',
           itemStatus: 'downloading',
           itemProgress: percentage,
+        });
+      };
+
+      /**
+       * Report tracks the conversion could not match.
+       *
+       * Previously these were counted and logged server-side only, so a
+       * playlist simply arrived short with no explanation.
+       */
+      const reportUnmatched = (parsed: any) => {
+        const unmatched = Array.isArray(parsed?.unmatched) ? parsed.unmatched : [];
+        if (unmatched.length === 0) return;
+        socket.emit('conversionReport', {
+          itemId: data.itemId,
+          matched: parsed?.tracks?.length ?? 0,
+          unmatched,
         });
       };
 
@@ -97,6 +117,7 @@ export const registerDirectDownloadSocketHandler = ({
           });
 
           await ensureQobuzDownloadReady();
+          reportUnmatched(parsedData);
           await downloadQobuzTracks(parsedData, data, socket);
         } else if (data.service === 'deezer') {
           await ensureDeezerDownloadReady();
@@ -112,6 +133,7 @@ export const registerDirectDownloadSocketHandler = ({
             delete parsedData.linkinfo.ART_NAME;
           }
 
+          reportUnmatched(parsedData);
           await downloadDeezerTracks(parsedData, data, socket);
         }
       } else if (data.url.includes('deezer.com')) {
@@ -121,11 +143,13 @@ export const registerDirectDownloadSocketHandler = ({
           parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
           await ensureQobuzDownloadReady();
+          reportUnmatched(parsedData);
           await downloadQobuzTracks(parsedData, data, socket);
         } else {
           parsedData = await parseDeezerUrl(data.url);
 
           await ensureDeezerDownloadReady();
+          reportUnmatched(parsedData);
           await downloadDeezerTracks(parsedData, data, socket);
         }
       } else if (data.url.includes('tidal.com')) {
@@ -138,6 +162,7 @@ export const registerDirectDownloadSocketHandler = ({
         parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
         await ensureQobuzDownloadReady();
+        reportUnmatched(parsedData);
         await downloadQobuzTracks(parsedData, data, socket);
       } else if (data.url.includes('youtube.com') || data.url.includes('youtu.be')) {
         if (data.service !== 'qobuz') {
@@ -149,6 +174,7 @@ export const registerDirectDownloadSocketHandler = ({
         parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
         await ensureQobuzDownloadReady();
+        reportUnmatched(parsedData);
         await downloadQobuzTracks(parsedData, data, socket);
       } else if (data.url.includes('qobuz.com') || data.url.includes('play.qobuz.com')) {
         console.log('🎵 Processing Qobuz URL...');
@@ -157,6 +183,7 @@ export const registerDirectDownloadSocketHandler = ({
         parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
         await ensureQobuzDownloadReady();
+        reportUnmatched(parsedData);
         await downloadQobuzTracks(parsedData, data, socket);
       } else {
         throw new Error('Unsupported URL format');

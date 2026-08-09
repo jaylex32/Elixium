@@ -4,6 +4,8 @@ import FastLRU from '../lib/fast-lru';
 import {trackType, albumType} from './types';
 import {getTrackInfo} from './index';
 import NodeID3 from 'node-id3';
+import {qobuzCoverUrl} from '../../lib/cover-art';
+import {formatGain, formatPeak, cleanVersion, isCompilation, ENCODED_BY} from '../../lib/metadata-extra';
 
 interface ID3Tags {
   title: string;
@@ -21,6 +23,16 @@ interface ID3Tags {
   involvedPeopleList?: string;
   musicianCreditsList: string;
   composer: string;
+  /** TPUB — the record label, previously misfiled into `copyright`. */
+  publisher?: string;
+  /** TSRC. */
+  ISRC?: string;
+  /** TPOS — disc number within a multi-disc release. */
+  partOfSet?: string;
+  /** TENC. */
+  encodedBy?: string;
+  /** TIT3 — the release version, e.g. "Extended Club Mix". */
+  subtitle?: string;
   TXXX?: Array<{description: string; value: string}>;
   image?: {
     mime: string;
@@ -52,12 +64,27 @@ async function writeMetadataMp3(buffer: Buffer, track: trackType, cover: Buffer 
     genre: genreName,
     performerInfo: albumArtistName,
     mediaType: 'Digital Media', // Assuming all tracks are digital media
-    copyright: labelName,
+    /*
+     * copyright was set to the record label, which is a different thing —
+     * Qobuz returns the real copyright line on the track. The label belongs in
+     * publisher (TPUB), where it was not being written at all.
+     */
+    copyright: track.copyright || undefined,
+    publisher: labelName,
     date: track.album?.release_date_original,
     length: track.duration.toString(),
-    involvedPeopleList: albumArtistName.match(/various/i) ? '1' : '0',
+    /*
+     * involvedPeopleList (TIPL) previously held "1"/"0" — the compilation flag
+     * had been written into the credits frame, which corrupted it for any
+     * player that displays credits. The flag now lives in a TXXX below.
+     */
     musicianCreditsList: track.performers,
     composer: composerName,
+    ISRC: track.isrc,
+    partOfSet: track.media_number ? String(track.media_number) : undefined,
+    encodedBy: ENCODED_BY,
+    // Distinguishes a remix or edit from the original recording.
+    subtitle: cleanVersion(track.version) ?? undefined,
     TXXX: [
       {
         description: 'Explicit',
@@ -73,6 +100,17 @@ async function writeMetadataMp3(buffer: Buffer, track: trackType, cover: Buffer 
         description: 'Release Type',
         value: track.album?.release_type || 'Unknown',
       },
+      {
+        description: 'COMPILATION',
+        value: isCompilation(albumArtistName) ? '1' : '0',
+      },
+      // Lowercase descriptions: players match ReplayGain keys case-sensitively.
+      ...(formatGain(track.audio_info?.replaygain_track_gain)
+        ? [{description: 'replaygain_track_gain', value: formatGain(track.audio_info.replaygain_track_gain) as string}]
+        : []),
+      ...(formatPeak(track.audio_info?.replaygain_track_peak)
+        ? [{description: 'replaygain_track_peak', value: formatPeak(track.audio_info.replaygain_track_peak) as string}]
+        : []),
     ],
   };
 
@@ -135,14 +173,13 @@ export const downloadAlbumCover = async (album: albumType, albumCoverSize: cover
   }
 
   try {
-    let url = album.image.thumbnail;
-    if (albumCoverSize < 230) {
-      url = album.image.thumbnail;
-    } else if (albumCoverSize < 600) {
-      url = album.image.small;
-    } else {
-      url = album.image.large;
-    }
+    /*
+     * Previously this topped out at image.large (600px), so an embedded cover
+     * could never exceed 600 however the size was configured. Qobuz hosts a
+     * _max rung at 4000px that the album payload never links to; the URL has
+     * to be rebuilt to reach it.
+     */
+    const url = qobuzCoverUrl(album.image, albumCoverSize) ?? album.image.large;
     const {data} = await axios.get<any>(url, {responseType: 'arraybuffer'});
     lru.set(album.id + albumCoverSize, data);
     return data;
@@ -189,7 +226,7 @@ export const writeMetadataFlac = (
     if (releaseYear) {
       flac.setTag('YEAR=' + releaseYear);
     }
-    flac.setTag(`COMPILATION=${albumArtistName.match(/various/i) ? '1' : '0'}`);
+    flac.setTag(`COMPILATION=${isCompilation(albumArtistName) ? '1' : '0'}`);
     flac.setTag(`UPC=${track.album.upc}`);
   }
 
@@ -202,10 +239,37 @@ export const writeMetadataFlac = (
   flac.setTag('LENGTH=' + track.duration);
   flac.setTag('MEDIA=Digital Media');
 
-  // TODO
-  // if (track.LYRICS) {
-  //   flac.setTag('LYRICS=' + track.LYRICS.LYRICS_TEXT);
-  // }
+  /*
+   * ReplayGain. Qobuz returns both a gain and a peak per track and neither was
+   * written, so a mixed-source library had no consistent playback level.
+   */
+  const gain = formatGain(track.audio_info?.replaygain_track_gain);
+  if (gain) {
+    flac.setTag('REPLAYGAIN_TRACK_GAIN=' + gain);
+  }
+  const peak = formatPeak(track.audio_info?.replaygain_track_peak);
+  if (peak) {
+    flac.setTag('REPLAYGAIN_TRACK_PEAK=' + peak);
+  }
+
+  // The real copyright line, which Qobuz provides per track and was unused.
+  if (track.copyright) {
+    flac.setTag('COPYRIGHT=' + track.copyright);
+  }
+
+  // Keeps a remix or edit distinct from the original recording.
+  const version = cleanVersion(track.version);
+  if (version) {
+    flac.setTag('VERSION=' + version);
+    flac.setTag('SUBTITLE=' + version);
+  }
+
+  // Populated by applyLyrics before tagging. UNSYNCEDLYRICS is what most
+  // players read from a FLAC; LYRICS is kept for the ones that only know it.
+  if (track.LYRICS?.LYRICS_TEXT) {
+    flac.setTag('LYRICS=' + track.LYRICS.LYRICS_TEXT);
+    flac.setTag('UNSYNCEDLYRICS=' + track.LYRICS.LYRICS_TEXT);
+  }
 
   if (track.parental_warning) {
     flac.setTag('EXPLICIT=1');
@@ -252,6 +316,7 @@ export const writeMetadataFlac = (
 
   flac.setTag('SOURCE=Qobuz');
   flac.setTag('SOURCEID=' + track.id);
+  flac.setTag('ENCODEDBY=' + ENCODED_BY);
 
   return flac.getBuffer();
 };

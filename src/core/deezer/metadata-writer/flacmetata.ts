@@ -1,5 +1,6 @@
 import Metaflac from '../../lib/metaflac-js';
 import type {albumTypePublicApi, trackType} from '../types';
+import {formatGain, cleanVersion, isCompilation, ENCODED_BY} from '../../../lib/metadata-extra';
 
 export const writeMetadataFlac = (
   buffer: Buffer,
@@ -31,7 +32,7 @@ export const writeMetadataFlac = (
     flac.setTag('LABEL=' + album.label);
     flac.setTag('DATE=' + album.release_date);
     flac.setTag('YEAR=' + RELEASE_YEAR);
-    flac.setTag(`COMPILATION=${album.artist.name.match(/various/i) ? '1' : '0'}`);
+    flac.setTag(`COMPILATION=${isCompilation(album.artist.name) ? '1' : '0'}`);
   }
 
   if (track.DISK_NUMBER) {
@@ -79,12 +80,31 @@ export const writeMetadataFlac = (
     }
   }
 
+  /*
+   * ReplayGain lets a player level tracks without re-encoding. Deezer returns
+   * GAIN on every track and it was being discarded; there is no peak, so only
+   * the gain is written.
+   */
+  const gain = formatGain(track.GAIN);
+  if (gain) {
+    flac.setTag('REPLAYGAIN_TRACK_GAIN=' + gain);
+  }
+
+  // Distinguishes a remix or edit from the original, which otherwise tag
+  // identically and merge into one entry in most libraries.
+  const version = cleanVersion(track.VERSION);
+  if (version) {
+    flac.setTag('VERSION=' + version);
+    flac.setTag('SUBTITLE=' + version);
+  }
+
   if (cover) {
     flac.importPicture(cover, dimension, 'image/jpeg');
   }
 
   flac.setTag('SOURCE=Deezer');
   flac.setTag('SOURCEID=' + track.SNG_ID);
+  flac.setTag('ENCODEDBY=' + ENCODED_BY);
 
   return flac.getBuffer();
 };

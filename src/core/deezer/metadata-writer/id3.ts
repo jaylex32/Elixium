@@ -1,6 +1,7 @@
 // @ts-ignore
 import id3Writer from 'browser-id3-writer';
 import type {albumTypePublicApi, trackType} from '../types';
+import {formatGain, cleanVersion, isCompilation, ENCODED_BY} from '../../../lib/metadata-extra';
 
 export const writeMetadataMp3 = (
   buffer: Buffer,
@@ -47,7 +48,7 @@ export const writeMetadataMp3 = (
       })
       .setFrame('TXXX', {
         description: 'COMPILATION',
-        value: album.artist.name.match(/various/i) ? '1' : '0',
+        value: isCompilation(album.artist.name) ? '1' : '0',
       });
   }
 
@@ -123,6 +124,33 @@ export const writeMetadataMp3 = (
       value: track.EXPLICIT_LYRICS,
     });
   }
+
+  /*
+   * ReplayGain. The lowercase TXXX descriptions are not a style choice —
+   * foobar2000, mpd and most Android players match them case-sensitively, so
+   * "REPLAYGAIN_TRACK_GAIN" here would simply not be read.
+   */
+  const gain = formatGain(track.GAIN);
+  if (gain) {
+    writer.setFrame('TXXX', {description: 'replaygain_track_gain', value: gain});
+  }
+
+  // Keeps a remix distinct from the original it would otherwise duplicate.
+  const version = cleanVersion(track.VERSION);
+  if (version) {
+    writer.setFrame('TIT3', version);
+  }
+
+  /*
+   * The compilation flag stays a TXXX: browser-id3-writer has no TCMP frame
+   * (it rejects anything outside its known list), so the iTunes-native flag
+   * is not reachable from here. TXXX COMPILATION is written above and is what
+   * Picard and foobar2000 read.
+   */
+
+  // Matches MEDIA=Digital Media on the FLAC side, which MP3 was missing.
+  writer.setFrame('TMED', 'Digital Media');
+  writer.setFrame('TXXX', {description: 'ENCODEDBY', value: ENCODED_BY});
 
   if (cover) {
     writer.setFrame('APIC', {

@@ -1,6 +1,8 @@
 import got from 'got';
 import stream from 'stream';
 import {existsSync, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync, unlinkSync} from 'fs';
+import {applyLyrics, type LyricsOptions} from './lyrics-embed';
+import {resolveCoverSize, deezerCoverUrl} from './cover-art';
 import {promisify} from 'util';
 import {dirname, isAbsolute, join, resolve} from 'path';
 import {deezer} from '../core';
@@ -17,15 +19,24 @@ const pipeline = promisify(stream.pipeline);
 const simulate = process.env.SIMULATE;
 const config = new Config();
 
+/**
+ * Lyrics preferences, read per call so a change in Settings takes effect
+ * without a restart.
+ */
+const getLyricsOptions = (): LyricsOptions => ({
+  embed: config.get('embedLyrics') !== false,
+  saveLrc: Boolean(config.get('saveLrcFile')),
+});
+
 interface downloadTrackProps {
   track: trackType;
   quality: string | number;
   info: {[key: string]: any};
-  coverSizes: {
-    '128': number;
-    '320': number;
-    flac: number;
-  };
+  /**
+   * Either the per-quality object or a single width — the web UI saves a
+   * scalar, the CLI config holds the object. resolveCoverSize takes both.
+   */
+  coverSizes: {'128': number; '320': number; flac: number} | number | string;
   path: string;
   totalTracks: number;
   trackNumber?: boolean;
@@ -55,7 +66,7 @@ async function downloadAlbumCover(track: trackType, coverSize: number, savePath:
   // Define the safeFileName function if it's not imported
   const safeFileName = (name: string) => name.replace(/[<>:"/\\|?*]+/g, '_').replace(/(^\s+|\s+$)|(^\.+|\.+$)/g, '');
 
-  const coverArtUrl = `https://e-cdns-images.dzcdn.net/images/cover/${track.ALB_PICTURE}/${coverSize}x${coverSize}-000000-80-0-0.jpg`;
+  const coverArtUrl = deezerCoverUrl(track.ALB_PICTURE, coverSize);
   const coverArtDirectory = dirname(savePath);
   const coverArtFileName = `${safeFileName(track.ALB_TITLE)}.jpg`;
   const coverArtPath = join(coverArtDirectory, coverArtFileName);
@@ -112,7 +123,7 @@ const downloadTrack = async ({
       case '128kbps':
         quality = 1;
         fileSize = Number(track.FILESIZE_MP3_128);
-        coverSize = coverSizes['128'];
+        coverSize = resolveCoverSize(coverSizes, '128');
         break;
       case 9:
       case '9':
@@ -122,12 +133,12 @@ const downloadTrack = async ({
         quality = 9;
         ext = '.flac';
         fileSize = Number(track.FILESIZE_FLAC);
-        coverSize = coverSizes['flac'];
+        coverSize = resolveCoverSize(coverSizes, 'flac');
         break;
       default:
         quality = 3;
         fileSize = Number(track.FILESIZE_MP3_320);
-        coverSize = coverSizes['320'];
+        coverSize = resolveCoverSize(coverSizes, '320');
     }
 
     const qobuzDownloadCover = false;
@@ -280,6 +291,20 @@ const downloadTrack = async ({
     } else {
       logUpdate(signale.pending('Tagging ' + track.SNG_TITLE + ' by ' + track.ART_NAME));
     }
+    // Lyrics before tagging: the writer emits USLT / LYRICS from track.LYRICS,
+    // so they have to be attached before the tags are built.
+    await applyLyrics(
+      track,
+      {
+        artist: track.ART_NAME,
+        title: track.SNG_TITLE,
+        album: track.ALB_TITLE,
+        durationSec: Number(track.DURATION) || undefined,
+      },
+      savePath,
+      getLyricsOptions(),
+    );
+
     const trackWithMetadata = await deezer.addTrackTags(outFile, track, coverSize);
 
     // Delete temporary file now

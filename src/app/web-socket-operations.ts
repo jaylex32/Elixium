@@ -45,6 +45,8 @@ export const registerOperationsSocketHandlers = ({
         fallbackQuality: conf.get('fallbackQuality'),
         deezerDownloadCover: conf.get('deezerDownloadCover'),
         qobuzDownloadCover: conf.get('qobuzDownloadCover'),
+        embedLyrics: conf.get('embedLyrics') !== false,
+        saveLrcFile: Boolean(conf.get('saveLrcFile')),
         createPlaylist: configAny.get('playlist.createPlaylist'),
         cookies: {
           arl: conf.get('cookies.arl'),
@@ -100,6 +102,14 @@ export const registerOperationsSocketHandlers = ({
 
       if (data.qobuzDownloadCover !== undefined) {
         conf.set('qobuzDownloadCover', data.qobuzDownloadCover);
+      }
+
+      if (data.embedLyrics !== undefined) {
+        conf.set('embedLyrics', data.embedLyrics);
+      }
+
+      if (data.saveLrcFile !== undefined) {
+        conf.set('saveLrcFile', data.saveLrcFile);
       }
 
       if (data.createPlaylist !== undefined) {

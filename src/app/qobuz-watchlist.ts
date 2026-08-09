@@ -1,4 +1,13 @@
 import {existsSync, readdirSync} from 'fs';
+import {
+  QUALITY_TIERS,
+  bestAvailableTier,
+  classifyFileQuality,
+  meetsCutoff,
+  needsUpgrade,
+  readQualityProfile,
+  type QualityTier,
+} from './quality-profile';
 import path from 'path';
 import {getUrlParts, tidal} from '../core';
 import {getSpotifyPlaylistBundle} from '../core/converter/spotify';
@@ -16,7 +25,7 @@ import type {
   WatchedArtistRecord,
   WatchedPlaylistRecord,
 } from './watchlist-store';
-import {WatchlistStore} from './watchlist-store';
+import {WatchlistStore, type ReleaseType, DEFAULT_RELEASE_TYPES, ALL_RELEASE_TYPES} from './watchlist-store';
 
 interface QobuzWatchlistDependencies {
   conf: Config | any;
@@ -53,7 +62,124 @@ export const normalizeWatchlistText = (value: string) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+/*
+ * Edition markers that identify the *same* record rather than a different one.
+ *
+ * Without stripping these, "Album" and "Album (Deluxe Edition)" normalize to
+ * different keys, so both are treated as new and both get downloaded — and
+ * again for the remaster, the anniversary edition, and the explicit version.
+ * Collapsing them means the first one wins and the rest are recognised as
+ * already handled.
+ *
+ * Deliberately NOT collapsed: "Live", "Acoustic", "Instrumental", "Remix" and
+ * "Demo" are genuinely different recordings, not repackages of the same one.
+ */
+const EDITION_MARKERS = [
+  'deluxe',
+  'deluxe edition',
+  'super deluxe',
+  'expanded',
+  'expanded edition',
+  'remaster',
+  'remastered',
+  'remastered version',
+  'anniversary edition',
+  'special edition',
+  'limited edition',
+  'collectors edition',
+  'bonus track version',
+  'bonus tracks',
+  'explicit',
+  'clean',
+  'standard edition',
+  'original mix',
+  'single version',
+  'radio edit',
+];
+
+/**
+ * Remove edition/packaging qualifiers so variants of one release share a key.
+ *
+ * Handles the three shapes services actually use: a parenthetical, a bracketed
+ * suffix, and a trailing " - Qualifier".
+ */
+export const stripEditionMarkers = (value: string): string => {
+  let text = String(value || '');
+
+  // "(...)" and "[...]" whose contents are only edition words, plus optional years.
+  text = text.replace(/[([]([^)\]]*)[)\]]/g, (match, inner: string) => {
+    const cleaned = normalizeWatchlistText(inner)
+      .replace(/\b(19|20)\d{2}\b/g, '')
+      // Ordinals too, so "20th Anniversary Edition" reduces to the marker.
+      .replace(/\b\d+(st|nd|rd|th)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) return '';
+    return EDITION_MARKERS.includes(cleaned) ? '' : match;
+  });
+
+  // Trailing " - Qualifier".
+  text = text.replace(/\s[-–—]\s([^-–—]+)$/, (match, tail: string) => {
+    const cleaned = normalizeWatchlistText(tail)
+      .replace(/\b(19|20)\d{2}\b/g, '')
+      // Ordinals too, so "20th Anniversary Edition" reduces to the marker.
+      .replace(/\b\d+(st|nd|rd|th)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return EDITION_MARKERS.includes(cleaned) ? '' : match;
+  });
+
+  return text.trim();
+};
+
+/**
+ * Infer what kind of release an album is.
+ *
+ * Qobuz exposes no release-type field, so this reads the signals it does give:
+ * track count, the `version` string, the title, and whether the credited
+ * artist is a various-artists placeholder. It is a heuristic, not metadata —
+ * a 4-track album by an artist who releases short records will read as an EP.
+ * Erring toward "album" keeps real releases from being filtered away.
+ */
+export const classifyReleaseType = (album: any): ReleaseType => {
+  const title = normalizeWatchlistText(album?.title || album?.name || '');
+  const version = normalizeWatchlistText(album?.version || '');
+  const artistName = normalizeWatchlistText(album?.artist?.name || '');
+  const trackCount = Number(album?.tracks_count) || 0;
+  const durationSec = Number(album?.duration) || 0;
+  const haystack = `${title} ${version}`;
+
+  // Explicit markers win over any count-based guess.
+  if (/\blive\b|\bin concert\b|\bunplugged\b|\bsession(s)?\b/.test(haystack)) return 'live';
+  if (/\bcompilation\b|\bgreatest hits\b|\bbest of\b|\banthology\b|\bcollection\b/.test(haystack)) {
+    return 'compilation';
+  }
+  if (/\bvarious artists\b|\bva\b/.test(artistName)) return 'compilation';
+  if (/\bsingle\b/.test(haystack)) return 'single';
+  if (/\bep\b/.test(haystack)) return 'ep';
+
+  // Otherwise fall back to size. Duration guards against an "album" that is
+  // three long tracks, and against an EP padded with many short ones.
+  if (trackCount > 0) {
+    if (trackCount <= 2) return 'single';
+    if (trackCount <= 6 && durationSec > 0 && durationSec < 30 * 60) return 'ep';
+    if (trackCount <= 4) return 'ep';
+  }
+
+  return 'album';
+};
+
 const buildAlbumKey = (artist: string, title: string) =>
+  `${normalizeWatchlistText(artist)}::${normalizeWatchlistText(stripEditionMarkers(title))}`;
+
+/**
+ * The pre-edition-stripping key.
+ *
+ * Existing state was written with this format, so a scan must still match it —
+ * otherwise every previously downloaded album reappears as new the first time
+ * the improved key ships.
+ */
+const buildLegacyAlbumKey = (artist: string, title: string) =>
   `${normalizeWatchlistText(artist)}::${normalizeWatchlistText(title)}`;
 
 const buildTrackKey = (artist: string, title: string) => buildAlbumKey(artist, title);
@@ -88,25 +214,84 @@ const extractPlaylistTrackImage = (tracks: any[]) => {
   return '';
 };
 
+/**
+ * Index the library by normalized name, recording the best audio quality found.
+ *
+ * This used to return names only, which answered "do I have this?" but not
+ * "is what I have good enough?" — so a release grabbed as MP3 stayed MP3
+ * forever. The quality is read from the files because download history never
+ * recorded it, and reading the files is the only thing that works for a
+ * library that predates the quality profile.
+ *
+ * A file's tier is attributed to its own name *and* to every directory above
+ * it, so both "Artist/Album/01 Track.flac" and a flat "Album.flac" resolve.
+ */
 const collectFilesystemTokens = (rootPath: string) => {
-  const names = new Set<string>();
+  const names = new Map<string, QualityTier>();
   if (!rootPath || !existsSync(rootPath)) return names;
 
-  const stack = [rootPath];
+  const write = (key: string, tier: QualityTier | null) => {
+    if (!key) return;
+    if (!tier) {
+      // Keep the bare presence signal for non-audio entries (folders), without
+      // claiming a quality we have not observed.
+      if (!names.has(key)) names.set(key, 'mp3');
+      return;
+    }
+    const existing = names.get(key);
+    if (!existing || QUALITY_TIERS.indexOf(tier) > QUALITY_TIERS.indexOf(existing)) names.set(key, tier);
+  };
+
+  /**
+   * Index a name under every form a release might be looked up by.
+   *
+   * The default path template is "{alb_artist} - {alb_title}", so an album
+   * folder is "Draco Rosa - OLAS DE LUZ" while the release is known upstream
+   * as "OLAS DE LUZ". Recording only the full name meant those never matched,
+   * so an album sitting on disk still read as missing — and the duplicate
+   * check that predates this had the same blind spot.
+   *
+   * Splitting on the first " - " recovers the title. An album whose own name
+   * contains " - " still indexes under its full form, so nothing is lost.
+   */
+  const record = (rawName: string, tier: QualityTier | null) => {
+    const normalized = normalizeWatchlistText(rawName);
+    write(normalized, tier);
+
+    const separator = rawName.indexOf(' - ');
+    if (separator > 0) {
+      write(normalizeWatchlistText(rawName.slice(separator + 3)), tier);
+      write(normalizeWatchlistText(stripEditionMarkers(rawName.slice(separator + 3))), tier);
+    }
+    write(normalizeWatchlistText(stripEditionMarkers(rawName)), tier);
+  };
+
+  const stack: Array<{dir: string; ancestors: string[]}> = [{dir: rootPath, ancestors: []}];
   while (stack.length > 0) {
-    const current = stack.pop() as string;
+    const {dir, ancestors} = stack.pop() as {dir: string; ancestors: string[]};
     let entries: ReturnType<typeof readdirSync>;
     try {
-      entries = readdirSync(current, {withFileTypes: true}) as any;
+      entries = readdirSync(dir, {withFileTypes: true}) as any;
     } catch {
       continue;
     }
 
     for (const entry of entries as any[]) {
-      const fullPath = path.join(current, entry.name);
-      const normalized = normalizeWatchlistText(path.parse(entry.name).name || entry.name);
-      if (normalized) names.add(normalized);
-      if (entry.isDirectory()) stack.push(fullPath);
+      const fullPath = path.join(dir, entry.name);
+      // Raw, not normalized: `record` needs the original " - " separator to
+      // recover the album title from a "{artist} - {album}" folder name.
+      const rawName = path.parse(entry.name).name || entry.name;
+
+      if (entry.isDirectory()) {
+        record(rawName, null);
+        stack.push({dir: fullPath, ancestors: rawName ? [...ancestors, rawName] : ancestors});
+        continue;
+      }
+
+      const tier = classifyFileQuality(fullPath);
+      record(rawName, tier);
+      // Promote the tier onto the enclosing album/artist folders too.
+      if (tier) for (const ancestor of ancestors) record(ancestor, tier);
     }
   }
 
@@ -296,6 +481,68 @@ export const createQobuzWatchlistService = ({
 
   const getState = () => enrichState(store.getState());
 
+  /**
+   * Discography of every watched artist, split into what is held and what is not.
+   *
+   * The watchlist only ever answered "what is new since the last scan", so
+   * there was no way to see an artist's catalogue against the library — the
+   * question Lidarr's main screen exists to answer. Nothing new is fetched
+   * here: candidates are already recorded per artist, and the library index
+   * now carries a quality tier, so this is a projection over existing state
+   * and stays cheap enough to call on every page view.
+   *
+   * A release counts as held if the filesystem index knows its title. That is
+   * deliberately independent of download history: files moved in by hand still
+   * count, and a history entry whose files were deleted does not.
+   */
+  const getLibraryOverview = (artistId?: string) => {
+    const state = store.getState();
+    const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const profile = readQualityProfile(conf);
+
+    const artists = artistId
+      ? state.watchedArtists.filter((entry) => String(entry.id) === String(artistId))
+      : state.watchedArtists;
+
+    const summaries = artists.map((artist) => {
+      const candidates = state.candidates.filter((c) => String(c.artistId) === String(artist.id));
+
+      const releases = candidates.map((candidate) => {
+        const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(candidate.title));
+        const haveTier = libraryTokens.get(normalizedTitle) ?? null;
+        const availableTier = bestAvailableTier('qobuz', candidate.rawData);
+
+        return {
+          id: candidate.id,
+          title: candidate.title,
+          year: candidate.year,
+          image: candidate.image,
+          releaseType: candidate.releaseType ?? 'album',
+          owned: haveTier !== null,
+          quality: haveTier,
+          availableQuality: availableTier,
+          // Held, but below the tier the profile asks for.
+          upgradable: haveTier !== null && !meetsCutoff(haveTier, profile.cutoff) && availableTier !== haveTier,
+          reason: candidate.reason,
+        };
+      });
+
+      const owned = releases.filter((r) => r.owned).length;
+      return {
+        artistId: String(artist.id),
+        name: artist.name,
+        image: artist.image ?? '',
+        total: releases.length,
+        owned,
+        missing: releases.length - owned,
+        upgradable: releases.filter((r) => r.upgradable).length,
+        releases: releases.sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
+      };
+    });
+
+    return {cutoff: profile.cutoff, artists: summaries};
+  };
+
   const parseGenreList = (payload: any): FavoriteGenreRecord[] => {
     const rawItems = payload?.genres?.items || payload?.genres || payload?.items || [];
     if (!Array.isArray(rawItems)) return [];
@@ -333,6 +580,30 @@ export const createQobuzWatchlistService = ({
       artists: normalizeSchedule(state.schedules?.artists),
       playlists: normalizeSchedule(state.schedules?.playlists),
     };
+  };
+
+  const getReleaseTypes = (): ReleaseType[] => {
+    const current = store.getState().releaseTypes;
+    return Array.isArray(current) && current.length > 0 ? current : [...DEFAULT_RELEASE_TYPES];
+  };
+
+  /**
+   * Replace the accepted release kinds.
+   *
+   * Rejects an empty selection: saving "collect nothing" silently stops every
+   * scan from ever producing a candidate, which looks identical to the
+   * watchlist being broken.
+   */
+  const saveReleaseTypes = (types: string[]) => {
+    const allowed = new Set(ALL_RELEASE_TYPES);
+    const next = [...new Set((types || []).map(String))].filter((t): t is ReleaseType => allowed.has(t as ReleaseType));
+    const effective = next.length > 0 ? next : [...DEFAULT_RELEASE_TYPES];
+
+    const state = store.update((draft) => {
+      draft.releaseTypes = effective;
+    });
+    pushMonitorHistory('artists', 'info', `Release types set to ${effective.join(', ')}`);
+    return enrichState(state);
   };
 
   const saveFavoriteGenres = (genreIds: string[]) => {
@@ -536,18 +807,51 @@ export const createQobuzWatchlistService = ({
     const state = store.getState();
     const processedByKey = new Map(state.processedAlbums.map((entry) => [entry.normalizedKey, entry]));
     const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const qualityProfile = readQualityProfile(conf);
     const nextCandidates: WatchlistCandidateRecord[] = [];
+
+    // Which release kinds the user wants collected at all. Anything else is
+    // still recorded, but flagged so it never reaches the wanted list or an
+    // automatic download.
+    const allowedTypes = new Set<ReleaseType>(
+      Array.isArray(state.releaseTypes) && state.releaseTypes.length > 0 ? state.releaseTypes : DEFAULT_RELEASE_TYPES,
+    );
 
     albums.forEach((album) => {
       const title = String(album?.title || album?.name || 'Unknown Album');
-      const normalizedTitle = normalizeWatchlistText(title);
-      const normalizedArtist = normalizeWatchlistText(album?.artist?.name || artist.name);
-      const normalizedKey = `${normalizedArtist}::${normalizedTitle}`;
+      const rawArtist = album?.artist?.name || artist.name;
+      const releaseType = classifyReleaseType(album);
+      const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(title));
+      const normalizedKey = buildAlbumKey(rawArtist, title);
+      // Match legacy-format entries too, so shipping the improved key does not
+      // resurface everything already downloaded.
+      const legacyKey = buildLegacyAlbumKey(rawArtist, title);
 
       let reason: WatchlistCandidateRecord['reason'] = 'new';
       let duplicateSource = '';
-      if (processedByKey.has(normalizedKey)) {
-        const processedReason = processedByKey.get(normalizedKey)?.reason || 'history';
+      const matchedKey = processedByKey.has(normalizedKey)
+        ? normalizedKey
+        : processedByKey.has(legacyKey)
+        ? legacyKey
+        : '';
+
+      /*
+       * What the library already holds, and whether the service can beat it.
+       *
+       * Checked before the duplicate branches so an album that is "already
+       * processed" but sitting below the cutoff still surfaces as wanted —
+       * that is the entire point of an upgrade cutoff, and the old flow
+       * short-circuited on `already-processed` and never looked at quality.
+       */
+      const haveTier = libraryTokens.get(normalizedTitle) ?? null;
+      const availableTier = bestAvailableTier('qobuz', album);
+      const upgradable = needsUpgrade(haveTier, qualityProfile, availableTier);
+
+      if (upgradable) {
+        reason = 'new';
+        duplicateSource = `upgrade:${haveTier}->${availableTier}`;
+      } else if (matchedKey) {
+        const processedReason = processedByKey.get(matchedKey)?.reason || 'history';
         if (['downloaded', 'dismissed', 'duplicate'].includes(processedReason)) {
           reason = 'already-processed';
           duplicateSource = processedReason;
@@ -558,10 +862,16 @@ export const createQobuzWatchlistService = ({
       } else if (libraryTokens.has(normalizedTitle)) {
         reason = 'needs-review';
         duplicateSource = 'local-library';
+      } else if (!allowedTypes.has(releaseType)) {
+        // Checked last so a genuine duplicate still reports as such — the more
+        // specific explanation is the more useful one.
+        reason = 'filtered-type';
+        duplicateSource = releaseType;
       }
 
       nextCandidates.push({
         id: String(album.id),
+        releaseType,
         artistId: String(artist.id),
         artist: String(album?.artist?.name || artist.name),
         title,
@@ -1344,12 +1654,15 @@ export const createQobuzWatchlistService = ({
   return {
     loadAvailableGenres,
     getState,
+    getLibraryOverview,
     getFavoriteGenres,
     getMonitorSchedules,
     getMonitorHistory,
     saveMonitorSchedule,
     runMonitorNow,
     saveFavoriteGenres,
+    getReleaseTypes,
+    saveReleaseTypes,
     addWatchedArtist,
     addWatchedPlaylist,
     removeWatchedArtist,

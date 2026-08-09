@@ -234,6 +234,22 @@ const getPublicDeezerPlaylist = async (playlistId: string) => {
   return {playlistInfo, tracks};
 };
 
+/**
+ * A source track that could not be matched on the target service.
+ *
+ * Conversion has always counted these and mentioned the total in a progress
+ * string ("12 not found"), but the identities were only ever written to the
+ * server console — so a user saw a playlist arrive short with no way to know
+ * which tracks were missing or why.
+ */
+export interface UnmatchedTrack {
+  title: string;
+  artist: string;
+  album?: string;
+  isrc?: string;
+  reason: string;
+}
+
 export const parseToQobuz = async (
   url: string,
   onProgress?: (progress: qobuzConversionProgressType) => void,
@@ -242,7 +258,26 @@ export const parseToQobuz = async (
   linktype: string;
   linkinfo: any;
   tracks: qobuz.types.trackType[];
+  unmatched: UnmatchedTrack[];
 }> => {
+  const unmatched: UnmatchedTrack[] = [];
+
+  /** Records a failed match; shape matches the converter's onError contract. */
+  const collectUnmatched = (item: any, _index: number, err: Error) => {
+    const source = item?.track ?? item;
+    unmatched.push({
+      title: String(source?.name ?? source?.title ?? 'Unknown track'),
+      artist: Array.isArray(source?.artists)
+        ? source.artists
+            .map((a: any) => a?.name)
+            .filter(Boolean)
+            .join(', ')
+        : String(source?.artist?.name ?? source?.artist ?? ''),
+      album: source?.album?.name ?? source?.album?.title,
+      isrc: source?.external_ids?.isrc ?? source?.isrc,
+      reason: String(err?.message ?? 'No match found'),
+    });
+  };
   const info = await getUrlParts(url, true);
   if (!info.id) {
     throw new Error('Unable to parse id');
@@ -257,7 +292,7 @@ export const parseToQobuz = async (
     case 'qobuz-album':
     case 'qobuz-playlist':
     case 'qobuz-artist':
-      return await parseQobuzUrl(url);
+      return {...(await parseQobuzUrl(url)), unmatched: []};
 
     case 'spotify-track': {
       emitProgress(onProgress, {
@@ -289,7 +324,7 @@ export const parseToQobuz = async (
         message: 'Fetching Spotify playlist...',
         percentage: 10,
       });
-      const [playlistInfo, playlistTracks] = await qobuzParser.playlist2Qobuz(info.id, undefined, onProgress);
+      const [playlistInfo, playlistTracks] = await qobuzParser.playlist2Qobuz(info.id, collectUnmatched, onProgress);
       tracks = playlistTracks;
       linkinfo = playlistInfo;
       linktype = 'qobuz-playlist';
@@ -483,5 +518,6 @@ export const parseToQobuz = async (
       }
       return track;
     }),
+    unmatched,
   };
 };

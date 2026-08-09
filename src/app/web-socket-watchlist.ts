@@ -216,6 +216,20 @@ export const registerWatchlistSocketHandlers = ({socket, io, watchlist}: WebSock
     socket.emit('favoriteGenres', watchlist.getFavoriteGenres());
   });
 
+  socket.on('getReleaseTypes', () => {
+    socket.emit('releaseTypes', {types: watchlist.getReleaseTypes()});
+  });
+
+  socket.on('saveReleaseTypes', ({types}) => {
+    try {
+      const state = watchlist.saveReleaseTypes(Array.isArray(types) ? types : []);
+      io.emit('releaseTypes', {types: watchlist.getReleaseTypes()});
+      broadcastState(state);
+    } catch (error: any) {
+      socket.emit('watchlistError', {message: error.message || 'Unable to save release types'});
+    }
+  });
+
   socket.on('saveFavoriteGenres', async ({genreIds}) => {
     try {
       await watchlist.loadAvailableGenres();
@@ -266,16 +280,28 @@ export const registerWatchlistSocketHandlers = ({socket, io, watchlist}: WebSock
     }
   });
 
-  socket.on('runMonitorNow', async ({kind}) => {
+  const runMonitor = async (kind?: string) => {
+    // Scan lifecycle is broadcast so any connected client can show progress,
+    // not just the one that started it. Without a terminal event a client that
+    // flips into a "scanning" state has nothing to turn it off again.
+    io.emit('watchlistScanStarted', {kind: kind === 'playlists' ? 'playlists' : 'artists'});
     try {
       const result = await watchlist.runMonitorNow(kind === 'playlists' ? 'playlists' : 'artists');
       socket.emit('monitorSchedules', watchlist.getMonitorSchedules());
       io.emit('monitorHistory', {items: watchlist.getMonitorHistory()});
       broadcastState(result.state);
+      io.emit('watchlistScanComplete', {time: new Date().toISOString(), kind});
     } catch (error: any) {
       socket.emit('watchlistError', {message: error.message || 'Unable to run monitor'});
+      // Emit the terminal event on failure too, or the UI stays stuck spinning.
+      io.emit('watchlistScanComplete', {time: new Date().toISOString(), kind, failed: true});
     }
-  });
+  };
+
+  socket.on('runMonitorNow', async ({kind}) => runMonitor(kind));
+
+  // Alias for the web UI, which names the action after the user-facing button.
+  socket.on('runWatchlistScan', async (data) => runMonitor(data?.kind));
 
   socket.on('getMonitorHistory', () => {
     socket.emit('monitorHistory', {

@@ -526,6 +526,8 @@ export const playlist2Qobuz = async (
           failures++;
           console.log(`❌ Failed to convert: ${item?.name} - ${err.message}`);
           if (onError) {
+            // Pass the source item through so the caller can report which
+            // track failed, not just how many did.
             onError({track: item} as SpotifyApi.PlaylistTrackObject, index, err);
           }
         } finally {
