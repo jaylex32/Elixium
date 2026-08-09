@@ -34,11 +34,11 @@ export function useSocket() {
       },
     );
 
-    s.on(ON.DIRECT_DOWNLOAD_PROGRESS, (data: {phase: string; message: string; percentage: number; itemId?: string}) => {
+    s.on(ON.DIRECT_DOWNLOAD_PROGRESS, (data) => {
       onConversionProgress(data);
     });
 
-    s.on(ON.DOWNLOAD_COMPLETE, (data: {count?: number; files?: string[]}) => {
+    s.on(ON.DOWNLOAD_COMPLETE, (data) => {
       const count = data.count ?? data.files?.length ?? 1;
       onBatchComplete(count);
       toast.success(`Download complete — ${count} track${count > 1 ? 's' : ''}`);
@@ -62,7 +62,7 @@ export function useSocket() {
      */
     s.on(
       'conversionReport',
-      (data: {itemId?: string; matched?: number; unmatched?: Array<Record<string, string>>}) => {
+      (data) => {
         const unmatched = Array.isArray(data?.unmatched) ? data.unmatched : [];
         if (unmatched.length === 0) return;
 

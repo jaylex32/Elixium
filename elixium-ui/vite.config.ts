@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Event contract compiled by the server too — see shared/socket-events.ts
+      '@shared': path.resolve(__dirname, '../shared'),
     },
   },
   build: {

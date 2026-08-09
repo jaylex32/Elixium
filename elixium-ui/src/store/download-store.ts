@@ -1,3 +1,4 @@
+import type {DownloadProgressPayload} from '@shared/socket-events';
 import {create} from 'zustand';
 import {persist} from 'zustand/middleware';
 
@@ -67,7 +68,12 @@ interface DownloadState {
     itemProgress?: number;
   }) => void;
   // Called on directUrlConversionProgress (pre-download phase)
-  onConversionProgress: (data: {phase: string; message: string; percentage: number; itemId?: string}) => void;
+  /**
+   * Takes the shared payload rather than restating it. The old inline type
+   * required `phase`, `message` and `percentage`, none of which every emit
+   * site actually sends — `phase` was not even read.
+   */
+  onConversionProgress: (data: DownloadProgressPayload) => void;
   onComplete: (itemId: string, count: number) => void;
   onBatchComplete: (count: number) => void;
   onError: (itemId: string, message: string) => void;
@@ -225,21 +231,24 @@ export const useDownloadStore = create<DownloadState>()(
 
   onConversionProgress: (data) => {
     const id = data.itemId ?? '__conversion__';
+    // Every field here is optional on the wire; falling back keeps a partial
+    // emit from blanking a row that already had a label or a percentage.
+    const label = data.message ?? data.currentTrack ?? 'Converting…';
     set((s) => ({
       active: {
         ...s.active,
         [id]: {
           ...(s.active[id] ?? {
             itemId: id,
-            title: data.message,
+            title: label,
             status: 'converting',
             current: 0,
             total: 100,
             startedAt: Date.now(),
           }),
           status: 'converting',
-          percentage: data.percentage,
-          currentTrack: data.message,
+          percentage: data.percentage ?? s.active[id]?.percentage ?? 0,
+          currentTrack: label,
         },
       },
       isRunning: true,

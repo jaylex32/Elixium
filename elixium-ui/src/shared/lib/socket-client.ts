@@ -1,5 +1,16 @@
 import {useEffect, useRef} from 'react';
 import {getSocket} from './socket';
+import type {ServerToClientEvents, ClientToServerEvents} from '@shared/socket-events';
+
+/**
+ * Event names, constrained to the shared contract.
+ *
+ * These wrappers took plain strings, which meant every caller sat outside the
+ * type check even after the socket itself was typed — a listener for an event
+ * nothing emits still compiled.
+ */
+type ServerEvent = keyof ServerToClientEvents;
+type ClientEvent = keyof ClientToServerEvents;
 
 /**
  * Request/subscribe helpers over Socket.IO.
@@ -13,9 +24,9 @@ import {getSocket} from './socket';
 
 export interface SocketRequestOptions {
   /** Event carrying the successful result. */
-  resolveOn: string;
+  resolveOn: ServerEvent;
   /** Event carrying a failure, if the protocol has one. */
-  rejectOn?: string;
+  rejectOn?: ServerEvent;
   /** Give up after this long so a lost reply cannot hang a caller forever. */
   timeoutMs?: number;
 }
@@ -28,9 +39,9 @@ export interface SocketRequestOptions {
  * resolves a promise nobody is waiting for.
  */
 export function socketRequest<T = unknown>(
-  emitEvent: string,
-  payload?: unknown,
-  {resolveOn, rejectOn, timeoutMs = 15000}: SocketRequestOptions = {resolveOn: ''},
+  emitEvent: ClientEvent,
+  payload: unknown,
+  {resolveOn, rejectOn, timeoutMs = 15000}: SocketRequestOptions,
 ): Promise<T> {
   const socket = getSocket();
 
@@ -77,7 +88,7 @@ export function socketRequest<T = unknown>(
  * not re-subscribe on every render — the mistake that produces duplicate
  * listeners and handlers firing N times.
  */
-export function useSocketEvent<T = unknown>(event: string, handler: (data: T) => void, enabled = true): void {
+export function useSocketEvent<T = unknown>(event: ServerEvent, handler: (data: T) => void, enabled = true): void {
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
@@ -94,6 +105,6 @@ export function useSocketEvent<T = unknown>(event: string, handler: (data: T) =>
 }
 
 /** Fire-and-forget emit, for actions with no reply worth awaiting. */
-export function socketSend(event: string, payload?: unknown): void {
-  getSocket().emit(event, payload);
+export function socketSend(event: ClientEvent, payload?: unknown): void {
+  getSocket().emit(event, payload as never);
 }
