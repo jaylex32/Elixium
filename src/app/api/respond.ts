@@ -22,6 +22,8 @@ export type ApiErrorCode =
   | 'upstream_error'
   | 'not_configured'
   | 'rate_limited'
+  | 'unauthorized'
+  | 'forbidden'
   | 'internal_error';
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
@@ -32,6 +34,10 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   upstream_error: 502,
   not_configured: 409,
   rate_limited: 429,
+  // 401 means "authenticate and retry"; 403 means the credential was fine but
+  // the action is not available from where the request came (see /auth/token).
+  unauthorized: 401,
+  forbidden: 403,
   internal_error: 500,
 };
 

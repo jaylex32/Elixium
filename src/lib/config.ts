@@ -26,7 +26,11 @@ type keysType =
   | 'tempDirectory'
   | 'qobuz.app_id'
   | 'qobuz.secrets'
-  | 'qobuz.token';
+  | 'qobuz.token'
+  | 'auth'
+  | 'auth.enabled'
+  | 'auth.token'
+  | 'auth.allowedOrigins';
 
 type configType = {
   concurrency: number;
@@ -57,6 +61,14 @@ type configType = {
     arl: string;
   };
   tempDirectory: string;
+  auth: {
+    /** Require a token from non-loopback clients. */
+    enabled: boolean;
+    /** Generated on first use; empty here so it is never a shared secret. */
+    token: string;
+    /** Extra browser origins allowed past CORS, beyond localhost. */
+    allowedOrigins: string[];
+  };
 };
 
 const old_arl =
@@ -91,6 +103,15 @@ const defaultConfig: configType = {
     arl: 'c973964816688562722418b5200c1515dffaad15a42643ebf87cc72824a54612ec51c2ad42d566743f9e424c774e98ccae7737770acff59251328e6cd598c7bcac38ca269adf78bfb88ec5bbad6cd800db3c0b88b2af645bb22b99e71de26416',
   },
   tempDirectory: 'temp',
+  auth: {
+    // On by default. Loopback is exempt, so this costs a local user nothing
+    // while making a network-reachable server safe out of the box.
+    enabled: true,
+    // Generated per install on first use — a shipped default would be a shared
+    // secret and therefore no secret at all.
+    token: '',
+    allowedOrigins: [],
+  },
 };
 
 class Config {

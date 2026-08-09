@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {Save, Eye, EyeOff, Palette, Shield, HardDrive, Sliders, RefreshCw, Mic2, FolderTree} from 'lucide-react';
+import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, HardDrive, Sliders, RefreshCw, Mic2, FolderTree} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
@@ -10,6 +10,7 @@ import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS} from '@/s
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
+import {ApiAccess} from './ApiAccess';
 import {PathTemplates} from './PathTemplates';
 import {useSettingsStore as useSettingsStoreRaw} from '@/store/settings-store';
 import {cn} from '@/shared/lib/utils';
@@ -255,6 +256,13 @@ export function SettingsPage() {
             placeholder="Comma-separated secrets"
           />
         </Field>
+      </Section>
+
+      {/* Access control for this server, distinct from the service credentials
+          above — those authenticate Elixium to Deezer/Qobuz, this authenticates
+          other devices to Elixium. */}
+      <Section title="API access" icon={ShieldCheck}>
+        <ApiAccess />
       </Section>
 
       <Section title="Lyrics" icon={Mic2}>

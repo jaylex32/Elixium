@@ -1,6 +1,7 @@
 import type {Express} from 'express';
 import {ApiError, parseService, requireString, route, sendData} from '../respond';
 import {applySettings, readRedactedSettings, type SettingsInvalidationHooks} from '../settings';
+import {getOrCreateToken, isAuthEnabled, isLoopback, readAllowedOrigins, rotateToken} from '../auth';
 
 export interface LibraryRouteDependencies {
   app: Express;
@@ -65,6 +66,42 @@ export const registerLibraryRoutes = ({
     route(async (req, res) => {
       const changed = applySettings(conf, req.body, settingsHooks);
       return sendData(res, readRedactedSettings(conf), {changed, count: changed.length});
+    }),
+  );
+
+  // ── Access token ───────────────────────────────────────────────────────────
+
+  /**
+   * GET /auth/token — loopback only.
+   *
+   * Returns the token in the clear so the machine running Elixium can display
+   * it for pairing. Deliberately not reachable from the network even with a
+   * valid token: a device that has been given access should not be able to
+   * read the credential back out and re-share it, and this keeps the token off
+   * the wire except at the moment someone chooses to pair a device.
+   */
+  app.get(
+    `${basePath}/auth/token`,
+    route(async (req, res) => {
+      if (!isLoopback(req)) {
+        throw new ApiError('forbidden', 'The token can only be read from the machine running Elixium.', 403);
+      }
+      return sendData(res, {
+        token: getOrCreateToken(conf),
+        enabled: isAuthEnabled(conf),
+        allowedOrigins: readAllowedOrigins(conf),
+      });
+    }),
+  );
+
+  /** POST /auth/rotate — loopback only. Invalidates every paired device. */
+  app.post(
+    `${basePath}/auth/rotate`,
+    route(async (req, res) => {
+      if (!isLoopback(req)) {
+        throw new ApiError('forbidden', 'The token can only be rotated from the machine running Elixium.', 403);
+      }
+      return sendData(res, {token: rotateToken(conf), enabled: isAuthEnabled(conf)});
     }),
   );
 

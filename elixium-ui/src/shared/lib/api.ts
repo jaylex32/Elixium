@@ -1,12 +1,29 @@
 import axios from 'axios';
 import {useQuery, useMutation} from '@tanstack/react-query';
 import type {Service, RawSearchResult, RawDiscoveryItem, ItemTracksResponse} from '@/types';
+import {getToken, notifyAuthRequired, withToken} from './auth-token';
 
 export const http = axios.create({baseURL: '/api', timeout: 30000});
 
+// Attach the API token when this browser has one. Loopback is exempt server
+// side, so on the host machine there is no token and nothing is added.
+http.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.set('X-Elixium-Token', token);
+  return config;
+});
+
 http.interceptors.response.use(
   (r) => r,
-  (e) => Promise.reject(new Error(e.response?.data?.error ?? e.message ?? 'Request failed')),
+  (e) => {
+    // Surface a refusal distinctly so the UI can ask for a token rather than
+    // reporting a generic failure the user cannot act on.
+    if (e.response?.status === 401) {
+      notifyAuthRequired();
+      return Promise.reject(new Error('auth_required'));
+    }
+    return Promise.reject(new Error(e.response?.data?.error ?? e.message ?? 'Request failed'));
+  },
 );
 
 // ── Stream URL constructor ────────────────────────────────────────────────────
@@ -19,7 +36,9 @@ http.interceptors.response.use(
  */
 export function getStreamUrl(id: string, service: Service, quality?: string): string {
   const q = quality ?? (service === 'deezer' ? 'flac' : '44khz');
-  return `/api/v1/tracks/${encodeURIComponent(id)}/stream?service=${service}&quality=${q}`;
+  // withToken because an <audio> element cannot set headers; a no-op on
+  // loopback, where no token is stored.
+  return withToken(`/api/v1/tracks/${encodeURIComponent(id)}/stream?service=${service}&quality=${q}`);
 }
 
 export type StreamKind = 'full' | 'preview' | 'unknown';

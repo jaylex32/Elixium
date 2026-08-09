@@ -33,6 +33,8 @@ export interface ElixiumSettings {
   playlist: unknown;
   paths: {deezer: string; qobuz: string};
   quality: {deezer: string; qobuz: string};
+  /** The token itself is never included here — see GET /auth/token. */
+  auth: {enabled: boolean; allowedOrigins: string[]};
 }
 
 /** Fields that carry credentials and must never appear in a shared response. */
@@ -70,6 +72,10 @@ export const readSettings = (conf: any): ElixiumSettings => ({
   quality: {
     deezer: conf.get('quality.deezer') || '320',
     qobuz: conf.get('quality.qobuz') || '44khz',
+  },
+  auth: {
+    enabled: conf.get('auth.enabled') !== false,
+    allowedOrigins: Array.isArray(conf.get('auth.allowedOrigins')) ? conf.get('auth.allowedOrigins') : [],
   },
 });
 
@@ -200,6 +206,23 @@ export const applySettings = (conf: any, data: any, hooks: SettingsInvalidationH
       hooks.setIsQobuzInitialized(false);
       hooks.setIsQobuzDownloadReady(false);
       changed.push('qobuz.secrets');
+    }
+  }
+
+  if (data.auth && typeof data.auth === 'object') {
+    if (typeof data.auth.enabled === 'boolean') {
+      conf.set('auth.enabled', data.auth.enabled);
+      changed.push('auth.enabled');
+    }
+    if (Array.isArray(data.auth.allowedOrigins)) {
+      // Normalised to bare origins: a trailing slash or a path never matches
+      // the Origin header a browser actually sends.
+      const origins = data.auth.allowedOrigins
+        .filter((entry: unknown): entry is string => typeof entry === 'string')
+        .map((entry: string) => entry.trim().replace(/\/+$/, ''))
+        .filter((entry: string) => entry.length > 0);
+      conf.set('auth.allowedOrigins', origins);
+      changed.push('auth.allowedOrigins');
     }
   }
 

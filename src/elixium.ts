@@ -26,7 +26,15 @@ import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
-import {registerApiV1} from './app/api/v1';
+import {registerApiV1, API_V1_BASE} from './app/api/v1';
+import {
+  authorize,
+  buildCorsOptions,
+  createAuthMiddleware,
+  getOrCreateToken,
+  isAuthEnabled,
+  LOOPBACK_ADDRESSES,
+} from './app/api/auth';
 import {registerCatalogSocketHandlers} from './app/web-socket-catalog';
 import {registerDirectDownloadSocketHandler} from './app/web-socket-direct-download';
 import {registerDiscoverySocketHandler} from './app/web-socket-discovery';
@@ -238,14 +246,35 @@ const toStandardTrack = (track: any, service: 'deezer' | 'qobuz'): SearchResult 
 const setupWebServer = () => {
   const app = express();
   const server = createServer(app);
+
+  /*
+   * Socket.IO carries the same privileges as the REST API — downloads,
+   * settings, the watchlist — so it is authenticated identically. Guarding
+   * only HTTP would leave the whole thing reachable through the socket.
+   */
   io = new SocketIOServer(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-    },
+    cors: buildCorsOptions(conf),
   });
 
-  app.use(cors());
+  io.use((socket, next) => {
+    const handshake = socket.handshake;
+    const presented =
+      (typeof handshake.auth?.token === 'string' && handshake.auth.token) ||
+      (typeof handshake.query?.token === 'string' && handshake.query.token) ||
+      '';
+    const loopback = LOOPBACK_ADDRESSES.has(handshake.address);
+
+    const decision = authorize(conf, presented, loopback);
+    if (decision.ok) {
+      next();
+      return;
+    }
+    // The client checks this message to decide between prompting for a token
+    // and reporting a genuine connection failure.
+    next(new Error(decision.reason === 'missing_token' ? 'auth_required' : 'auth_invalid'));
+  });
+
+  app.use(cors(buildCorsOptions(conf)));
   app.use(express.json());
 
   const staticRoots = [
@@ -291,6 +320,13 @@ const setupWebServer = () => {
     initQobuzForDownload,
     startDownloadProcess,
   });
+
+  /*
+   * Guard the versioned API before its routes are registered, so a route added
+   * later cannot accidentally sit outside the check. Loopback is exempt, so
+   * the local web UI is unaffected; /health stays open for discovery.
+   */
+  app.use(API_V1_BASE, createAuthMiddleware(conf, API_V1_BASE));
 
   // Versioned API. The unversioned routes above stay for the existing web UI;
   // external clients (the Android app) target /api/v1, which has a stable
