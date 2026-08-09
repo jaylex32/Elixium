@@ -98,10 +98,14 @@ export function PathTemplates() {
   const [active, setActive] = useState<'deezer' | 'qobuz'>('deezer');
   const service = SERVICES.find((s) => s.id === active) as (typeof SERVICES)[number];
 
-  const setLayout = (key: LayoutKey, value: string) => update({layout: {...settings.layout, [key]: value}});
+  // Defensive: the persist merge keeps `layout` populated, but a settings
+  // object arriving from anywhere else must not be able to crash the page.
+  const layout = settings.layout ?? DEFAULTS;
+
+  const setLayout = (key: LayoutKey, value: string) => update({layout: {...layout, [key]: value}});
 
   const resetService = () => {
-    const next = {...settings.layout};
+    const next = {...layout};
     for (const {key} of service.rows) next[key] = DEFAULTS[key];
     update({layout: next});
   };
@@ -116,7 +120,8 @@ export function PathTemplates() {
               onClick={() => setActive(s.id)}
               aria-pressed={active === s.id}
               className={cn(
-                'min-h-9 rounded-xs px-3.5 text-xs font-semibold transition-all duration-fast',
+                // 40px tall: 36 fell under a comfortable touch target on phones.
+                'min-h-10 rounded-xs px-4 text-xs font-semibold transition-all duration-fast',
                 active === s.id ? 'text-white shadow-sm' : 'text-text-muted hover:text-text-primary',
               )}
               style={active === s.id ? {backgroundColor: s.accent} : undefined}
@@ -137,10 +142,15 @@ export function PathTemplates() {
           <div key={key} className="space-y-1.5">
             <label className="text-xs font-medium text-text-secondary">{label}</label>
             <Input
-              value={settings.layout[key] ?? ''}
+              value={layout[key] ?? ''}
               onChange={(e) => setLayout(key, e.target.value)}
               placeholder={DEFAULTS[key]}
               className="font-mono text-xs"
+              // Selecting these by their mono styling also catches the
+              // credential fields; this marker is the safe handle.
+              data-template={key}
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
         ))}

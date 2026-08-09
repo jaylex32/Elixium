@@ -61,6 +61,15 @@ function SecretInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder ?? '···'}
         className="pr-11 font-mono text-xs"
+        /*
+         * Credential fields share `font-mono text-xs` with the path-template
+         * inputs, which made a class-based selector match both — a QA probe
+         * aimed at the templates overwrote a stored ARL. Anything automating
+         * this page must select on these markers, never on styling.
+         */
+        data-secret="true"
+        autoComplete="off"
+        spellCheck={false}
       />
       {/* Padded to a real tap target: the bare 14px icon was a 14x14 hit area. */}
       <button
@@ -81,6 +90,17 @@ const defaultLayout = useSettingsStoreRaw.getState().settings.layout;
 export function SettingsPage() {
   const {settings, update, isDirty, markClean} = useSettingsStore();
   const {theme, setTheme} = useAppStore();
+
+  /*
+   * Whether the server's settings have actually arrived.
+   *
+   * Credentials live in a persisted store, so before the `settings` event
+   * lands the fields hold whatever localStorage had — possibly nothing. The
+   * server now honours an empty credential as "clear this", so saving from
+   * that unloaded state would wipe real tokens. Until this flips true the
+   * credential keys are left out of the payload entirely.
+   */
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const socket = getSocket();
@@ -121,6 +141,7 @@ export function SettingsPage() {
           ...(data.saveLayout ? {layout: {...defaultLayout, ...data.saveLayout}} : {}),
           ...(data.coverSize ? {coverSize: String(data.coverSize)} : {}),
         });
+        setLoaded(true);
         markClean();
       },
     );
@@ -139,12 +160,17 @@ export function SettingsPage() {
       saveLrcFile: settings.saveLrcFile,
       saveLayout: settings.layout,
       coverSize: Number(settings.coverSize) || 1000,
-      cookies: {arl: settings.deezerArl, sp_dc: settings.spotifySpDc},
-      qobuz: {
-        app_id: settings.qobuzAppId,
-        secrets: settings.qobuzSecrets,
-        token: settings.qobuzToken,
-      },
+      // Omitted until the server's values have loaded — see `loaded` above.
+      ...(loaded
+        ? {
+            cookies: {arl: settings.deezerArl, sp_dc: settings.spotifySpDc},
+            qobuz: {
+              app_id: settings.qobuzAppId,
+              secrets: settings.qobuzSecrets,
+              token: settings.qobuzToken,
+            },
+          }
+        : {qobuz: {app_id: settings.qobuzAppId}}),
       paths: {deezer: settings.downloadPath, qobuz: settings.qobuzDownloadPath},
       quality: {deezer: settings.deezerQuality, qobuz: settings.qobuzQuality},
     });

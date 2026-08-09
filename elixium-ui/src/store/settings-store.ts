@@ -87,7 +87,36 @@ export const useSettingsStore = create<SettingsState>()(
       reset: () => set({settings: defaults, isDirty: false}),
       markClean: () => set({isDirty: false}),
     }),
-    {name: 'elixium-settings'},
+    {
+      name: 'elixium-settings',
+      /*
+       * Merge persisted settings *over* the defaults instead of replacing them.
+       *
+       * Zustand's default merge is shallow, so a stored `settings` object
+       * replaces the whole default one — meaning any field added after a user
+       * first saved simply does not exist for them. Adding `layout` crashed
+       * Settings on load for exactly this reason: `settings.layout` was
+       * undefined and PathTemplates read `layout['track']` off it.
+       *
+       * `layout` is spread explicitly because it is the one nested object
+       * here; a shallow spread would otherwise drop newly added template keys
+       * the same way.
+       */
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as Partial<SettingsState>;
+        return {
+          ...current,
+          ...stored,
+          settings: {
+            ...current.settings,
+            ...(stored.settings ?? {}),
+            layout: {...current.settings.layout, ...(stored.settings?.layout ?? {})},
+          },
+          // Never restore a dirty flag: nothing is unsaved on a fresh load.
+          isDirty: false,
+        };
+      },
+    },
   ),
 );
 

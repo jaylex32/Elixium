@@ -99,6 +99,21 @@ export const readRedactedSettings = (conf: any): ElixiumSettings & {configured: 
 export const SECRET_SETTING_PATHS: readonly string[] = SECRET_PATHS;
 
 /**
+ * Should this incoming value be written to a credential field?
+ *
+ * An empty string is a deliberate "clear this" — previously credentials were
+ * only written when truthy, so a token that was wrong or corrupted could not be
+ * removed through the UI at all; blanking the field silently kept the old
+ * value.
+ *
+ * Booleans are rejected because `readRedactedSettings` reports credentials as
+ * presence flags: a client that GETs the redacted document and PATCHes it back
+ * wholesale would otherwise overwrite real tokens with the string "true".
+ */
+const isCredentialUpdate = (value: unknown): boolean =>
+  value !== undefined && value !== null && typeof value !== 'boolean';
+
+/**
  * Apply a partial settings update.
  *
  * Only keys present in `data` are written, so this is safe to call from a PATCH
@@ -136,20 +151,20 @@ export const applySettings = (conf: any, data: any, hooks: SettingsInvalidationH
   setIfPresent('createPlaylist', data.createPlaylist, 'playlist.createPlaylist');
 
   if (data.cookies) {
-    if (data.cookies.arl) {
-      conf.set('cookies.arl', data.cookies.arl);
+    if (isCredentialUpdate(data.cookies.arl)) {
+      conf.set('cookies.arl', String(data.cookies.arl).trim());
       hooks.setIsDeezerDownloadReady(false);
       changed.push('cookies.arl');
     }
-    if (data.cookies.sp_dc) {
-      conf.set('cookies.sp_dc', data.cookies.sp_dc);
+    if (isCredentialUpdate(data.cookies.sp_dc)) {
+      conf.set('cookies.sp_dc', String(data.cookies.sp_dc).trim());
       changed.push('cookies.sp_dc');
     }
   }
 
   if (data.qobuz) {
-    if (data.qobuz.token) {
-      conf.set('qobuz.token', data.qobuz.token);
+    if (isCredentialUpdate(data.qobuz.token)) {
+      conf.set('qobuz.token', String(data.qobuz.token).trim());
       hooks.setIsQobuzDownloadReady(false);
       changed.push('qobuz.token');
     }
