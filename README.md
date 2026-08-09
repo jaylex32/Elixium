@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/icons/elixium-icon.svg" alt="Elixium logo" width="128">
+  <img src="public/elixium-icon.svg" alt="Elixium logo" width="128">
 </p>
 
 <h1 align="center">Elixium</h1>
