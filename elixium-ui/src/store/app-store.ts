@@ -1,7 +1,7 @@
 import {create} from 'zustand';
 import {persist} from 'zustand/middleware';
 
-export type Page = 'home' | 'search' | 'downloads' | 'watchlist' | 'genres' | 'url-download' | 'playlists' | 'settings';
+export type Page = 'home' | 'search' | 'downloads' | 'watchlist' | 'library' | 'genres' | 'url-download' | 'playlists' | 'settings';
 
 export type Service = 'deezer' | 'qobuz';
 

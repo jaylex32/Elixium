@@ -26,6 +26,7 @@ import {PAGE_TITLES} from './nav-items';
 const SearchPage = lazy(() => import('@/features/search/SearchPage').then((m) => ({default: m.SearchPage})));
 const DownloadsPage = lazy(() => import('@/features/downloads/DownloadsPage').then((m) => ({default: m.DownloadsPage})));
 const WatchlistPage = lazy(() => import('@/features/watchlist/WatchlistPage').then((m) => ({default: m.WatchlistPage})));
+const LibraryPage = lazy(() => import('@/features/library/LibraryPage').then((m) => ({default: m.LibraryPage})));
 const GenresPage = lazy(() => import('@/features/genres/GenresPage').then((m) => ({default: m.GenresPage})));
 const UrlDownloadPage = lazy(() =>
   import('@/features/url-download/UrlDownloadPage').then((m) => ({default: m.UrlDownloadPage})),
@@ -38,6 +39,7 @@ const PAGE_MAP = {
   search: SearchPage,
   downloads: DownloadsPage,
   watchlist: WatchlistPage,
+  library: LibraryPage,
   genres: GenresPage,
   'url-download': UrlDownloadPage,
   playlists: PlaylistsPage,

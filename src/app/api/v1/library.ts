@@ -214,6 +214,27 @@ export const registerLibraryRoutes = ({
     }),
   );
 
+  // ── Library ────────────────────────────────────────────────────────────────
+
+  /**
+   * GET /library — watched artists with owned / missing / upgradable counts.
+   *
+   * `?artistId=` narrows to one artist. Ownership is decided from the files on
+   * disk rather than download history, so a release copied in by hand counts
+   * and one whose files were deleted does not.
+   */
+  app.get(
+    `${basePath}/library`,
+    route(async (req, res) => {
+      const service = requireWatchlist(watchlist);
+      if (typeof service.getLibraryOverview !== 'function') {
+        throw new ApiError('service_unavailable', 'Library overview is not available.', 503);
+      }
+      const artistId = typeof req.query.artistId === 'string' ? req.query.artistId : undefined;
+      return sendData(res, await service.getLibraryOverview(artistId));
+    }),
+  );
+
   // ── Watchlist ──────────────────────────────────────────────────────────────
 
   /** GET /watchlist — full watchlist state (artists, playlists, pending releases). */

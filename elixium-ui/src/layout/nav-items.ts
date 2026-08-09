@@ -1,4 +1,4 @@
-import {Home, Search, Download, Eye, Music2, Link2, ListMusic, Settings} from 'lucide-react';
+import {Home, Search, Download, Eye, Library, Music2, Link2, ListMusic, Settings} from 'lucide-react';
 import type {Page, Service} from '@/store/app-store';
 
 export interface NavItem {
@@ -15,6 +15,7 @@ export const NAV_ITEMS: NavItem[] = [
   {id: 'search', icon: Search, label: 'Search'},
   {id: 'downloads', icon: Download, label: 'Downloads', shortLabel: 'Files'},
   {id: 'watchlist', icon: Eye, label: 'Watchlist', shortLabel: 'Watch'},
+  {id: 'library', icon: Library, label: 'Library'},
   {id: 'genres', icon: Music2, label: 'Genres'},
   {id: 'url-download', icon: Link2, label: 'URL Download', shortLabel: 'Link'},
   {id: 'playlists', icon: ListMusic, label: 'Playlists', shortLabel: 'Lists'},
@@ -45,6 +46,7 @@ export const PAGE_TITLES: Record<Page, string> = {
   search: 'Search',
   downloads: 'Downloads',
   watchlist: 'Watchlist',
+  library: 'Library',
   genres: 'Genres',
   'url-download': 'URL Download',
   playlists: 'Playlists',

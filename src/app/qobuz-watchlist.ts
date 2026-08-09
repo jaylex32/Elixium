@@ -3,6 +3,7 @@ import {
   QUALITY_TIERS,
   bestAvailableTier,
   classifyFileQuality,
+  meetsCutoff,
   needsUpgrade,
   readQualityProfile,
   type QualityTier,
@@ -229,7 +230,7 @@ const collectFilesystemTokens = (rootPath: string) => {
   const names = new Map<string, QualityTier>();
   if (!rootPath || !existsSync(rootPath)) return names;
 
-  const record = (key: string, tier: QualityTier | null) => {
+  const write = (key: string, tier: QualityTier | null) => {
     if (!key) return;
     if (!tier) {
       // Keep the bare presence signal for non-audio entries (folders), without
@@ -239,6 +240,30 @@ const collectFilesystemTokens = (rootPath: string) => {
     }
     const existing = names.get(key);
     if (!existing || QUALITY_TIERS.indexOf(tier) > QUALITY_TIERS.indexOf(existing)) names.set(key, tier);
+  };
+
+  /**
+   * Index a name under every form a release might be looked up by.
+   *
+   * The default path template is "{alb_artist} - {alb_title}", so an album
+   * folder is "Draco Rosa - OLAS DE LUZ" while the release is known upstream
+   * as "OLAS DE LUZ". Recording only the full name meant those never matched,
+   * so an album sitting on disk still read as missing — and the duplicate
+   * check that predates this had the same blind spot.
+   *
+   * Splitting on the first " - " recovers the title. An album whose own name
+   * contains " - " still indexes under its full form, so nothing is lost.
+   */
+  const record = (rawName: string, tier: QualityTier | null) => {
+    const normalized = normalizeWatchlistText(rawName);
+    write(normalized, tier);
+
+    const separator = rawName.indexOf(' - ');
+    if (separator > 0) {
+      write(normalizeWatchlistText(rawName.slice(separator + 3)), tier);
+      write(normalizeWatchlistText(stripEditionMarkers(rawName.slice(separator + 3))), tier);
+    }
+    write(normalizeWatchlistText(stripEditionMarkers(rawName)), tier);
   };
 
   const stack: Array<{dir: string; ancestors: string[]}> = [{dir: rootPath, ancestors: []}];
@@ -253,16 +278,18 @@ const collectFilesystemTokens = (rootPath: string) => {
 
     for (const entry of entries as any[]) {
       const fullPath = path.join(dir, entry.name);
-      const normalized = normalizeWatchlistText(path.parse(entry.name).name || entry.name);
+      // Raw, not normalized: `record` needs the original " - " separator to
+      // recover the album title from a "{artist} - {album}" folder name.
+      const rawName = path.parse(entry.name).name || entry.name;
 
       if (entry.isDirectory()) {
-        record(normalized, null);
-        stack.push({dir: fullPath, ancestors: normalized ? [...ancestors, normalized] : ancestors});
+        record(rawName, null);
+        stack.push({dir: fullPath, ancestors: rawName ? [...ancestors, rawName] : ancestors});
         continue;
       }
 
       const tier = classifyFileQuality(fullPath);
-      record(normalized, tier);
+      record(rawName, tier);
       // Promote the tier onto the enclosing album/artist folders too.
       if (tier) for (const ancestor of ancestors) record(ancestor, tier);
     }
@@ -453,6 +480,68 @@ export const createQobuzWatchlistService = ({
   };
 
   const getState = () => enrichState(store.getState());
+
+  /**
+   * Discography of every watched artist, split into what is held and what is not.
+   *
+   * The watchlist only ever answered "what is new since the last scan", so
+   * there was no way to see an artist's catalogue against the library — the
+   * question Lidarr's main screen exists to answer. Nothing new is fetched
+   * here: candidates are already recorded per artist, and the library index
+   * now carries a quality tier, so this is a projection over existing state
+   * and stays cheap enough to call on every page view.
+   *
+   * A release counts as held if the filesystem index knows its title. That is
+   * deliberately independent of download history: files moved in by hand still
+   * count, and a history entry whose files were deleted does not.
+   */
+  const getLibraryOverview = (artistId?: string) => {
+    const state = store.getState();
+    const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const profile = readQualityProfile(conf);
+
+    const artists = artistId
+      ? state.watchedArtists.filter((entry) => String(entry.id) === String(artistId))
+      : state.watchedArtists;
+
+    const summaries = artists.map((artist) => {
+      const candidates = state.candidates.filter((c) => String(c.artistId) === String(artist.id));
+
+      const releases = candidates.map((candidate) => {
+        const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(candidate.title));
+        const haveTier = libraryTokens.get(normalizedTitle) ?? null;
+        const availableTier = bestAvailableTier('qobuz', candidate.rawData);
+
+        return {
+          id: candidate.id,
+          title: candidate.title,
+          year: candidate.year,
+          image: candidate.image,
+          releaseType: candidate.releaseType ?? 'album',
+          owned: haveTier !== null,
+          quality: haveTier,
+          availableQuality: availableTier,
+          // Held, but below the tier the profile asks for.
+          upgradable: haveTier !== null && !meetsCutoff(haveTier, profile.cutoff) && availableTier !== haveTier,
+          reason: candidate.reason,
+        };
+      });
+
+      const owned = releases.filter((r) => r.owned).length;
+      return {
+        artistId: String(artist.id),
+        name: artist.name,
+        image: artist.image ?? '',
+        total: releases.length,
+        owned,
+        missing: releases.length - owned,
+        upgradable: releases.filter((r) => r.upgradable).length,
+        releases: releases.sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
+      };
+    });
+
+    return {cutoff: profile.cutoff, artists: summaries};
+  };
 
   const parseGenreList = (payload: any): FavoriteGenreRecord[] => {
     const rawItems = payload?.genres?.items || payload?.genres || payload?.items || [];
@@ -1565,6 +1654,7 @@ export const createQobuzWatchlistService = ({
   return {
     loadAvailableGenres,
     getState,
+    getLibraryOverview,
     getFavoriteGenres,
     getMonitorSchedules,
     getMonitorHistory,
