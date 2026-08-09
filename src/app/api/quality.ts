@@ -75,10 +75,34 @@ export const qobuzFormatCode = (quality: string): number => {
 };
 
 /** Qobuz format codes to try, in descending preference, starting from the requested one. */
-export const qobuzFormatFallbacks = (quality: string): number[] => {
-  const requested = qobuzFormatCode(quality);
-  return [requested, 7, 6, 5].filter((value, index, list) => list.indexOf(value) === index);
-};
+/**
+ * Build a fallback chain that only ever steps *down* from what was asked for.
+ *
+ * `[requested, ...all]` deduped is not enough: asking for Qobuz 44.1kHz (6)
+ * produced [6, 7, 5], which retries 96kHz — a higher tier the account has
+ * already been refused — before dropping to MP3.
+ */
+const descendingFrom = (requested: number, ladder: number[]): number[] => [
+  requested,
+  ...ladder.filter((code) => code < requested),
+];
+
+export const qobuzFormatFallbacks = (quality: string): number[] =>
+  descendingFrom(qobuzFormatCode(quality), [27, 7, 6, 5]);
+
+/**
+ * Deezer formats to try, best first.
+ *
+ * Deezer refuses FLAC and MP3_320 outright on accounts without the matching
+ * licence, so a free account asking for the default FLAC got no stream at all
+ * and playback fell back to a 30-second public preview. Downloads already
+ * stepped down through the qualities; streaming did not, which is why a track
+ * would download fine yet refuse to play.
+ *
+ * 1 (MP3_128) is last because it is the one format Deezer never licence-gates.
+ */
+export const deezerFormatFallbacks = (quality: string): number[] =>
+  descendingFrom(deezerFormatCode(quality), [9, 3, 1]);
 
 /** File extension implied by a service + quality pair. */
 export const extensionFor = (service: ServiceName, quality: string): 'flac' | 'mp3' => {

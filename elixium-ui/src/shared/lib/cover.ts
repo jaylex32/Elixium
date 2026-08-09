@@ -36,11 +36,28 @@ export function extractCover(rawData: Raw | undefined | null, service: string): 
   }
 
   // ── Deezer ──────────────────────────────────────────────────────────────
-  // ALB_PICTURE hash → CDN URL (internal Deezer format from piped API)
-  const hash = (rawData.ALB_PICTURE as string | undefined) ?? (rawData.ART_PICTURE as string | undefined);
-  if (typeof hash === 'string' && hash && !hash.startsWith('http')) {
-    const type = rawData.ALB_PICTURE ? 'cover' : 'artist';
-    return `https://e-cdns-images.dzcdn.net/images/${type}/${hash}/500x500-000000-80-0-0.jpg`;
+  /*
+   * Picture hash → CDN URL (internal Deezer format from the private API).
+   *
+   * The path segment is the *kind* of image, not a constant: a playlist lives
+   * under /images/playlist/, an artist under /images/artist/, and only an
+   * album under /images/cover/. Playlists were missing entirely here, which is
+   * why playlist artwork never appeared — PLAYLIST_PICTURE was never read, and
+   * pointing its hash at /cover/ would 404 anyway.
+   */
+  const pictureSources: Array<[key: string, kind: string]> = [
+    ['ALB_PICTURE', 'cover'],
+    ['PLAYLIST_PICTURE', 'playlist'],
+    ['ART_PICTURE', 'artist'],
+  ];
+
+  for (const [key, kind] of pictureSources) {
+    const value = rawData[key];
+    if (typeof value === 'string' && value && !value.startsWith('http')) {
+      // PICTURE_TYPE, when present, is authoritative over the key we matched.
+      const type = typeof rawData.PICTURE_TYPE === 'string' && rawData.PICTURE_TYPE ? rawData.PICTURE_TYPE : kind;
+      return `https://e-cdns-images.dzcdn.net/images/${type}/${value}/500x500-000000-80-0-0.jpg`;
+    }
   }
 
   // Public API format: album.cover_xl / cover_big / cover_medium

@@ -6,6 +6,7 @@ import {PassThrough} from 'stream';
 import {ApiError, parseService, requireString, route, sendData, type ServiceName} from '../respond';
 import {
   deezerFormatCode,
+  deezerFormatFallbacks,
   defaultQualityFor,
   extensionFor,
   qobuzFormatCode,
@@ -135,23 +136,44 @@ export const registerMediaRoutes = ({
 }: MediaRouteDependencies): void => {
   /** Fetch + decrypt a Deezer track in full, reusing the cache when warm. */
   const materializeDeezerTrack = async (id: string, quality: string) => {
-    const formatCode = deezerFormatCode(quality);
-    const cacheKey = `deezer:${id}:${formatCode}`;
+    /*
+     * Walk down the qualities rather than demanding one.
+     *
+     * Deezer throws WrongLicense for FLAC and MP3_320 on accounts without the
+     * matching licence. This used to request a single format, so a free
+     * account — whose only licensed format is MP3_128 — got nothing and
+     * playback silently degraded to a 30-second public preview, even though
+     * the same track downloaded fine because the download path already
+     * stepped down.
+     */
+    const codes = deezerFormatFallbacks(quality);
 
-    const cached = trackBufferCache.get(cacheKey);
-    if (cached) return cached;
+    // A warm cache entry at any tier beats re-fetching a lower one.
+    for (const formatCode of codes) {
+      const cached = trackBufferCache.get(`deezer:${id}:${formatCode}`);
+      if (cached) return cached;
+    }
 
     await initDeezerForDownload();
     const trackInfo = await deezer.getTrackInfo(id);
-    const urlInfo = await deezer.getTrackDownloadUrl(trackInfo, formatCode);
-    if (!urlInfo) return undefined;
 
-    const raw = await got(urlInfo.trackUrl).buffer();
-    const buffer = urlInfo.isEncrypted ? deezer.decryptDownload(raw, String(trackInfo.SNG_ID)) : raw;
-    const contentType = mimeFor(formatCode === 9 ? 'flac' : 'mp3');
+    for (const formatCode of codes) {
+      try {
+        const urlInfo = await deezer.getTrackDownloadUrl(trackInfo, formatCode);
+        if (!urlInfo) continue;
 
-    trackBufferCache.set(cacheKey, buffer, contentType);
-    return {buffer, contentType};
+        const raw = await got(urlInfo.trackUrl).buffer();
+        const buffer = urlInfo.isEncrypted ? deezer.decryptDownload(raw, String(trackInfo.SNG_ID)) : raw;
+        const contentType = mimeFor(formatCode === 9 ? 'flac' : 'mp3');
+
+        trackBufferCache.set(`deezer:${id}:${formatCode}`, buffer, contentType);
+        return {buffer, contentType};
+      } catch {
+        // WrongLicense or a dead CDN URL: try the next tier down.
+      }
+    }
+
+    return undefined;
   };
 
   /** Resolve a playable Qobuz URL, walking down qualities until one is available. */
