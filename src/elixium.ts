@@ -26,7 +26,7 @@ import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
-import {registerApiV1, API_V1_BASE} from './app/api/v1';
+import {registerApiV1} from './app/api/v1';
 import {
   authorize,
   buildCorsOptions,
@@ -277,6 +277,24 @@ const setupWebServer = () => {
   app.use(cors(buildCorsOptions(conf)));
   app.use(express.json());
 
+  /*
+   * Guard the whole API surface, before any API route is registered.
+   *
+   * Two things were wrong. It was mounted on /api/v1, which left the older
+   * /api/* routes — search, discovery, item-tracks, stream, download,
+   * download-zip — completely unauthenticated, so anything on the network
+   * could stream the library and queue downloads without a token. And it was
+   * registered *after* those routes: Express matches handlers in registration
+   * order, so even mounting it at /api would have run too late to stop them.
+   *
+   * Mounted at /api rather than per-route so a route added later cannot sit
+   * outside the check. Static assets are not under /api, so an unpaired
+   * browser can still load the web UI shell — without that it could never
+   * fetch the pairing screen it needs to show. Loopback stays exempt, and
+   * /api/v1/health stays public for address discovery.
+   */
+  app.use('/api', createAuthMiddleware(conf, '/api'));
+
   const staticRoots = [
     path.join(process.cwd(), 'public'),
     path.join(__dirname, 'public'),
@@ -320,13 +338,6 @@ const setupWebServer = () => {
     initQobuzForDownload,
     startDownloadProcess,
   });
-
-  /*
-   * Guard the versioned API before its routes are registered, so a route added
-   * later cannot accidentally sit outside the check. Loopback is exempt, so
-   * the local web UI is unaffected; /health stays open for discovery.
-   */
-  app.use(API_V1_BASE, createAuthMiddleware(conf, API_V1_BASE));
 
   // Versioned API. The unversioned routes above stay for the existing web UI;
   // external clients (the Android app) target /api/v1, which has a stable

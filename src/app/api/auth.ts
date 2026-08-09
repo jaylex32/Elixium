@@ -29,8 +29,14 @@ export const TOKEN_HEADER = 'x-elixium-token';
 /** Query fallback for URLs a browser loads directly. */
 export const TOKEN_QUERY = 'token';
 
-/** Routes reachable without a token, relative to the API base. */
-const PUBLIC_PATHS = new Set(['/health']);
+/**
+ * Routes reachable without a token, relative to wherever this is mounted.
+ *
+ * Express strips the mount path, so the same endpoint appears as '/health'
+ * when mounted at '/api/v1' and '/v1/health' when mounted at '/api'. Both are
+ * listed so moving the mount cannot silently expose or lock the probe.
+ */
+const PUBLIC_PATHS = new Set(['/health', '/v1/health']);
 
 /** Exported so the Socket.IO handshake can apply the same rule. */
 export const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
