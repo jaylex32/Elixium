@@ -136,3 +136,6 @@ test-results/
 .tmp_*/
 nul
 .claude/
+
+# Packaged binaries produced by pkg for a GitHub release.
+release/
