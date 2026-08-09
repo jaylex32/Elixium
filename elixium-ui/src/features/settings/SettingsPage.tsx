@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {Save, Eye, EyeOff, Palette, Shield, HardDrive, Sliders, RefreshCw, Mic2} from 'lucide-react';
+import {Save, Eye, EyeOff, Palette, Shield, HardDrive, Sliders, RefreshCw, Mic2, FolderTree} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
@@ -10,6 +10,8 @@ import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS} from '@/s
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
+import {PathTemplates} from './PathTemplates';
+import {useSettingsStore as useSettingsStoreRaw} from '@/store/settings-store';
 import {cn} from '@/shared/lib/utils';
 
 function Section({title, icon: Icon, children}: {title: string; icon: React.ElementType; children: React.ReactNode}) {
@@ -74,6 +76,8 @@ function SecretInput({
   );
 }
 
+const defaultLayout = useSettingsStoreRaw.getState().settings.layout;
+
 export function SettingsPage() {
   const {settings, update, isDirty, markClean} = useSettingsStore();
   const {theme, setTheme} = useAppStore();
@@ -95,6 +99,8 @@ export function SettingsPage() {
         fallbackQuality?: boolean;
         embedLyrics?: boolean;
         saveLrcFile?: boolean;
+        saveLayout?: Record<string, string>;
+        coverSize?: number | string;
       }) => {
         if (!data) return;
         update({
@@ -112,6 +118,8 @@ export function SettingsPage() {
           fallbackQuality: data.fallbackQuality ?? true,
           embedLyrics: data.embedLyrics ?? true,
           saveLrcFile: data.saveLrcFile ?? false,
+          ...(data.saveLayout ? {layout: {...defaultLayout, ...data.saveLayout}} : {}),
+          ...(data.coverSize ? {coverSize: String(data.coverSize)} : {}),
         });
         markClean();
       },
@@ -129,6 +137,8 @@ export function SettingsPage() {
       qobuzDownloadCover: settings.coverArt,
       embedLyrics: settings.embedLyrics,
       saveLrcFile: settings.saveLrcFile,
+      saveLayout: settings.layout,
+      coverSize: Number(settings.coverSize) || 1000,
       cookies: {arl: settings.deezerArl, sp_dc: settings.spotifySpDc},
       qobuz: {
         app_id: settings.qobuzAppId,
@@ -292,16 +302,26 @@ export function SettingsPage() {
             placeholder="e.g. C:\Music\Qobuz"
           />
         </Field>
-        <Field label="File template" description="{ART_NAME}, {ALB_TITLE}, {SNG_TITLE}, {TRACK_NUMBER}">
-          <Input
-            value={settings.fileTemplate}
-            onChange={(e) => update({fileTemplate: e.target.value})}
-            className="font-mono text-xs"
-          />
-        </Field>
+      </Section>
+
+      <Section title="File naming" icon={FolderTree}>
+        <PathTemplates />
       </Section>
 
       <Section title="Behaviour" icon={RefreshCw}>
+        <Field label="Cover art size" description="Pixel size of embedded and saved artwork">
+          <Select
+            value={settings.coverSize}
+            onValueChange={(v) => update({coverSize: v})}
+            options={[
+              {value: '250', label: '250 x 250'},
+              {value: '500', label: '500 x 500'},
+              {value: '1000', label: '1000 x 1000'},
+              {value: '1500', label: '1500 x 1500'},
+            ]}
+          />
+        </Field>
+        <div className="border-t border-border" />
         <Field label="Track numbering" description="Prefix filenames with track number">
           <Switch checked={settings.trackNumbering} onCheckedChange={(v) => update({trackNumbering: v})} />
         </Field>

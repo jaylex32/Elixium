@@ -19,7 +19,23 @@ export interface Settings {
   createPlaylists: boolean;
   fallbackTrack: boolean;
   fallbackQuality: boolean;
-  fileTemplate: string;
+  /**
+   * Path templates, one set per service.
+   *
+   * The server has always kept eight (track/album/artist/playlist for Deezer
+   * and the qobuz- prefixed equivalents); the UI exposed a single field that
+   * was never saved.
+   */
+  layout: {
+    track: string;
+    album: string;
+    artist: string;
+    playlist: string;
+    'qobuz-track': string;
+    'qobuz-album': string;
+    'qobuz-artist': string;
+    'qobuz-playlist': string;
+  };
   coverSize: string;
 }
 
@@ -41,7 +57,16 @@ const defaults: Settings = {
   createPlaylists: false,
   fallbackTrack: true,
   fallbackQuality: true,
-  fileTemplate: '{ART_NAME}/{ALB_TITLE}/{TRACK_NUMBER} - {SNG_TITLE}',
+  layout: {
+    track: '{ALB_TITLE}/{SNG_TITLE}',
+    album: '{ART_NAME}/{ALB_TITLE}/{NO_TRACK_NUMBER}{SNG_TITLE}',
+    artist: '{ALB_TITLE}/{SNG_TITLE}',
+    playlist: '{ART_NAME}/{ART_NAME} - {ALB_TITLE}/{NO_TRACK_NUMBER}{ART_NAME} - {SNG_TITLE}',
+    'qobuz-track': '{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
+    'qobuz-album': '{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
+    'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
+    'qobuz-playlist': 'Playlist/{list_title}/{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
+  },
   coverSize: '1000',
 };
 
