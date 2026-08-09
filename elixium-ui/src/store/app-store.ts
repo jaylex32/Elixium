@@ -17,6 +17,8 @@ export const THEMES = [
 
 interface AppState {
   currentPage: Page;
+  /** One-shot query handed to the Search page, e.g. from an unmatched track. */
+  pendingSearch?: string;
   service: Service;
   theme: string;
   sidebarCollapsed: boolean;

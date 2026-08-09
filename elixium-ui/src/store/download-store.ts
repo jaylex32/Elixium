@@ -1,4 +1,5 @@
 import {create} from 'zustand';
+import {persist} from 'zustand/middleware';
 
 export interface ActiveDownload {
   itemId: string;
@@ -17,13 +18,40 @@ export interface ActiveDownload {
 export interface HistoryEntry {
   id: string;
   title: string;
+  artist?: string;
+  cover?: string;
   count: number;
   completedAt: number;
+}
+
+/** A source track the conversion could not match on the target service. */
+export interface UnmatchedTrack {
+  title: string;
+  artist: string;
+  album?: string;
+  isrc?: string;
+  reason: string;
+}
+
+/**
+ * Conversion outcome for one job.
+ *
+ * Kept separate from the download rows because a conversion can succeed
+ * partially: 83 of 95 tracks matched is a completed download *and* twelve
+ * tracks the user never asked to lose.
+ */
+export interface ConversionReport {
+  itemId: string;
+  title?: string;
+  matched: number;
+  unmatched: UnmatchedTrack[];
+  at: number;
 }
 
 interface DownloadState {
   active: Record<string, ActiveDownload>;
   history: HistoryEntry[];
+  reports: ConversionReport[];
   isRunning: boolean;
 
   // Called when directUrlDownload is emitted — creates a placeholder
@@ -45,6 +73,9 @@ interface DownloadState {
   onError: (itemId: string, message: string) => void;
   clear: (itemId: string) => void;
   clearDone: () => void;
+  clearHistory: () => void;
+  addReport: (report: Omit<ConversionReport, 'at'>) => void;
+  dismissReport: (itemId: string) => void;
   setRunning: (v: boolean) => void;
 
   // Legacy: simple add for URL-download queuing before download starts
@@ -54,9 +85,12 @@ interface DownloadState {
   clearPending: () => void;
 }
 
-export const useDownloadStore = create<DownloadState>()((set) => ({
+export const useDownloadStore = create<DownloadState>()(
+  persist<DownloadState>(
+    (set) => ({
   active: {},
   history: [],
+  reports: [],
   isRunning: false,
   pendingUrls: [],
 
@@ -118,8 +152,31 @@ export const useDownloadStore = create<DownloadState>()((set) => ({
         },
       };
 
+      /*
+       * Record history on the per-item transition too.
+       *
+       * onBatchComplete only files entries for rows still in flight when the
+       * queue-wide event lands — so an item the server marked completed
+       * individually finished correctly but left no trace in history.
+       */
+      const justFinished = status === 'done' && existing?.status !== 'done';
+      const history = justFinished
+        ? [
+            {
+              id,
+              title: updated[id].title,
+              artist: updated[id].artist,
+              cover: updated[id].cover,
+              count: updated[id].total || 1,
+              completedAt: Date.now(),
+            },
+            ...s.history.filter((h) => h.id !== id),
+          ].slice(0, 100)
+        : s.history;
+
       return {
         active: updated,
+        history,
         isRunning: Object.values(updated).some((d) => d.status !== 'done' && d.status !== 'error'),
       };
     });
@@ -148,13 +205,20 @@ export const useDownloadStore = create<DownloadState>()((set) => ({
       const newHistory = finished.map((id) => ({
         id,
         title: updated[id].title,
+        artist: updated[id].artist,
+        cover: updated[id].cover,
         count,
         completedAt: Date.now(),
       }));
 
+      // onProgress may already have filed some of these; keep one per id.
+      const merged = [...newHistory, ...s.history].filter(
+        (entry, index, list) => list.findIndex((e) => e.id === entry.id) === index,
+      );
+
       return {
         active: updated,
-        history: [...newHistory, ...s.history].slice(0, 50),
+        history: merged.slice(0, 100),
         isRunning: false,
       };
     }),
@@ -234,6 +298,16 @@ export const useDownloadStore = create<DownloadState>()((set) => ({
       ),
     })),
 
+  clearHistory: () => set({history: [], reports: []}),
+
+  addReport: (report) =>
+    set((s) => ({
+      // Newest first, and only one report per job.
+      reports: [{...report, at: Date.now()}, ...s.reports.filter((r) => r.itemId !== report.itemId)].slice(0, 25),
+    })),
+
+  dismissReport: (itemId) => set((s) => ({reports: s.reports.filter((r) => r.itemId !== itemId)})),
+
   setRunning: (isRunning) => set({isRunning}),
 
   addPending: (item) =>
@@ -244,4 +318,16 @@ export const useDownloadStore = create<DownloadState>()((set) => ({
   removePending: (url) => set((s) => ({pendingUrls: s.pendingUrls.filter((p) => p.url !== url)})),
 
   clearPending: () => set({pendingUrls: []}),
-}));
+    }),
+    {
+      name: 'elixium-downloads',
+      /*
+       * Only completed work survives a reload. In-flight rows are tied to a
+       * server process that will not resume them, so restoring them would show
+       * downloads that are not running.
+       */
+      partialize: (s) =>
+        ({history: s.history, reports: s.reports} as DownloadState),
+    },
+  ),
+);

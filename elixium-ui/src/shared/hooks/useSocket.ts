@@ -10,6 +10,7 @@ export function useSocket() {
   const setConnected = useAppStore((s) => s.setConnected);
   const {onProgress, onConversionProgress, onBatchComplete, onError, setRunning, clearDone} = useDownloadStore();
   const settings = useSettingsStore((s) => s.settings);
+  const addReport = useDownloadStore((s) => s.addReport);
 
   useEffect(() => {
     const s = getSocket();
@@ -53,6 +54,35 @@ export function useSocket() {
     });
 
     s.on(ON.DIRECT_DOWNLOAD_START, () => setRunning(true));
+
+    /*
+     * Conversion outcome. A cross-service download can complete while quietly
+     * dropping tracks that had no match; this is the only place the user finds
+     * out which ones.
+     */
+    s.on(
+      'conversionReport',
+      (data: {itemId?: string; matched?: number; unmatched?: Array<Record<string, string>>}) => {
+        const unmatched = Array.isArray(data?.unmatched) ? data.unmatched : [];
+        if (unmatched.length === 0) return;
+
+        addReport({
+          itemId: String(data.itemId ?? `report-${Date.now()}`),
+          matched: Number(data.matched) || 0,
+          unmatched: unmatched.map((u) => ({
+            title: String(u.title ?? 'Unknown track'),
+            artist: String(u.artist ?? ''),
+            album: u.album,
+            isrc: u.isrc,
+            reason: String(u.reason ?? 'No match found'),
+          })),
+        });
+
+        toast.warning(`${unmatched.length} track${unmatched.length > 1 ? 's' : ''} could not be matched`, {
+          description: 'See Downloads for the list.',
+        });
+      },
+    );
 
     /*
      * Watchlist queue -> actual download.
@@ -119,7 +149,8 @@ export function useSocket() {
       s.off(ON.DOWNLOAD_COMPLETE);
       s.off(ON.DOWNLOAD_ERROR);
       s.off(ON.DIRECT_DOWNLOAD_START);
+      s.off('conversionReport');
       s.off(ON.WATCHLIST_QUEUE_ITEMS);
     };
-  }, [setConnected, onProgress, onConversionProgress, onBatchComplete, onError, setRunning, clearDone, settings]);
+  }, [setConnected, onProgress, onConversionProgress, onBatchComplete, onError, setRunning, clearDone, settings, addReport]);
 }

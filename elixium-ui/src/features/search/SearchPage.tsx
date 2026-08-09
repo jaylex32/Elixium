@@ -149,6 +149,16 @@ export function SearchPage() {
 
   const {entries: recentSearches, record, remove, clear} = useSearchHistoryStore();
 
+  // Consumed once, then cleared, so returning to Search later does not re-run
+  // a query the user has moved on from.
+  const pendingSearch = useAppStore((s) => s.pendingSearch);
+  useEffect(() => {
+    if (!pendingSearch) return;
+    setQuery(pendingSearch);
+    setType('track');
+    useAppStore.setState({pendingSearch: undefined});
+  }, [pendingSearch]);
+
   useEffect(() => {
     if (!spinning && query.trim().length >= 2 && data.length > 0) record(query, type);
     // eslint-disable-next-line react-hooks/exhaustive-deps

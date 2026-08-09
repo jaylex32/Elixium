@@ -70,6 +70,22 @@ export const registerDirectDownloadSocketHandler = ({
         });
       };
 
+      /**
+       * Report tracks the conversion could not match.
+       *
+       * Previously these were counted and logged server-side only, so a
+       * playlist simply arrived short with no explanation.
+       */
+      const reportUnmatched = (parsed: any) => {
+        const unmatched = Array.isArray(parsed?.unmatched) ? parsed.unmatched : [];
+        if (unmatched.length === 0) return;
+        socket.emit('conversionReport', {
+          itemId: data.itemId,
+          matched: parsed?.tracks?.length ?? 0,
+          unmatched,
+        });
+      };
+
       console.log('🚀 Direct URL download started');
       console.log('📄 URL:', data.url);
       console.log('🎵 Selected service:', data.service);
@@ -101,6 +117,7 @@ export const registerDirectDownloadSocketHandler = ({
           });
 
           await ensureQobuzDownloadReady();
+          reportUnmatched(parsedData);
           await downloadQobuzTracks(parsedData, data, socket);
         } else if (data.service === 'deezer') {
           await ensureDeezerDownloadReady();
@@ -116,6 +133,7 @@ export const registerDirectDownloadSocketHandler = ({
             delete parsedData.linkinfo.ART_NAME;
           }
 
+          reportUnmatched(parsedData);
           await downloadDeezerTracks(parsedData, data, socket);
         }
       } else if (data.url.includes('deezer.com')) {
@@ -125,11 +143,13 @@ export const registerDirectDownloadSocketHandler = ({
           parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
           await ensureQobuzDownloadReady();
+          reportUnmatched(parsedData);
           await downloadQobuzTracks(parsedData, data, socket);
         } else {
           parsedData = await parseDeezerUrl(data.url);
 
           await ensureDeezerDownloadReady();
+          reportUnmatched(parsedData);
           await downloadDeezerTracks(parsedData, data, socket);
         }
       } else if (data.url.includes('tidal.com')) {
@@ -142,6 +162,7 @@ export const registerDirectDownloadSocketHandler = ({
         parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
         await ensureQobuzDownloadReady();
+        reportUnmatched(parsedData);
         await downloadQobuzTracks(parsedData, data, socket);
       } else if (data.url.includes('youtube.com') || data.url.includes('youtu.be')) {
         if (data.service !== 'qobuz') {
@@ -153,6 +174,7 @@ export const registerDirectDownloadSocketHandler = ({
         parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
         await ensureQobuzDownloadReady();
+        reportUnmatched(parsedData);
         await downloadQobuzTracks(parsedData, data, socket);
       } else if (data.url.includes('qobuz.com') || data.url.includes('play.qobuz.com')) {
         console.log('🎵 Processing Qobuz URL...');
@@ -161,6 +183,7 @@ export const registerDirectDownloadSocketHandler = ({
         parsedData = await parseToQobuz(data.url, emitConversionProgress);
 
         await ensureQobuzDownloadReady();
+        reportUnmatched(parsedData);
         await downloadQobuzTracks(parsedData, data, socket);
       } else {
         throw new Error('Unsupported URL format');

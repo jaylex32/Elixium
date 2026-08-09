@@ -1,9 +1,11 @@
-import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2, Ban} from 'lucide-react';
+import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2, Ban, Search} from 'lucide-react';
 import {socketSend} from '@/shared/lib/socket-client';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 import {Progress} from '@/shared/components/ui/Progress';
 import {useDownloadStore, type ActiveDownload} from '@/store/download-store';
+import {Input} from '@/shared/components/ui/Input';
+import {UnmatchedReports} from './UnmatchedReport';
 import {useEffect, useState} from 'react';
 
 /** Compact elapsed time: 42s, 3m 07s, 1h 02m. */
@@ -141,10 +143,22 @@ function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
   );
 }
 
+type Filter = 'all' | 'active' | 'done' | 'failed';
+
+const FILTERS: {id: Filter; label: string}[] = [
+  {id: 'all', label: 'All'},
+  {id: 'active', label: 'Active'},
+  {id: 'done', label: 'Done'},
+  {id: 'failed', label: 'Failed'},
+];
+
 export function DownloadsPage() {
-  const {active, history, clear, clearDone} = useDownloadStore();
+  const {active, history, reports, clear, clearDone, clearHistory} = useDownloadStore();
   const isRunning = useDownloadStore((s) => s.isRunning);
   useElapsedTick(isRunning);
+
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
 
   const downloads = Object.values(active).sort((a, b) => {
     const order = {downloading: 0, converting: 1, starting: 2, error: 3, done: 4};
@@ -155,80 +169,162 @@ export function DownloadsPage() {
   const errorCount = downloads.filter((d) => d.status === 'error').length;
   const activeCount = downloads.filter((d) => d.status !== 'done' && d.status !== 'error').length;
 
-  if (downloads.length === 0 && history.length === 0) {
+  const matches = (text: string) => text.toLowerCase().includes(query.trim().toLowerCase());
+
+  const visible = downloads.filter((d) => {
+    if (filter === 'active' && (d.status === 'done' || d.status === 'error')) return false;
+    if (filter === 'done' && d.status !== 'done') return false;
+    if (filter === 'failed' && d.status !== 'error') return false;
+    if (!query.trim()) return true;
+    return matches(d.title) || matches(d.artist ?? '') || matches(d.currentTrack ?? '');
+  });
+
+  const visibleHistory = history.filter((h) => !query.trim() || matches(h.title) || matches(h.artist ?? ''));
+
+  const nothingAtAll = downloads.length === 0 && history.length === 0 && reports.length === 0;
+
+  if (nothingAtAll) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-96 text-text-muted">
+      <div className="flex h-full min-h-96 flex-col items-center justify-center text-text-muted">
         <Download size={48} className="mb-4 opacity-30" />
-        <p className="text-text-secondary font-semibold text-lg">No downloads yet</p>
-        <p className="text-sm mt-1">Search for music or paste a URL to start downloading</p>
+        <p className="text-lg font-semibold text-text-secondary">No downloads yet</p>
+        <p className="mt-1 text-sm">Search for music or paste a URL to start downloading</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl animate-fade-in space-y-5 p-4 sm:space-y-6 sm:p-6">
-      {/* Stats bar */}
-      {downloads.length > 0 && (
-        <div className="flex items-center gap-4 flex-wrap">
-          {activeCount > 0 && (
-            <div className="flex items-center gap-1.5 text-sm text-accent font-medium">
-              <Loader2 size={14} className="animate-spin" />
-              {activeCount} downloading
-            </div>
+    <div className="mx-auto max-w-3xl animate-fade-in space-y-5 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {activeCount > 0 && (
+          <span className="flex items-center gap-1.5 text-sm font-medium text-accent">
+            <Loader2 size={14} className="animate-spin" />
+            {activeCount} downloading
+          </span>
+        )}
+        {doneCount > 0 && (
+          <span className="flex items-center gap-1.5 text-sm text-success">
+            <CheckCircle2 size={14} />
+            {doneCount} done
+          </span>
+        )}
+        {errorCount > 0 && (
+          <span className="flex items-center gap-1.5 text-sm text-danger">
+            <AlertCircle size={14} />
+            {errorCount} failed
+          </span>
+        )}
+        {activeCount === 0 && doneCount === 0 && errorCount === 0 && (
+          <span className="text-sm text-text-muted">Nothing running</span>
+        )}
+
+        <div className="ml-auto flex gap-1">
+          {doneCount + errorCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearDone} className="text-text-muted">
+              <Trash2 size={13} />
+              Clear finished
+            </Button>
           )}
-          {doneCount > 0 && (
-            <div className="flex items-center gap-1.5 text-sm text-success">
-              <CheckCircle2 size={14} />
-              {doneCount} done
-            </div>
-          )}
-          {errorCount > 0 && (
-            <div className="flex items-center gap-1.5 text-sm text-danger">
-              <AlertCircle size={14} />
-              {errorCount} failed
-            </div>
-          )}
-          <div className="ml-auto flex gap-2">
-            {doneCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearDone}>
-                <Trash2 size={13} />
-                Clear done
-              </Button>
-            )}
+        </div>
+      </div>
+
+      {/* Surfaced above the list: a partially-successful conversion otherwise
+          reads as a clean success while quietly missing tracks. */}
+      <UnmatchedReports />
+
+      {/* Only worth showing once there is enough to sift through. */}
+      {downloads.length + history.length > 3 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="scroll-row flex gap-1 rounded-sm border border-border bg-secondary-bg p-1">
+            {FILTERS.map((f) => {
+              const count =
+                f.id === 'all'
+                  ? downloads.length
+                  : f.id === 'active'
+                    ? activeCount
+                    : f.id === 'done'
+                      ? doneCount
+                      : errorCount;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(f.id)}
+                  aria-pressed={filter === f.id}
+                  className={cn(
+                    'min-h-9 shrink-0 rounded-xs px-3 text-xs font-medium transition-colors',
+                    filter === f.id
+                      ? 'bg-card-bg text-text-primary shadow-sm'
+                      : 'text-text-muted hover:text-text-secondary',
+                  )}
+                >
+                  {f.label}
+                  {count > 0 && <span className="ml-1.5 tabular-nums opacity-60">{count}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="relative flex-1">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter by title or artist…"
+              aria-label="Filter downloads"
+              className="h-10 pl-9"
+            />
           </div>
         </div>
       )}
 
-      {/* Active downloads */}
-      {downloads.length > 0 && (
+      {visible.length > 0 && (
         <div className="space-y-3">
-          {downloads.map((d) => (
+          {visible.map((d) => (
             <DownloadCard key={d.itemId} d={d} onClear={() => clear(d.itemId)} />
           ))}
         </div>
       )}
 
-      {/* History */}
-      {history.length > 0 && downloads.length === 0 && (
-        <div>
-          <p className="text-sm font-medium text-text-secondary mb-3">Recent downloads</p>
+      {downloads.length > 0 && visible.length === 0 && (
+        <p className="py-10 text-center text-sm text-text-muted">Nothing matches this filter.</p>
+      )}
+
+      {/* History survives a reload and stays visible alongside active work,
+          rather than appearing only when the list happens to be empty. */}
+      {visibleHistory.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-text-secondary">Completed earlier</h2>
+            <Button variant="ghost" size="sm" onClick={clearHistory} className="text-text-muted">
+              Clear history
+            </Button>
+          </div>
+
           <div className="space-y-2">
-            {history.slice(0, 20).map((h) => (
-              <div key={h.id} className="flex items-center gap-3 rounded-xl border border-border bg-card-bg px-4 py-3">
-                <CheckCircle2 size={16} className="text-success shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-text-primary truncate">{h.title}</p>
-                  <p className="text-xs text-text-muted">
+            {visibleHistory.slice(0, 30).map((h) => (
+              <div
+                key={`${h.id}-${h.completedAt}`}
+                className="rows-track flex items-center gap-3 rounded-md border border-border bg-card-bg px-3 py-2.5"
+              >
+                {h.cover ? (
+                  <img src={h.cover} alt="" loading="lazy" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
+                ) : (
+                  <CheckCircle2 size={16} className="shrink-0 text-success" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-text-primary">{h.title}</p>
+                  <p className="truncate text-xs text-text-muted">
+                    {h.artist ? `${h.artist} · ` : ''}
                     {h.count} track{h.count > 1 ? 's' : ''}
                   </p>
                 </div>
-                <span className="text-xs text-text-muted shrink-0">
-                  {new Date(h.completedAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                <span className="shrink-0 text-xs text-text-muted">
+                  {new Date(h.completedAt).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
                 </span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
