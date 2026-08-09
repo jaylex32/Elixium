@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, HardDrive, Sliders, RefreshCw, Mic2, FolderTree} from 'lucide-react';
+import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, ArrowUpCircle, HardDrive, Sliders, RefreshCw, Mic2, FolderTree} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
@@ -11,6 +11,7 @@ import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
 import {ApiAccess} from './ApiAccess';
+import {QualityProfile} from './QualityProfile';
 import {PathTemplates} from './PathTemplates';
 import {useSettingsStore as useSettingsStoreRaw} from '@/store/settings-store';
 import {cn} from '@/shared/lib/utils';
@@ -319,6 +320,12 @@ export function SettingsPage() {
             </Badge>
           </div>
         </Field>
+      </Section>
+
+      {/* Distinct from Audio Quality above: that is what to fetch now, this is
+          what counts as good enough for something already in the library. */}
+      <Section title="Quality profile" icon={ArrowUpCircle}>
+        <QualityProfile />
       </Section>
 
       <Section title="Download Paths" icon={HardDrive}>

@@ -8,6 +8,7 @@
  */
 
 import {resolveCoverSize} from '../../lib/cover-art';
+import {readQualityProfile, writeQualityProfile} from '../quality-profile';
 
 export interface SettingsInvalidationHooks {
   setIsDeezerDownloadReady: (value: boolean) => void;
@@ -35,6 +36,8 @@ export interface ElixiumSettings {
   quality: {deezer: string; qobuz: string};
   /** The token itself is never included here — see GET /auth/token. */
   auth: {enabled: boolean; allowedOrigins: string[]};
+  /** Cutoff below which an already-owned release is re-fetched. */
+  qualityProfile: {cutoff: string; upgradeExisting: boolean};
 }
 
 /** Fields that carry credentials and must never appear in a shared response. */
@@ -77,6 +80,7 @@ export const readSettings = (conf: any): ElixiumSettings => ({
     enabled: conf.get('auth.enabled') !== false,
     allowedOrigins: Array.isArray(conf.get('auth.allowedOrigins')) ? conf.get('auth.allowedOrigins') : [],
   },
+  qualityProfile: readQualityProfile(conf),
 });
 
 /**
@@ -224,6 +228,11 @@ export const applySettings = (conf: any, data: any, hooks: SettingsInvalidationH
       conf.set('auth.allowedOrigins', origins);
       changed.push('auth.allowedOrigins');
     }
+  }
+
+  if (data.qualityProfile && typeof data.qualityProfile === 'object') {
+    writeQualityProfile(conf, data.qualityProfile);
+    changed.push('qualityProfile');
   }
 
   if (data.paths) {

@@ -30,7 +30,10 @@ type keysType =
   | 'auth'
   | 'auth.enabled'
   | 'auth.token'
-  | 'auth.allowedOrigins';
+  | 'auth.allowedOrigins'
+  | 'qualityProfile'
+  | 'qualityProfile.cutoff'
+  | 'qualityProfile.upgradeExisting';
 
 type configType = {
   concurrency: number;
@@ -61,6 +64,12 @@ type configType = {
     arl: string;
   };
   tempDirectory: string;
+  qualityProfile: {
+    /** Tier at which a release counts as done. */
+    cutoff: 'mp3' | 'lossless' | 'hires';
+    /** Re-fetch releases already held below the cutoff. */
+    upgradeExisting: boolean;
+  };
   auth: {
     /** Require a token from non-loopback clients. */
     enabled: boolean;
@@ -103,6 +112,14 @@ const defaultConfig: configType = {
     arl: 'c973964816688562722418b5200c1515dffaad15a42643ebf87cc72824a54612ec51c2ad42d566743f9e424c774e98ccae7737770acff59251328e6cd598c7bcac38ca269adf78bfb88ec5bbad6cd800db3c0b88b2af645bb22b99e71de26416',
   },
   tempDirectory: 'temp',
+  qualityProfile: {
+    // Lossless rather than hi-res: a hi-res default would flag most existing
+    // libraries as needing an upgrade the first time a scan runs.
+    cutoff: 'lossless',
+    // Off by default — enabling it can queue a lot of traffic, which should be
+    // a decision rather than a side effect of upgrading.
+    upgradeExisting: false,
+  },
   auth: {
     // On by default. Loopback is exempt, so this costs a local user nothing
     // while making a network-reachable server safe out of the box.

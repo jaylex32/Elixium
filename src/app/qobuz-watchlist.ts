@@ -1,4 +1,12 @@
 import {existsSync, readdirSync} from 'fs';
+import {
+  QUALITY_TIERS,
+  bestAvailableTier,
+  classifyFileQuality,
+  needsUpgrade,
+  readQualityProfile,
+  type QualityTier,
+} from './quality-profile';
 import path from 'path';
 import {getUrlParts, tidal} from '../core';
 import {getSpotifyPlaylistBundle} from '../core/converter/spotify';
@@ -205,25 +213,58 @@ const extractPlaylistTrackImage = (tracks: any[]) => {
   return '';
 };
 
+/**
+ * Index the library by normalized name, recording the best audio quality found.
+ *
+ * This used to return names only, which answered "do I have this?" but not
+ * "is what I have good enough?" — so a release grabbed as MP3 stayed MP3
+ * forever. The quality is read from the files because download history never
+ * recorded it, and reading the files is the only thing that works for a
+ * library that predates the quality profile.
+ *
+ * A file's tier is attributed to its own name *and* to every directory above
+ * it, so both "Artist/Album/01 Track.flac" and a flat "Album.flac" resolve.
+ */
 const collectFilesystemTokens = (rootPath: string) => {
-  const names = new Set<string>();
+  const names = new Map<string, QualityTier>();
   if (!rootPath || !existsSync(rootPath)) return names;
 
-  const stack = [rootPath];
+  const record = (key: string, tier: QualityTier | null) => {
+    if (!key) return;
+    if (!tier) {
+      // Keep the bare presence signal for non-audio entries (folders), without
+      // claiming a quality we have not observed.
+      if (!names.has(key)) names.set(key, 'mp3');
+      return;
+    }
+    const existing = names.get(key);
+    if (!existing || QUALITY_TIERS.indexOf(tier) > QUALITY_TIERS.indexOf(existing)) names.set(key, tier);
+  };
+
+  const stack: Array<{dir: string; ancestors: string[]}> = [{dir: rootPath, ancestors: []}];
   while (stack.length > 0) {
-    const current = stack.pop() as string;
+    const {dir, ancestors} = stack.pop() as {dir: string; ancestors: string[]};
     let entries: ReturnType<typeof readdirSync>;
     try {
-      entries = readdirSync(current, {withFileTypes: true}) as any;
+      entries = readdirSync(dir, {withFileTypes: true}) as any;
     } catch {
       continue;
     }
 
     for (const entry of entries as any[]) {
-      const fullPath = path.join(current, entry.name);
+      const fullPath = path.join(dir, entry.name);
       const normalized = normalizeWatchlistText(path.parse(entry.name).name || entry.name);
-      if (normalized) names.add(normalized);
-      if (entry.isDirectory()) stack.push(fullPath);
+
+      if (entry.isDirectory()) {
+        record(normalized, null);
+        stack.push({dir: fullPath, ancestors: normalized ? [...ancestors, normalized] : ancestors});
+        continue;
+      }
+
+      const tier = classifyFileQuality(fullPath);
+      record(normalized, tier);
+      // Promote the tier onto the enclosing album/artist folders too.
+      if (tier) for (const ancestor of ancestors) record(ancestor, tier);
     }
   }
 
@@ -677,6 +718,7 @@ export const createQobuzWatchlistService = ({
     const state = store.getState();
     const processedByKey = new Map(state.processedAlbums.map((entry) => [entry.normalizedKey, entry]));
     const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const qualityProfile = readQualityProfile(conf);
     const nextCandidates: WatchlistCandidateRecord[] = [];
 
     // Which release kinds the user wants collected at all. Anything else is
@@ -704,7 +746,22 @@ export const createQobuzWatchlistService = ({
         ? legacyKey
         : '';
 
-      if (matchedKey) {
+      /*
+       * What the library already holds, and whether the service can beat it.
+       *
+       * Checked before the duplicate branches so an album that is "already
+       * processed" but sitting below the cutoff still surfaces as wanted —
+       * that is the entire point of an upgrade cutoff, and the old flow
+       * short-circuited on `already-processed` and never looked at quality.
+       */
+      const haveTier = libraryTokens.get(normalizedTitle) ?? null;
+      const availableTier = bestAvailableTier('qobuz', album);
+      const upgradable = needsUpgrade(haveTier, qualityProfile, availableTier);
+
+      if (upgradable) {
+        reason = 'new';
+        duplicateSource = `upgrade:${haveTier}->${availableTier}`;
+      } else if (matchedKey) {
         const processedReason = processedByKey.get(matchedKey)?.reason || 'history';
         if (['downloaded', 'dismissed', 'duplicate'].includes(processedReason)) {
           reason = 'already-processed';
