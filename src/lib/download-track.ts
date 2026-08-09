@@ -1,6 +1,7 @@
 import got from 'got';
 import stream from 'stream';
 import {existsSync, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync, unlinkSync} from 'fs';
+import {applyLyrics, type LyricsOptions} from './lyrics-embed';
 import {promisify} from 'util';
 import {dirname, isAbsolute, join, resolve} from 'path';
 import {deezer} from '../core';
@@ -16,6 +17,15 @@ import {terminalProgress} from './terminal-progress';
 const pipeline = promisify(stream.pipeline);
 const simulate = process.env.SIMULATE;
 const config = new Config();
+
+/**
+ * Lyrics preferences, read per call so a change in Settings takes effect
+ * without a restart.
+ */
+const getLyricsOptions = (): LyricsOptions => ({
+  embed: config.get('embedLyrics') !== false,
+  saveLrc: Boolean(config.get('saveLrcFile')),
+});
 
 interface downloadTrackProps {
   track: trackType;
@@ -280,6 +290,20 @@ const downloadTrack = async ({
     } else {
       logUpdate(signale.pending('Tagging ' + track.SNG_TITLE + ' by ' + track.ART_NAME));
     }
+    // Lyrics before tagging: the writer emits USLT / LYRICS from track.LYRICS,
+    // so they have to be attached before the tags are built.
+    await applyLyrics(
+      track,
+      {
+        artist: track.ART_NAME,
+        title: track.SNG_TITLE,
+        album: track.ALB_TITLE,
+        durationSec: Number(track.DURATION) || undefined,
+      },
+      savePath,
+      getLyricsOptions(),
+    );
+
     const trackWithMetadata = await deezer.addTrackTags(outFile, track, coverSize);
 
     // Delete temporary file now

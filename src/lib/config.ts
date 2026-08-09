@@ -16,6 +16,8 @@ type keysType =
   | 'fallbackQuality'
   | 'deezerDownloadCover'
   | 'qobuzDownloadCover'
+  | 'embedLyrics'
+  | 'saveLrcFile'
   | 'coverSize'
   | 'coverSize.128'
   | 'coverSize.320'

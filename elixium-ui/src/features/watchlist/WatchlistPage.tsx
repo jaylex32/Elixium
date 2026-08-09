@@ -22,6 +22,7 @@ interface WatchlistState {
     name: string;
     picture_url?: string;
     picture?: string;
+    image?: string;
     addedAt?: string;
     lastChecked?: string;
     rules?: {autoQueueAlbums?: boolean; autoQueueTracks?: boolean; trackLimit?: number};
@@ -109,7 +110,9 @@ export function WatchlistPage() {
           state.watchedArtists.map((a) => ({
             id: a.id,
             name: a.name,
-            picture: a.picture_url ?? a.picture ?? '',
+            // The server sends `image`; the other two are legacy names that
+            // were never populated, so artist avatars were always blank.
+            picture: a.image ?? a.picture_url ?? a.picture ?? '',
             addedAt: a.addedAt ?? new Date().toISOString(),
             lastChecked: a.lastChecked,
             rules: a.rules,

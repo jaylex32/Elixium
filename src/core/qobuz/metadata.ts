@@ -202,10 +202,12 @@ export const writeMetadataFlac = (
   flac.setTag('LENGTH=' + track.duration);
   flac.setTag('MEDIA=Digital Media');
 
-  // TODO
-  // if (track.LYRICS) {
-  //   flac.setTag('LYRICS=' + track.LYRICS.LYRICS_TEXT);
-  // }
+  // Populated by applyLyrics before tagging. UNSYNCEDLYRICS is what most
+  // players read from a FLAC; LYRICS is kept for the ones that only know it.
+  if (track.LYRICS?.LYRICS_TEXT) {
+    flac.setTag('LYRICS=' + track.LYRICS.LYRICS_TEXT);
+    flac.setTag('UNSYNCEDLYRICS=' + track.LYRICS.LYRICS_TEXT);
+  }
 
   if (track.parental_warning) {
     flac.setTag('EXPLICIT=1');

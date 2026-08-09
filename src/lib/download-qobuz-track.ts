@@ -1,6 +1,7 @@
 import got from 'got';
 import stream from 'stream';
 import {existsSync, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync, unlinkSync} from 'fs';
+import {applyLyrics, type LyricsOptions} from './lyrics-embed';
 import {promisify} from 'util';
 import {dirname, isAbsolute, join, resolve} from 'path';
 import {qobuz} from '../core';
@@ -14,6 +15,15 @@ import {terminalProgress} from './terminal-progress';
 const pipeline = promisify(stream.pipeline);
 const simulate = process.env.SIMULATE;
 const config = new Config();
+
+/**
+ * Lyrics preferences, read per call so a change in Settings takes effect
+ * without a restart.
+ */
+const getLyricsOptions = (): LyricsOptions => ({
+  embed: config.get('embedLyrics') !== false,
+  saveLrc: Boolean(config.get('saveLrcFile')),
+});
 
 interface downloadTrackProps {
   track: qobuz.types.trackType;
@@ -251,6 +261,18 @@ const downloadTrack = async ({
     } else {
       logUpdate(signale.pending('Tagging ' + track.title + ' by ' + artistName));
     }
+    await applyLyrics(
+      track,
+      {
+        artist: artistName,
+        title: track.title,
+        album: track.album?.title,
+        durationSec: Number(track.duration) || undefined,
+      },
+      savePath,
+      getLyricsOptions(),
+    );
+
     const trackWithMetadata = await qobuz.addTrackTags(outFile, track, coverSize);
 
     // Delete temporary file now

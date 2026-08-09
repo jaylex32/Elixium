@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {Save, Eye, EyeOff, Palette, Shield, HardDrive, Sliders, RefreshCw} from 'lucide-react';
+import {Save, Eye, EyeOff, Palette, Shield, HardDrive, Sliders, RefreshCw, Mic2} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
@@ -93,6 +93,8 @@ export function SettingsPage() {
         deezerDownloadCover?: boolean;
         fallbackTrack?: boolean;
         fallbackQuality?: boolean;
+        embedLyrics?: boolean;
+        saveLrcFile?: boolean;
       }) => {
         if (!data) return;
         update({
@@ -108,6 +110,8 @@ export function SettingsPage() {
           coverArt: data.deezerDownloadCover ?? true,
           fallbackTrack: data.fallbackTrack ?? true,
           fallbackQuality: data.fallbackQuality ?? true,
+          embedLyrics: data.embedLyrics ?? true,
+          saveLrcFile: data.saveLrcFile ?? false,
         });
         markClean();
       },
@@ -123,6 +127,8 @@ export function SettingsPage() {
       fallbackQuality: settings.fallbackQuality,
       deezerDownloadCover: settings.coverArt,
       qobuzDownloadCover: settings.coverArt,
+      embedLyrics: settings.embedLyrics,
+      saveLrcFile: settings.saveLrcFile,
       cookies: {arl: settings.deezerArl, sp_dc: settings.spotifySpDc},
       qobuz: {
         app_id: settings.qobuzAppId,
@@ -213,6 +219,30 @@ export function SettingsPage() {
             placeholder="Comma-separated secrets"
           />
         </Field>
+      </Section>
+
+      <Section title="Lyrics" icon={Mic2}>
+        <Field
+          label="Embed lyrics in files"
+          description="Written into the tags (USLT for MP3, LYRICS for FLAC)"
+        >
+          <div className="flex sm:justify-end">
+            <Switch checked={settings.embedLyrics} onCheckedChange={(v) => update({embedLyrics: v})} />
+          </div>
+        </Field>
+        <div className="border-t border-border" />
+        <Field
+          label="Save .lrc file"
+          description="A sidecar with timings, for players that read synced lyrics"
+        >
+          <div className="flex sm:justify-end">
+            <Switch checked={settings.saveLrcFile} onCheckedChange={(v) => update({saveLrcFile: v})} />
+          </div>
+        </Field>
+        <p className="text-xs text-text-muted">
+          Lyrics come from LRCLIB, which needs no account. A track with none is downloaded exactly as before — the
+          lookup never blocks or fails a download.
+        </p>
       </Section>
 
       <Section title="Audio Quality" icon={Sliders}>

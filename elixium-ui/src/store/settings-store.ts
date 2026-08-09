@@ -14,6 +14,8 @@ export interface Settings {
   qobuzDownloadPath: string;
   trackNumbering: boolean;
   coverArt: boolean;
+  embedLyrics: boolean;
+  saveLrcFile: boolean;
   createPlaylists: boolean;
   fallbackTrack: boolean;
   fallbackQuality: boolean;
@@ -34,6 +36,8 @@ const defaults: Settings = {
   qobuzDownloadPath: '',
   trackNumbering: true,
   coverArt: true,
+  embedLyrics: true,
+  saveLrcFile: false,
   createPlaylists: false,
   fallbackTrack: true,
   fallbackQuality: true,

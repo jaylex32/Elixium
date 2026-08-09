@@ -21,6 +21,8 @@ export interface ElixiumSettings {
   fallbackQuality: unknown;
   deezerDownloadCover: unknown;
   qobuzDownloadCover: unknown;
+  embedLyrics: unknown;
+  saveLrcFile: unknown;
   createPlaylist: unknown;
   cookies: {arl: unknown; sp_dc: unknown};
   qobuz: {app_id: unknown; secrets: unknown; token: unknown};
@@ -41,6 +43,9 @@ export const readSettings = (conf: any): ElixiumSettings => ({
   fallbackQuality: conf.get('fallbackQuality'),
   deezerDownloadCover: conf.get('deezerDownloadCover'),
   qobuzDownloadCover: conf.get('qobuzDownloadCover'),
+  // Default on: an embedded lyric is inert if a player ignores it.
+  embedLyrics: conf.get('embedLyrics') !== false,
+  saveLrcFile: Boolean(conf.get('saveLrcFile')),
   createPlaylist: conf.get('playlist.createPlaylist'),
   cookies: {
     arl: conf.get('cookies.arl'),
@@ -124,6 +129,8 @@ export const applySettings = (conf: any, data: any, hooks: SettingsInvalidationH
   setIfPresent('fallbackQuality', data.fallbackQuality);
   setIfPresent('deezerDownloadCover', data.deezerDownloadCover);
   setIfPresent('qobuzDownloadCover', data.qobuzDownloadCover);
+  setIfPresent('embedLyrics', data.embedLyrics);
+  setIfPresent('saveLrcFile', data.saveLrcFile);
   setIfPresent('saveLayout', data.saveLayout);
   setIfPresent('coverSize', data.coverSize);
   setIfPresent('createPlaylist', data.createPlaylist, 'playlist.createPlaylist');

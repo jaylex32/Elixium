@@ -1,6 +1,8 @@
 import type {albumType} from './album';
 
 export interface trackType {
+  /** Attached before tagging by the download pipeline; not returned by the API. */
+  LYRICS?: {LYRICS_TEXT: string};
   maximum_bit_depth: number; // 24
   copyright: string; // '2021 Lone et la Lune under exclusive license to 3ème Bureau / Wagram Music 2021 Lone et la Lune under exclusive license to 3ème Bureau / Wagram Music'
   performers: string; // 'Lonepsi, Composer, MainArtist'
