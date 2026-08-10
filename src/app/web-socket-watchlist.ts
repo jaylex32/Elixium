@@ -298,10 +298,30 @@ export const registerWatchlistSocketHandlers = ({socket, io, watchlist}: WebSock
     }
   };
 
-  socket.on('runMonitorNow', async ({kind}) => runMonitor(kind));
+  /*
+   * Optional-chained payloads, and no promise left unhandled.
+   *
+   * `async ({kind}) => …` destructured the payload directly, so a client that
+   * emitted this event with no argument threw a TypeError inside an async
+   * function — an unhandled rejection, which Node turns into process exit.
+   * That killed the whole server from a single malformed emit.
+   *
+   * runMonitor resolves rather than rejects in normal use, but it is called
+   * without awaiting, so a throw from the io.emit before its try would escape
+   * the same way. Catching here keeps that contained.
+   */
+  socket.on('runMonitorNow', (data) => {
+    void runMonitor((data as {kind?: string} | undefined)?.kind).catch((error: any) => {
+      socket.emit('watchlistError', {message: error?.message || 'Unable to run monitor'});
+    });
+  });
 
   // Alias for the web UI, which names the action after the user-facing button.
-  socket.on('runWatchlistScan', async (data) => runMonitor(data?.kind));
+  socket.on('runWatchlistScan', (data) => {
+    void runMonitor((data as {kind?: string} | undefined)?.kind).catch((error: any) => {
+      socket.emit('watchlistError', {message: error?.message || 'Unable to run scan'});
+    });
+  });
 
   socket.on('getMonitorHistory', () => {
     socket.emit('monitorHistory', {

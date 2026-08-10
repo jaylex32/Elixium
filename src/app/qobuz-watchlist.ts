@@ -1645,7 +1645,16 @@ export const createQobuzWatchlistService = ({
       }
     });
     schedulerTimer = setInterval(() => {
-      void schedulerTick();
+      /*
+       * `void schedulerTick()` discarded the promise. schedulerTick guards the
+       * scan itself, but the work before that inner try — reading schedules —
+       * is unprotected, and a throw there escaped as an unhandled rejection.
+       * Because this runs on a timer, that took the server down with nobody
+       * touching it, which is the worst version of the failure to diagnose.
+       */
+      schedulerTick().catch((error: any) => {
+        console.error(`Watchlist scheduler tick failed: ${error?.message || error}`);
+      });
     }, SCHEDULER_TICK_MS);
   };
 

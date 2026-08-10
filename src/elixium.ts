@@ -27,6 +27,7 @@ import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
 import {registerApiV1} from './app/api/v1';
+import {installProcessGuard} from './app/process-guard';
 import {
   authorize,
   buildCorsOptions,
@@ -53,6 +54,7 @@ import {createServer} from 'http';
 import {Server as SocketIOServer} from 'socket.io';
 import cors from 'cors';
 
+installProcessGuard();
 ensureLegacyNodeOptions();
 printBanner(pkg.version);
 
