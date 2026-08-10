@@ -4,6 +4,7 @@ import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
 import {Switch} from '@/shared/components/ui/Switch';
+import {apiFetch} from '@/shared/lib/auth-token';
 
 interface TokenInfo {
   token: string;
@@ -27,7 +28,7 @@ export function ApiAccess() {
 
   const load = async () => {
     try {
-      const res = await fetch('/api/v1/auth/token');
+      const res = await apiFetch('/api/v1/auth/token');
       if (res.status === 403) {
         setLocalOnly(true);
         return;
@@ -56,7 +57,7 @@ export function ApiAccess() {
   const rotate = async () => {
     setBusy(true);
     try {
-      const res = await fetch('/api/v1/auth/rotate', {method: 'POST'});
+      const res = await apiFetch('/api/v1/auth/rotate', {method: 'POST'});
       const body = await res.json();
       if (body?.ok) {
         setInfo((prev) => (prev ? {...prev, token: body.data.token} : prev));
@@ -75,7 +76,7 @@ export function ApiAccess() {
   const setEnabled = async (enabled: boolean) => {
     setInfo((prev) => (prev ? {...prev, enabled} : prev));
     try {
-      const res = await fetch('/api/v1/settings', {
+      const res = await apiFetch('/api/v1/settings', {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({auth: {enabled}}),

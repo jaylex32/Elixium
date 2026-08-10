@@ -60,6 +60,29 @@ export const isAuthFailure = (status: number | undefined, message?: string): boo
   status === 401 || message === 'auth_required' || message === 'auth_invalid';
 
 /**
+ * `fetch` that carries the API token.
+ *
+ * Anything talking to /api must go through this or the axios client in
+ * `api.ts`. Plain `fetch` sends no token, so on a phone — where the server is
+ * not loopback and therefore not exempt — every such call comes back 401 while
+ * the rest of the app, which uses axios, keeps working. That is what made the
+ * Library page fail only on mobile.
+ *
+ * A 401 also raises the pairing prompt, matching the axios interceptor, so a
+ * stale or missing token surfaces as "pair this device" rather than an empty
+ * screen.
+ */
+export const apiFetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
+  const token = getToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set('X-Elixium-Token', token);
+
+  const response = await fetch(input, {...init, headers});
+  if (response.status === 401) notifyAuthRequired();
+  return response;
+};
+
+/**
  * Broadcast that the server refused this browser.
  *
  * A plain subscriber list rather than store state: the refusal originates in

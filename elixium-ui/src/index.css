@@ -61,7 +61,13 @@
   --z-header: 30;
   --z-player: 40;
   --z-bottom-nav: 45;
+  /* Scrim behind the nav drawer, then the drawer itself. These were a single
+     value with the drawer at 50 sitting *below* --z-overlay at 60, so on
+     mobile the blurred backdrop covered the sidebar: it showed through the
+     blur and every tap hit the scrim instead of a nav item. */
   --z-drawer: 50;
+  --z-drawer-panel: 55;
+  /* Scrim for modals, which sit above it at --z-modal. */
   --z-overlay: 60;
   --z-modal: 70;
   --z-toast: 80;

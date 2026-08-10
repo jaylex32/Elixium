@@ -173,7 +173,7 @@ export function NavDrawer({open, onClose}: {open: boolean; onClose: () => void})
             exit={{opacity: 0}}
             transition={{duration: 0.2}}
             onClick={onClose}
-            className="fixed inset-0 z-overlay bg-black/60 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-drawer bg-black/60 backdrop-blur-sm lg:hidden"
             aria-hidden
           />
           <motion.div
@@ -186,7 +186,7 @@ export function NavDrawer({open, onClose}: {open: boolean; onClose: () => void})
             animate={{x: 0}}
             exit={{x: '-100%'}}
             transition={{type: 'spring', stiffness: 400, damping: 40}}
-            className="fixed inset-y-0 left-0 z-drawer flex w-[min(84vw,320px)] flex-col border-r border-border bg-secondary-bg pt-safe outline-none lg:hidden"
+            className="fixed inset-y-0 left-0 z-drawer-panel flex w-[min(84vw,320px)] flex-col border-r border-border bg-secondary-bg pt-safe outline-none lg:hidden"
           >
             <div className="flex h-header shrink-0 items-center justify-between border-b border-border px-4">
               <div className="flex items-center gap-3">

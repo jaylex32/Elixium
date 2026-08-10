@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Library, Check, Download, ArrowUpCircle, Music2, ChevronDown, ChevronRight} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
+import {apiFetch} from '@/shared/lib/auth-token';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
@@ -111,7 +112,7 @@ export function LibraryPage() {
   const {download} = useDownload();
 
   useEffect(() => {
-    fetch('/api/v1/library')
+    apiFetch('/api/v1/library')
       .then((r) => r.json())
       .then((b) => setArtists(b?.ok ? (b.data.artists ?? []) : []))
       .catch(() => setArtists([]));

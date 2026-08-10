@@ -3,6 +3,7 @@ import {ArrowUpCircle} from 'lucide-react';
 import {toast} from 'sonner';
 import {Select} from '@/shared/components/ui/Select';
 import {Switch} from '@/shared/components/ui/Switch';
+import {apiFetch} from '@/shared/lib/auth-token';
 
 type Cutoff = 'mp3' | 'lossless' | 'hires';
 
@@ -32,7 +33,7 @@ export function QualityProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    fetch('/api/v1/settings')
+    apiFetch('/api/v1/settings')
       .then((r) => r.json())
       .then((b) => {
         if (b?.ok && b.data?.qualityProfile) setProfile(b.data.qualityProfile);
@@ -47,7 +48,7 @@ export function QualityProfile() {
     const next = {...(profile as Profile), ...patch};
     setProfile(next);
     try {
-      const res = await fetch('/api/v1/settings', {
+      const res = await apiFetch('/api/v1/settings', {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({qualityProfile: patch}),
