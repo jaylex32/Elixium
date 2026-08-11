@@ -1,0 +1,158 @@
+name: Release
+
+# Building each binary on its own native runner, rather than cross-compiling
+# them all from one machine. Cross-compiling was the source of two shipped
+# defects: pkg cannot generate bytecode for a target it cannot execute, so the
+# macOS arm64 build silently kept a stale artifact, and there is no way to run
+# codesign from a non-macOS host — which Apple Silicon requires, because the
+# kernel refuses unsigned arm64 binaries outright.
+
+on:
+  push:
+    tags: ['v*']
+  # Also runnable by hand so a release can be re-cut without moving the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach assets to'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not discard the binaries that did build.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+            target: node16-linux-x64
+            binary: elixium
+            archive: tar.gz
+          - os: macos-13 # Intel runner; macos-latest is Apple Silicon.
+            label: macos-x64
+            target: node16-macos-x64
+            binary: elixium
+            archive: tar.gz
+          - os: macos-latest
+            label: macos-arm64
+            target: node16-macos-arm64
+            binary: elixium
+            archive: tar.gz
+          - os: windows-latest
+            label: windows-x64
+            target: node16-win-x64
+            binary: elixium.exe
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        # `npm ci` respects the lockfile. postinstall runs setup-termux, which
+        # is a no-op off Termux but must not fail the build.
+        run: npm ci --ignore-scripts
+
+      - name: Build web interface
+        run: |
+          npm ci --ignore-scripts --prefix elixium-ui
+          npm run build --prefix elixium-ui
+
+      - name: Compile and sync assets
+        # eslint --fix first: the repo checks in CRLF while prettier expects
+        # LF, so a fresh checkout fails the lint gate on files nobody touched.
+        run: |
+          npx eslint . --fix || true
+          npx tsc
+          node sync-public.js
+
+      - name: Package binary
+        # `pkg .` rather than a path to the entry file — passing a file makes
+        # pkg ignore the `pkg.assets` config in package.json, which is how the
+        # web interface came to be missing from the v1.1.0 binaries.
+        run: npx pkg . --targets ${{ matrix.target }} --out-path dist-bin
+
+      - name: Normalise binary name
+        shell: bash
+        run: |
+          cd dist-bin
+          # pkg names single-target output after the package, but adds a target
+          # suffix for multi-target runs. Accept either.
+          found=$(ls | head -1)
+          if [ "$found" != "${{ matrix.binary }}" ]; then mv "$found" "${{ matrix.binary }}"; fi
+          ls -la
+
+      - name: Sign for macOS
+        if: startsWith(matrix.os, 'macos')
+        # An ad-hoc signature is what stops the kernel killing an arm64 binary
+        # on launch. It does NOT clear Gatekeeper's "unidentified developer"
+        # prompt — that needs a paid Apple Developer certificate and
+        # notarisation, so users still clear the quarantine flag once.
+        run: |
+          codesign --force --deep --sign - dist-bin/${{ matrix.binary }}
+          codesign --verify --verbose dist-bin/${{ matrix.binary }}
+
+      - name: Archive
+        shell: bash
+        run: |
+          cd dist-bin
+          chmod +x ${{ matrix.binary }} || true
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            # tar, not zip: zip does not preserve the Unix executable bit, so
+            # unzipped binaries arrived without +x and would not run.
+            tar -czf ../elixium-${{ matrix.label }}.tar.gz ${{ matrix.binary }}
+          else
+            7z a ../elixium-${{ matrix.label }}.zip ${{ matrix.binary }}
+          fi
+
+      - name: Verify the interface is bundled
+        # The v1.1.0 binaries shipped without the web assets and nobody noticed
+        # until a user ran one outside the project directory. Fail the build
+        # here instead.
+        shell: bash
+        run: |
+          asset=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' public/index.html | head -1 | sed 's|assets/||')
+          echo "looking for $asset inside the binary"
+          if grep -q "$asset" dist-bin/${{ matrix.binary }}; then
+            echo "web interface is bundled"
+          else
+            echo "::error::web interface missing from the packaged binary"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elixium-${{ matrix.label }}
+          path: elixium-${{ matrix.label }}.*
+
+  publish:
+    name: Attach to release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          ls -la assets
+          # --clobber so re-running replaces assets rather than erroring, and
+          # the release itself keeps its notes, URL and creation date.
+          gh release upload "$TAG" assets/* --clobber --repo "${{ github.repository }}"

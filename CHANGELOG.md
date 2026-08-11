@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.1 - 2026-08-11
+
+### Fixed
+
+- The server could die silently, leaving a reverse proxy returning 502 and needing a manual restart. Nothing installed an `unhandledRejection` handler, and Node has terminated the process on an unhandled rejection since v15, so any rejection anywhere killed it with no message. Two specific paths reached that: the watchlist scan handlers destructured a payload that could be absent, so a single malformed message took the server down, and the watchlist scheduler discarded its promise on a 60-second timer, which killed the process unattended. Errors are now logged and the server keeps serving.
+- The mobile navigation drawer opened underneath its own backdrop. The blurred layer covered the sidebar, so it showed through the blur and every tap landed on the backdrop instead of a menu item.
+- The Library, Quality profile and API access panels sent no API token, so they returned 401 on any device other than the machine running Elixium — the reason Library failed only on a phone.
+- Packaged binaries served a placeholder page instead of the interface when started from any directory without a `public/` folder beside them, because the web assets were never bundled into the executable.
+- `dist` accumulated every previously built asset, inflating the binaries with hundreds of unused files.
+
 ## v1.1.0 - 2026-08-09
 
 ### Breaking
