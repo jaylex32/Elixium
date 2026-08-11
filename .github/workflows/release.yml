@@ -140,6 +140,13 @@ jobs:
   publish:
     name: Attach to release
     needs: build
+    # `always()` so a runner that never gets scheduled cannot hold the whole
+    # release hostage. macos-13 (Intel) is scarce on the free tier and sat
+    # queued for over ten minutes while the other three were already built —
+    # with the default behaviour nothing would have been attached at all.
+    # Whatever finished is published; a missing platform can be added later by
+    # re-running this workflow with workflow_dispatch.
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -153,6 +160,12 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           ls -la assets
+          # Nothing to attach is a real failure, not a silent no-op.
+          if [ -z "$(ls -A assets 2>/dev/null)" ]; then
+            echo "::error::no binaries were produced"
+            exit 1
+          fi
           # --clobber so re-running replaces assets rather than erroring, and
           # the release itself keeps its notes, URL and creation date.
           gh release upload "$TAG" assets/* --clobber --repo "${{ github.repository }}"
+          echo "attached:"; ls assets
