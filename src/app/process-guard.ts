@@ -47,16 +47,42 @@ export const installProcessGuard = ({onError}: ProcessGuardOptions = {}): void =
   if (installed) return;
   installed = true;
 
+  /*
+   * A rejection is logged and survived, unlike an exception above.
+   *
+   * These come overwhelmingly from background work — the watchlist scheduler,
+   * a scan, a stray upstream call — where nothing is waiting on a response, so
+   * there is no request left hanging. Killing the server for one is what made
+   * a scheduled scan able to take the whole thing down unattended.
+   */
   process.on('unhandledRejection', (reason) => {
-    console.error(signale.error('Unhandled promise rejection — the server is still running'));
+    console.error(signale.error('Unhandled promise rejection — logged, the server keeps running'));
     console.error(signale.note(describe(reason)));
     onError?.('rejection', reason);
   });
 
+  /*
+   * An uncaught exception exits, deliberately.
+   *
+   * Swallowing it and carrying on was worse than the crash it replaced. When
+   * one is thrown while a request is in flight, Express has already returned
+   * and nothing will ever send that response — so the request hangs instead of
+   * failing. Each hung request holds its socket, and behind a reverse proxy
+   * the origin connection pool fills until every endpoint times out, while the
+   * process sits at near-zero CPU looking healthy. Measured directly: with the
+   * handler the request never answered; without it the client got an immediate
+   * reset.
+   *
+   * Exiting restores a fast, honest failure. The original complaint was not
+   * that the process died, it was that it died *silently* — so the fix is the
+   * log line above the exit, not staying alive in an unknown state.
+   */
   process.on('uncaughtException', (error) => {
-    console.error(signale.error('Uncaught exception — the server is still running'));
+    console.error(signale.error('Uncaught exception — exiting so the process does not serve from a broken state'));
     console.error(signale.note(describe(error)));
     onError?.('exception', error);
+    // Give stderr a tick to flush before the process goes away.
+    setTimeout(() => process.exit(1), 100).unref();
   });
 
   /*

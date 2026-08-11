@@ -455,6 +455,24 @@ const setupWebServer = () => {
     });
   });
 
+  /*
+   * Never let a single request hold a socket indefinitely.
+   *
+   * A request that somehow never gets a response — a handler that throws after
+   * returning, an upstream that stalls — otherwise occupies its connection
+   * until the client gives up. Behind a reverse proxy those accumulate in the
+   * origin pool and every endpoint starts timing out while the process sits
+   * near idle, which reads as "the server is dead" and is very hard to tell
+   * apart from a real crash.
+   *
+   * Generous rather than tight, because audio streaming is legitimately long:
+   * these bound a stuck request, they are not a latency budget.
+   */
+  server.requestTimeout = 15 * 60 * 1000;
+  server.headersTimeout = 70 * 1000;
+  // 0 disables Node's 5s default, which is far too short for a paused stream.
+  server.keepAliveTimeout = 65 * 1000;
+
   const port = parseInt(options.port);
   server.listen(port, () => {
     console.log(signale.success(`Web interface available at http://localhost:${port}`));

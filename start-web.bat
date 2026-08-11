@@ -26,6 +26,11 @@ node --version
 
 echo.
 echo Starting web server...
-node dist/src/elixium.js --web --port 1983
+echo (restarts automatically if the process exits; close this window to stop)
 
-pause
+:run
+node --openssl-legacy-provider dist/src/elixium.js --web --port 1983
+echo.
+echo Server exited with code %errorlevel% at %date% %time% - restarting in 3 seconds...
+timeout /t 3 /nobreak >nul
+goto run
