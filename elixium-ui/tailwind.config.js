@@ -62,6 +62,7 @@ export default {
         player: 'var(--z-player)',
         'bottom-nav': 'var(--z-bottom-nav)',
         drawer: 'var(--z-drawer)',
+        'drawer-panel': 'var(--z-drawer-panel)',
         overlay: 'var(--z-overlay)',
         modal: 'var(--z-modal)',
         toast: 'var(--z-toast)',
