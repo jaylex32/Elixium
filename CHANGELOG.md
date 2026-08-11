@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.2 - 2026-08-11
+
+### Fixed
+
+- Opening the Library page took the server offline. Building the library index opened and read every FLAC file synchronously on the main thread, so nothing else was served until it finished — a 5,760-file library blocked every other request for two seconds, and a large one blocks long enough to exceed a reverse proxy's origin timeout (a 502) and Socket.IO's ping timeout (every client disconnected). The same scan ran on every watchlist scan as well. It now yields to the event loop while walking and caches its result for a minute, so worst-case request latency during a scan dropped from 2,020 ms to 143 ms and a repeated Library view returns in 14 ms instead of rescanning.
+- Simultaneous scans — the Library page and the watchlist scheduler firing together — walked the tree twice at once. They now share one walk.
+
 ## v1.1.1 - 2026-08-11
 
 ### Fixed

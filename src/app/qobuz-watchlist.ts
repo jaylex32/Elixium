@@ -214,19 +214,46 @@ const extractPlaylistTrackImage = (tracks: any[]) => {
   return '';
 };
 
+/** Index cached per root, because rebuilding it walks the whole library. */
+const libraryIndexCache = new Map<string, {at: number; index: Map<string, QualityTier>}>();
+
+/** Scans in progress, so simultaneous callers share one walk. */
+const libraryIndexInflight = new Map<string, Promise<Map<string, QualityTier>>>();
+
+/**
+ * How long an index stays fresh.
+ *
+ * Long enough that opening the Library page, switching filters and expanding
+ * artists all reuse one scan; short enough that a finished download shows up
+ * without a restart.
+ */
+const LIBRARY_INDEX_TTL_MS = 60_000;
+
+export const invalidateLibraryIndex = (): void => {
+  libraryIndexCache.clear();
+};
+
 /**
  * Index the library by normalized name, recording the best audio quality found.
  *
- * This used to return names only, which answered "do I have this?" but not
- * "is what I have good enough?" — so a release grabbed as MP3 stayed MP3
- * forever. The quality is read from the files because download history never
- * recorded it, and reading the files is the only thing that works for a
- * library that predates the quality profile.
+ * Returns names only would answer "do I have this?" but not "is what I have
+ * good enough?" — so a release grabbed as MP3 stayed MP3 forever. The quality
+ * is read from the files because download history never recorded it, and
+ * reading the files is the only thing that works for a library that predates
+ * the quality profile.
  *
  * A file's tier is attributed to its own name *and* to every directory above
  * it, so both "Artist/Album/01 Track.flac" and a flat "Album.flac" resolve.
+ *
+ * Asynchronous and cached, which is not incidental. The synchronous version
+ * opened and read every FLAC on the main thread: a 5,760-file library blocked
+ * the event loop for ~2 seconds, during which the server answered nothing —
+ * concurrent requests measured the same 2s latency. On a large library that
+ * runs past a reverse proxy's origin timeout and surfaces as a 502, and past
+ * Socket.IO's ping timeout it drops every connected client. It ran on every
+ * Library page view and on every watchlist scan.
  */
-const collectFilesystemTokens = (rootPath: string) => {
+const scanLibrary = async (rootPath: string): Promise<Map<string, QualityTier>> => {
   const names = new Map<string, QualityTier>();
   if (!rootPath || !existsSync(rootPath)) return names;
 
@@ -267,7 +294,23 @@ const collectFilesystemTokens = (rootPath: string) => {
   };
 
   const stack: Array<{dir: string; ancestors: string[]}> = [{dir: rootPath, ancestors: []}];
+  let filesSinceYield = 0;
+
   while (stack.length > 0) {
+    /*
+     * Hand the event loop back regularly.
+     *
+     * Reading a FLAC header costs ~0.3ms, so a few thousand files add up to
+     * seconds of one uninterruptible task — during which the process answers
+     * nothing. Yielding every 200 files keeps request latency flat while the
+     * scan runs; it makes the scan marginally slower and the server usable,
+     * which is the right trade.
+     */
+    if (filesSinceYield >= 200) {
+      filesSinceYield = 0;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
     const {dir, ancestors} = stack.pop() as {dir: string; ancestors: string[]};
     let entries: ReturnType<typeof readdirSync>;
     try {
@@ -289,6 +332,7 @@ const collectFilesystemTokens = (rootPath: string) => {
       }
 
       const tier = classifyFileQuality(fullPath);
+      filesSinceYield++;
       record(rawName, tier);
       // Promote the tier onto the enclosing album/artist folders too.
       if (tier) for (const ancestor of ancestors) record(ancestor, tier);
@@ -296,6 +340,43 @@ const collectFilesystemTokens = (rootPath: string) => {
   }
 
   return names;
+};
+
+/**
+ * Cached, event-loop-friendly wrapper around the scan.
+ *
+ * The walk itself is still synchronous per directory — that part is fast. What
+ * matters is yielding to the event loop between directories so the server keeps
+ * answering while a large library is indexed, and reusing the result instead of
+ * rescanning on every request.
+ */
+const collectFilesystemTokens = async (rootPath: string): Promise<Map<string, QualityTier>> => {
+  if (!rootPath || !existsSync(rootPath)) return new Map();
+
+  const cached = libraryIndexCache.get(rootPath);
+  if (cached && Date.now() - cached.at < LIBRARY_INDEX_TTL_MS) return cached.index;
+
+  /*
+   * Collapse concurrent scans onto one promise.
+   *
+   * Opening the Library page fires a request while the watchlist scheduler may
+   * already be scanning; without this they would walk the tree twice at once
+   * and double the cost of the thing being optimised.
+   */
+  const inflight = libraryIndexInflight.get(rootPath);
+  if (inflight) return inflight;
+
+  const run = scanLibrary(rootPath)
+    .then((index) => {
+      libraryIndexCache.set(rootPath, {at: Date.now(), index});
+      return index;
+    })
+    .finally(() => {
+      libraryIndexInflight.delete(rootPath);
+    });
+
+  libraryIndexInflight.set(rootPath, run);
+  return run;
 };
 
 const clampNumber = (value: any, min: number, max: number, fallback: number) => {
@@ -495,9 +576,9 @@ export const createQobuzWatchlistService = ({
    * deliberately independent of download history: files moved in by hand still
    * count, and a history entry whose files were deleted does not.
    */
-  const getLibraryOverview = (artistId?: string) => {
+  const getLibraryOverview = async (artistId?: string) => {
     const state = store.getState();
-    const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const libraryTokens = await collectFilesystemTokens(getQobuzPath());
     const profile = readQualityProfile(conf);
 
     const artists = artistId
@@ -806,7 +887,7 @@ export const createQobuzWatchlistService = ({
   const classifyAlbums = async (artist: WatchedArtistRecord, albums: any[]) => {
     const state = store.getState();
     const processedByKey = new Map(state.processedAlbums.map((entry) => [entry.normalizedKey, entry]));
-    const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const libraryTokens = await collectFilesystemTokens(getQobuzPath());
     const qualityProfile = readQualityProfile(conf);
     const nextCandidates: WatchlistCandidateRecord[] = [];
 
@@ -982,7 +1063,7 @@ export const createQobuzWatchlistService = ({
     if (!artist) return {state: getState(), queueItems: []};
 
     const processedByKey = new Map(state.processedTracks.map((entry) => [entry.normalizedKey, entry]));
-    const libraryTokens = collectFilesystemTokens(getQobuzPath());
+    const libraryTokens = await collectFilesystemTokens(getQobuzPath());
     const tracks = await getArtistTracks(artist, options.limit || artist.rules?.trackLimit || 20);
     const queueItems = tracks
       .filter((track: any) => {
