@@ -231,7 +231,13 @@ export const registerLibraryRoutes = ({
         throw new ApiError('service_unavailable', 'Library overview is not available.', 503);
       }
       const artistId = typeof req.query.artistId === 'string' ? req.query.artistId : undefined;
-      return sendData(res, await service.getLibraryOverview(artistId));
+      /*
+       * `?refresh=1` fetches discographies for artists that have none. It is
+       * opt-in because it makes Qobuz requests: a plain page load must stay
+       * fast and offline-safe, so it renders whatever snapshot already exists.
+       */
+      const fetchIfMissing = req.query.refresh === '1' || req.query.refresh === 'true';
+      return sendData(res, await service.getLibraryOverview(artistId, {fetchIfMissing}));
     }),
   );
 

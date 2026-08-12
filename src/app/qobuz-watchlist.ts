@@ -24,6 +24,7 @@ import type {
   WatchlistData,
   WatchedArtistRecord,
   WatchedPlaylistRecord,
+  DiscographyReleaseRecord,
 } from './watchlist-store';
 import {WatchlistStore, type ReleaseType, DEFAULT_RELEASE_TYPES, ALL_RELEASE_TYPES} from './watchlist-store';
 
@@ -253,7 +254,7 @@ export const invalidateLibraryIndex = (): void => {
  * Socket.IO's ping timeout it drops every connected client. It ran on every
  * Library page view and on every watchlist scan.
  */
-const scanLibrary = async (rootPath: string): Promise<Map<string, QualityTier>> => {
+const scanLibrary = async (rootPath: string, probeDepth: boolean): Promise<Map<string, QualityTier>> => {
   const names = new Map<string, QualityTier>();
   if (!rootPath || !existsSync(rootPath)) return names;
 
@@ -331,7 +332,7 @@ const scanLibrary = async (rootPath: string): Promise<Map<string, QualityTier>> 
         continue;
       }
 
-      const tier = classifyFileQuality(fullPath);
+      const tier = classifyFileQuality(fullPath, probeDepth);
       filesSinceYield++;
       record(rawName, tier);
       // Promote the tier onto the enclosing album/artist folders too.
@@ -350,10 +351,11 @@ const scanLibrary = async (rootPath: string): Promise<Map<string, QualityTier>> 
  * answering while a large library is indexed, and reusing the result instead of
  * rescanning on every request.
  */
-const collectFilesystemTokens = async (rootPath: string): Promise<Map<string, QualityTier>> => {
+const collectFilesystemTokens = async (rootPath: string, probeDepth = false): Promise<Map<string, QualityTier>> => {
   if (!rootPath || !existsSync(rootPath)) return new Map();
 
-  const cached = libraryIndexCache.get(rootPath);
+  const cacheKey = rootPath + (probeDepth ? '::deep' : '');
+  const cached = libraryIndexCache.get(cacheKey);
   if (cached && Date.now() - cached.at < LIBRARY_INDEX_TTL_MS) return cached.index;
 
   /*
@@ -363,19 +365,19 @@ const collectFilesystemTokens = async (rootPath: string): Promise<Map<string, Qu
    * already be scanning; without this they would walk the tree twice at once
    * and double the cost of the thing being optimised.
    */
-  const inflight = libraryIndexInflight.get(rootPath);
+  const inflight = libraryIndexInflight.get(cacheKey);
   if (inflight) return inflight;
 
-  const run = scanLibrary(rootPath)
+  const run = scanLibrary(rootPath, probeDepth)
     .then((index) => {
-      libraryIndexCache.set(rootPath, {at: Date.now(), index});
+      libraryIndexCache.set(cacheKey, {at: Date.now(), index});
       return index;
     })
     .finally(() => {
-      libraryIndexInflight.delete(rootPath);
+      libraryIndexInflight.delete(cacheKey);
     });
 
-  libraryIndexInflight.set(rootPath, run);
+  libraryIndexInflight.set(cacheKey, run);
   return run;
 };
 
@@ -576,35 +578,78 @@ export const createQobuzWatchlistService = ({
    * deliberately independent of download history: files moved in by hand still
    * count, and a history entry whose files were deleted does not.
    */
-  const getLibraryOverview = async (artistId?: string) => {
-    const state = store.getState();
-    const libraryTokens = await collectFilesystemTokens(getQobuzPath());
+  /**
+   * Each watched artist's catalogue against what is actually on disk.
+   *
+   * Reads the stored discography, not the candidate queue. Candidates are
+   * "new since the last scan" and are removed the moment a release is queued
+   * or dismissed, so deriving Library from them meant every release vanished
+   * from the page as soon as it was downloaded — the opposite of what a
+   * library view is for, and why it reported "not scanned yet" to anyone who
+   * had actually used the watchlist.
+   *
+   * `fetchIfMissing` performs the Qobuz round trip for artists with no stored
+   * snapshot. It is off for the plain page load so opening Library is always
+   * fast, and on when the client explicitly asks to refresh.
+   */
+  const getLibraryOverview = async (artistId?: string, options: {fetchIfMissing?: boolean} = {}) => {
     const profile = readQualityProfile(conf);
+    // Only a hires cutoff needs 16-bit vs 24-bit told apart, and that is the
+    // only thing that justifies opening every file.
+    const libraryTokens = await collectFilesystemTokens(getQobuzPath(), profile.cutoff === 'hires');
 
-    const artists = artistId
-      ? state.watchedArtists.filter((entry) => String(entry.id) === String(artistId))
-      : state.watchedArtists;
+    const selected = () => {
+      const state = store.getState();
+      return artistId
+        ? state.watchedArtists.filter((entry) => String(entry.id) === String(artistId))
+        : state.watchedArtists;
+    };
 
-    const summaries = artists.map((artist) => {
-      const candidates = state.candidates.filter((c) => String(c.artistId) === String(artist.id));
+    if (options.fetchIfMissing) {
+      for (const artist of selected()) {
+        const existing = store.getState().discographies?.[String(artist.id)];
+        if (existing && existing.releases.length > 0) continue;
+        try {
+          await ensureQobuzSearchReady();
+          recordDiscography(String(artist.id), await fetchAllArtistAlbums(artist));
+        } catch {
+          // One artist failing must not blank the whole page.
+        }
+      }
+    }
 
-      const releases = candidates.map((candidate) => {
-        const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(candidate.title));
+    const state = store.getState();
+    const processedByKey = new Map(state.processedAlbums.map((entry) => [entry.normalizedKey, entry]));
+
+    const summaries = selected().map((artist) => {
+      const snapshot = state.discographies?.[String(artist.id)];
+      const stored = snapshot?.releases ?? [];
+
+      const releases = stored.map((release) => {
+        const normalizedTitle = normalizeWatchlistText(stripEditionMarkers(release.title));
         const haveTier = libraryTokens.get(normalizedTitle) ?? null;
-        const availableTier = bestAvailableTier('qobuz', candidate.rawData);
+        const availableTier = bestAvailableTier('qobuz', {maximum_bit_depth: release.maximumBitDepth});
+
+        /*
+         * Download history is a fallback, not the primary signal. Files on
+         * disk are the truth — something copied in by hand counts, and a
+         * history entry whose files were deleted does not.
+         */
+        const key = buildAlbumKey(artist.name, release.title);
+        const downloaded = processedByKey.get(key)?.reason === 'downloaded';
+        const owned = haveTier !== null || downloaded;
 
         return {
-          id: candidate.id,
-          title: candidate.title,
-          year: candidate.year,
-          image: candidate.image,
-          releaseType: candidate.releaseType ?? 'album',
-          owned: haveTier !== null,
+          id: release.id,
+          title: release.title,
+          year: release.year,
+          image: release.image,
+          releaseType: release.releaseType,
+          owned,
           quality: haveTier,
           availableQuality: availableTier,
-          // Held, but below the tier the profile asks for.
           upgradable: haveTier !== null && !meetsCutoff(haveTier, profile.cutoff) && availableTier !== haveTier,
-          reason: candidate.reason,
+          reason: owned ? 'owned' : 'missing',
         };
       });
 
@@ -617,6 +662,7 @@ export const createQobuzWatchlistService = ({
         owned,
         missing: releases.length - owned,
         upgradable: releases.filter((r) => r.upgradable).length,
+        scannedAt: snapshot?.fetchedAt ?? null,
         releases: releases.sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
       };
     });
@@ -714,6 +760,34 @@ export const createQobuzWatchlistService = ({
 
   const isAlbumOwnedByWatchedArtist = (album: any, artist: WatchedArtistRecord) =>
     String(album?.artist?.id || '') === String(artist.id);
+
+  /**
+   * Persist a trimmed snapshot of an artist's releases.
+   *
+   * Called wherever the discography is already in hand, so keeping Library
+   * populated costs no extra Qobuz requests.
+   */
+  const recordDiscography = (artistId: string, albums: any[]) => {
+    if (!Array.isArray(albums) || albums.length === 0) return;
+
+    const releases: DiscographyReleaseRecord[] = albums.map((album: any) => ({
+      id: String(album?.id ?? ''),
+      title: String(album?.title || album?.name || 'Unknown Album'),
+      year: album?.release_date_original ? new Date(album.release_date_original).getFullYear() : null,
+      image: String(album?.image?.large || album?.image?.small || album?.image?.thumbnail || ''),
+      releaseType: classifyReleaseType(album),
+      maximumBitDepth: Number(album?.maximum_bit_depth) || 16,
+    }));
+
+    store.update((draft) => {
+      if (!draft.discographies) draft.discographies = {};
+      draft.discographies[artistId] = {
+        artistId,
+        fetchedAt: new Date().toISOString(),
+        releases,
+      };
+    });
+  };
 
   const fetchAllArtistAlbums = async (artist: WatchedArtistRecord) => {
     const albumById = new Map<string, any>();
@@ -887,8 +961,8 @@ export const createQobuzWatchlistService = ({
   const classifyAlbums = async (artist: WatchedArtistRecord, albums: any[]) => {
     const state = store.getState();
     const processedByKey = new Map(state.processedAlbums.map((entry) => [entry.normalizedKey, entry]));
-    const libraryTokens = await collectFilesystemTokens(getQobuzPath());
     const qualityProfile = readQualityProfile(conf);
+    const libraryTokens = await collectFilesystemTokens(getQobuzPath(), qualityProfile.cutoff === 'hires');
     const nextCandidates: WatchlistCandidateRecord[] = [];
 
     // Which release kinds the user wants collected at all. Anything else is
@@ -1353,6 +1427,9 @@ export const createQobuzWatchlistService = ({
     try {
       await ensureQobuzSearchReady();
       const albums = await fetchAllArtistAlbums(watchedArtist);
+      // Snapshot the discography while we have it. Library reads this rather
+      // than the candidate queue, which empties as releases are downloaded.
+      recordDiscography(String(watchedArtist.id), albums);
       const candidates = await classifyAlbums(watchedArtist, albums);
 
       const state = store.update((draft) => {

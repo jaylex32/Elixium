@@ -80,10 +80,23 @@ const readFlacBitDepth = (filePath: string): number | null => {
 };
 
 /** Classify one audio file. Returns null for anything that is not audio. */
-export const classifyFileQuality = (filePath: string): QualityTier | null => {
+/**
+ * @param probeDepth Open the file to separate 16-bit from hi-res FLAC.
+ *
+ * Off by default because it is enormously expensive and almost never needed.
+ * Reading a header means an open + read per track: on a large library that is
+ * thousands of syscalls, and over a network share thousands of round trips,
+ * which is what made the Library page appear to hang for tens of seconds.
+ *
+ * The distinction only changes an outcome when the cutoff is `hires` — at any
+ * lower cutoff both 16-bit and 24-bit FLAC already satisfy it, so the extension
+ * alone answers the question. The caller turns this on only for that case.
+ */
+export const classifyFileQuality = (filePath: string, probeDepth = false): QualityTier | null => {
   const lower = filePath.toLowerCase();
 
   if (lower.endsWith('.flac')) {
+    if (!probeDepth) return 'lossless';
     const depth = readFlacBitDepth(filePath);
     // Unknown depth is treated as 16-bit: assuming hi-res would wrongly mark a
     // plain FLAC as already satisfying the highest cutoff.

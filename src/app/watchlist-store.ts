@@ -145,6 +145,39 @@ export interface WatchlistData {
    * buries the actual albums.
    */
   releaseTypes?: ReleaseType[];
+  /**
+   * Each watched artist's full discography, kept for the Library view.
+   *
+   * Library originally derived its rows from `candidates`, which is the
+   * "new since the last scan" queue — and queueing or dismissing a release
+   * removes it from that queue. So the page whose whole purpose is showing
+   * owned versus missing deleted every release the moment you downloaded it,
+   * and read as "not scanned yet" for anyone who had actually used the
+   * watchlist.
+   *
+   * Stored separately so downloading moves a release from missing to owned
+   * instead of removing it from view. Only the fields Library renders are
+   * kept, because the full Qobuz album payloads would multiply the size of
+   * this file for no benefit.
+   */
+  discographies?: Record<string, ArtistDiscographyRecord>;
+}
+
+/** A trimmed snapshot of one artist's releases. */
+export interface ArtistDiscographyRecord {
+  artistId: string;
+  fetchedAt: string;
+  releases: DiscographyReleaseRecord[];
+}
+
+export interface DiscographyReleaseRecord {
+  id: string;
+  title: string;
+  year: number | null;
+  image: string;
+  releaseType: ReleaseType;
+  /** Drives whether Qobuz can offer better than what is on disk. */
+  maximumBitDepth: number;
 }
 
 export type ReleaseType = 'album' | 'ep' | 'single' | 'live' | 'compilation';
@@ -182,6 +215,7 @@ const defaultWatchlistData = (): WatchlistData => ({
   },
   monitorHistory: [],
   releaseTypes: [...DEFAULT_RELEASE_TYPES],
+  discographies: {},
 });
 
 export class WatchlistStore {

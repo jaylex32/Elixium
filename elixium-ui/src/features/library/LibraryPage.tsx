@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Library, Check, Download, ArrowUpCircle, Music2, ChevronDown, ChevronRight} from 'lucide-react';
+import {Library, Check, Download, ArrowUpCircle, Music2, ChevronDown, ChevronRight, RefreshCw} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {apiFetch} from '@/shared/lib/auth-token';
 import {useDownload} from '@/shared/hooks/useDownload';
@@ -109,13 +109,25 @@ export function LibraryPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [fetching, setFetching] = useState(false);
   const {download} = useDownload();
 
-  useEffect(() => {
-    apiFetch('/api/v1/library')
+  /*
+   * A plain load reads the stored snapshot, which is instant and works with no
+   * network. `refresh` additionally pulls discographies for artists that have
+   * none, which costs a Qobuz round trip each and so stays an explicit action.
+   */
+  const load = (refresh = false) => {
+    if (refresh) setFetching(true);
+    return apiFetch(`/api/v1/library${refresh ? '?refresh=1' : ''}`)
       .then((r) => r.json())
       .then((b) => setArtists(b?.ok ? (b.data.artists ?? []) : []))
-      .catch(() => setArtists([]));
+      .catch(() => setArtists([]))
+      .finally(() => setFetching(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   const visible = useMemo(() => {
@@ -176,13 +188,26 @@ export function LibraryPage() {
           </p>
         </div>
 
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter artists"
-          className="w-full sm:w-56"
-          aria-label="Filter artists"
-        />
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter artists"
+            className="w-full sm:w-56"
+            aria-label="Filter artists"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => load(true)}
+            disabled={fetching}
+            title="Fetch catalogues for artists that have none yet"
+            className="shrink-0"
+          >
+            <RefreshCw size={13} className={fetching ? 'animate-spin' : undefined} />
+            {fetching ? 'Fetching…' : 'Refresh'}
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-1 overflow-x-auto rounded-sm border border-border bg-secondary-bg p-1">
@@ -228,7 +253,7 @@ export function LibraryPage() {
                       different from owning none of a known catalogue. */}
                   <p className="mt-0.5 text-xs text-text-muted">
                     {artist.total === 0 ? (
-                      <span className="text-warning">Not scanned yet — refresh this artist in Watchlist</span>
+                      <span className="text-warning">No catalogue yet — press Refresh</span>
                     ) : (
                       <>
                         {artist.owned} of {artist.total} owned
