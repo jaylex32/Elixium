@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.5 - 2026-08-11
+
+### Fixed
+
+- Library showed "not scanned yet" for every artist once you had actually used the watchlist. It derived its rows from the "new since last scan" queue, and queueing or dismissing a release removes it from that queue — so the page meant to show owned versus missing deleted every release the moment it was downloaded. Each artist's catalogue is now stored in its own right, so downloading moves a release from missing to owned instead of erasing it. A Refresh action fills in artists that have no catalogue yet.
+- Opening Library read a header from every FLAC file in the library on every press, which is what made it hang. That was only ever needed to tell 16-bit from 24-bit FLAC, which changes nothing unless the quality cutoff is set to hi-res. On 21,000 files the scan went from 7.8 seconds to 89 milliseconds.
+- An uncaught exception left every in-flight request hanging instead of failing. The guard added in 1.1.2 kept the process alive, but a response already abandoned by the thrown error was never sent, so requests occupied their sockets until the client gave up — behind a reverse proxy the connection pool filled and the whole server appeared dead at near-zero CPU. Uncaught exceptions now log and exit; unhandled rejections, which come from background work with nothing waiting, are still survived.
+- Request, header and keep-alive timeouts are set so no single request can hold a connection indefinitely.
+
+### Changed
+
+- macOS builds are ad-hoc signed on a macOS runner, and archives now include a double-clickable `Start Elixium.command` so the app can be launched from Finder without using a terminal.
+
 ## v1.1.2 - 2026-08-11
 
 ### Fixed

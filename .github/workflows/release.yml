@@ -34,7 +34,13 @@ jobs:
             target: node16-linux-x64
             binary: elixium
             archive: tar.gz
-          - os: macos-13 # Intel runner; macos-latest is Apple Silicon.
+          # Built on the Apple Silicon runner rather than macos-13. The Intel
+          # runners are scarce on the free tier and twice sat queued long
+          # enough that the release shipped without this binary at all. pkg
+          # produces an x86_64 Mach-O from any host, and codesign on macOS
+          # signs either architecture — so the only thing macos-13 was
+          # providing was a queue.
+          - os: macos-latest
             label: macos-x64
             target: node16-macos-x64
             binary: elixium
@@ -103,6 +109,33 @@ jobs:
         run: |
           codesign --force --deep --sign - dist-bin/${{ matrix.binary }}
           codesign --verify --verbose dist-bin/${{ matrix.binary }}
+          # Fail loudly rather than shipping an unsigned arm64 binary, which
+          # the kernel refuses to launch at all.
+          codesign -dv dist-bin/${{ matrix.binary }} 2>&1 | grep -q 'Signature=adhoc' \
+            && echo "ad-hoc signature confirmed" \
+            || { echo "::error::binary is not signed"; exit 1; }
+
+      - name: Add a double-clickable launcher
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        # Most people never open a terminal. A .command file runs on
+        # double-click in Finder, and cd'ing to its own directory means the
+        # config and library land next to the app rather than in the user's
+        # home. It also strips the quarantine flag from the binary beside it,
+        # which is the one step a browser download otherwise forces on them.
+        run: |
+          cat > "dist-bin/Start Elixium.command" <<'LAUNCHER'
+          #!/bin/bash
+          cd "$(dirname "$0")" || exit 1
+          if command -v xattr >/dev/null 2>&1; then
+            xattr -d com.apple.quarantine ./elixium 2>/dev/null || true
+          fi
+          chmod +x ./elixium 2>/dev/null || true
+          echo "Starting Elixium — open http://localhost:3000 in your browser."
+          echo "Close this window to stop the server."
+          ./elixium --web --port 3000
+          LAUNCHER
+          chmod +x "dist-bin/Start Elixium.command"
 
       - name: Archive
         shell: bash
@@ -112,7 +145,7 @@ jobs:
           if [ "${{ matrix.archive }}" = "tar.gz" ]; then
             # tar, not zip: zip does not preserve the Unix executable bit, so
             # unzipped binaries arrived without +x and would not run.
-            tar -czf ../elixium-${{ matrix.label }}.tar.gz ${{ matrix.binary }}
+            tar -czf ../elixium-${{ matrix.label }}.tar.gz ${{ matrix.binary }} "Start Elixium.command"
           else
             7z a ../elixium-${{ matrix.label }}.zip ${{ matrix.binary }}
           fi
