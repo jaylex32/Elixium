@@ -33,7 +33,8 @@ type keysType =
   | 'auth.allowedOrigins'
   | 'qualityProfile'
   | 'qualityProfile.cutoff'
-  | 'qualityProfile.upgradeExisting';
+  | 'qualityProfile.upgradeExisting'
+  | 'port';
 
 type configType = {
   concurrency: number;
@@ -64,6 +65,15 @@ type configType = {
     arl: string;
   };
   tempDirectory: string;
+  /**
+   * Port the web interface listens on.
+   *
+   * Lives here because this is the file people already edit for paths and
+   * credentials; the port was previously reachable only through a --port flag,
+   * which meant a terminal. `--port` and the PORT environment variable still
+   * override it.
+   */
+  port: number;
   qualityProfile: {
     /** Tier at which a release counts as done. */
     cutoff: 'mp3' | 'lossless' | 'hires';
@@ -112,6 +122,7 @@ const defaultConfig: configType = {
     arl: 'c973964816688562722418b5200c1515dffaad15a42643ebf87cc72824a54612ec51c2ad42d566743f9e424c774e98ccae7737770acff59251328e6cd598c7bcac38ca269adf78bfb88ec5bbad6cd800db3c0b88b2af645bb22b99e71de26416',
   },
   tempDirectory: 'temp',
+  port: 3000,
   qualityProfile: {
     // Lossless rather than hi-res: a hi-res default would flag most existing
     // libraries as needing an upgrade the first time a scan runs.

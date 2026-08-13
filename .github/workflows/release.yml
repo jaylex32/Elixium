@@ -123,6 +123,10 @@ jobs:
         # config and library land next to the app rather than in the user's
         # home. It also strips the quarantine flag from the binary beside it,
         # which is the one step a browser download otherwise forces on them.
+        #
+        # No --port here on purpose: the binary resolves it from .env, then
+        # elixium.config.json, then its default. Passing a flag would override
+        # the .env the user just edited, which is the opposite of the point.
         run: |
           cat > "dist-bin/Start Elixium.command" <<'LAUNCHER'
           #!/bin/bash
@@ -131,11 +135,37 @@ jobs:
             xattr -d com.apple.quarantine ./elixium 2>/dev/null || true
           fi
           chmod +x ./elixium 2>/dev/null || true
-          echo "Starting Elixium — open http://localhost:3000 in your browser."
+          echo "Starting Elixium. Edit the .env file beside this one to change the port."
           echo "Close this window to stop the server."
-          ./elixium --web --port 3000
+          ./elixium --web
           LAUNCHER
           chmod +x "dist-bin/Start Elixium.command"
+
+      - name: Add a .env with the port
+        shell: bash
+        # Shipped pre-written and commented so changing the port is editing one
+        # obvious line, not creating a file from instructions.
+        run: |
+          cat > dist-bin/.env <<'ENVFILE'
+          # Port the Elixium web interface listens on.
+          # Change the number, save, then restart Elixium.
+          PORT=3000
+          ENVFILE
+
+      - name: Add a double-clickable launcher (Windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        # Same idea for Windows: double-clicking the .bat avoids asking anyone
+        # to open a command prompt and type flags.
+        run: |
+          cat > "dist-bin/Start Elixium.bat" <<'LAUNCHER'
+          @echo off
+          cd /d "%~dp0"
+          echo Starting Elixium. Edit the .env file beside this one to change the port.
+          echo Close this window to stop the server.
+          elixium.exe --web
+          pause
+          LAUNCHER
 
       - name: Archive
         shell: bash
@@ -145,9 +175,9 @@ jobs:
           if [ "${{ matrix.archive }}" = "tar.gz" ]; then
             # tar, not zip: zip does not preserve the Unix executable bit, so
             # unzipped binaries arrived without +x and would not run.
-            tar -czf ../elixium-${{ matrix.label }}.tar.gz ${{ matrix.binary }} "Start Elixium.command"
+            tar -czf ../elixium-${{ matrix.label }}.tar.gz ${{ matrix.binary }} "Start Elixium.command" .env
           else
-            7z a ../elixium-${{ matrix.label }}.zip ${{ matrix.binary }}
+            7z a ../elixium-${{ matrix.label }}.zip ${{ matrix.binary }} "Start Elixium.bat" .env
           fi
 
       - name: Verify the interface is bundled

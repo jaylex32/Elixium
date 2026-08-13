@@ -47,12 +47,28 @@ import {getDefaultWebShell} from './app/web-shell';
 import type {CatalogService, CatalogType, SearchResult} from './app/interactive-types';
 import * as fs from 'fs';
 import * as path from 'path';
+import dotenv from 'dotenv';
 
 // Web server imports
 import express from 'express';
 import {createServer} from 'http';
 import {Server as SocketIOServer} from 'socket.io';
 import cors from 'cors';
+
+/*
+ * Load a .env sitting next to the app before anything reads process.env.
+ *
+ * This is the file people expect to find a port in, and it is the one thing a
+ * non-technical user can be told to create without explaining flags or JSON.
+ * `path` is resolved against the executable's own directory rather than the
+ * shell's working directory, so double-clicking the launcher from Finder or
+ * Explorer picks it up.
+ *
+ * Existing environment variables win — a value set by a container or a service
+ * manager should not be overridden by a file that shipped in the archive.
+ */
+dotenv.config({path: path.join(path.dirname(process.execPath), '.env'), override: false});
+dotenv.config({override: false});
 
 installProcessGuard();
 ensureLegacyNodeOptions();
@@ -473,7 +489,22 @@ const setupWebServer = () => {
   // 0 disables Node's 5s default, which is far too short for a paused stream.
   server.keepAliveTimeout = 65 * 1000;
 
-  const port = parseInt(options.port);
+  /*
+   * Port resolution, most explicit first.
+   *
+   *   --port            someone typed it, so it wins
+   *   PORT              the usual convention for containers and hosts
+   *   config `port`     the file people already edit for paths and credentials
+   *   3000              fallback
+   *
+   * commander gives --port a default, so the flag alone cannot tell "the user
+   * asked for 3000" from "nobody asked". getOptionValueSource distinguishes
+   * them; without it the config value could never take effect.
+   */
+  const portFromFlag = cmd.getOptionValueSource?.('port') === 'cli' ? Number(options.port) : NaN;
+  const portFromEnv = Number(process.env.PORT);
+  const portFromConfig = Number(conf.get('port'));
+  const port = [portFromFlag, portFromEnv, portFromConfig].find((value) => Number.isFinite(value) && value > 0) ?? 3000;
   server.listen(port, () => {
     console.log(signale.success(`Web interface available at http://localhost:${port}`));
     console.log(signale.info('Open this URL in your browser to use the GUI'));
