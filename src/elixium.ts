@@ -505,10 +505,25 @@ const setupWebServer = () => {
   const portFromEnv = Number(process.env.PORT);
   const portFromConfig = Number(conf.get('port'));
   const port = [portFromFlag, portFromEnv, portFromConfig].find((value) => Number.isFinite(value) && value > 0) ?? 3000;
-  server.listen(port, () => {
+  /*
+   * Bind address. Unset means every interface, which is what a LAN server or
+   * one behind a reverse proxy needs, so the default is unchanged. Passing
+   * 127.0.0.1 makes the server genuinely local-only — the desktop app does
+   * that, because an app on someone's laptop has no business listening on
+   * their network.
+   */
+  const host = typeof options.host === 'string' && options.host.trim() ? options.host.trim() : undefined;
+
+  const onListening = () => {
     console.log(signale.success(`Web interface available at http://localhost:${port}`));
+    if (host) {
+      console.log(signale.info(`Bound to ${host} only — not reachable from other devices`));
+    }
     console.log(signale.info('Open this URL in your browser to use the GUI'));
-  });
+  };
+
+  if (host) server.listen(port, host, onListening);
+  else server.listen(port, onListening);
 
   return server;
 };

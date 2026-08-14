@@ -95,7 +95,14 @@ export const buildCommand = () => {
     .option('-cp, --create-playlist', 'Force create a playlist file for non playlists')
     .option('-b, --qobuz', 'Experimental Qobuz support')
     .option('-w, --web', 'Start web interface', false)
-    .option('-p, --port <port>', 'Web interface port', '3000');
+    .option('-p, --port <port>', 'Web interface port', '3000')
+    /*
+     * Interface to bind. Unset keeps the previous behaviour of listening on
+     * every interface, which is what a server on a LAN or behind a proxy
+     * needs. The desktop app passes 127.0.0.1 so it is genuinely local-only
+     * rather than quietly exposing the user's downloader to their network.
+     */
+    .option('-H, --host <host>', 'Interface to bind (e.g. 127.0.0.1 for local-only)');
 
   cmd.showHelpAfterError('(run with --help for usage and examples)');
   cmd.configureOutput({
