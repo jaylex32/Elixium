@@ -6,7 +6,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder && node check-no-secrets.js",
+    "check:secrets": "node check-no-secrets.js"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -17,21 +18,33 @@
     "productName": "Elixium",
     "files": [
       "main.js",
-      "package.json"
+      "package.json",
+      "!**/elixium.config.json",
+      "!**/elixium.watchlist.json",
+      "!**/.env",
+      "!**/*.log"
     ],
     "extraResources": [
       {
         "from": "../dist/src",
         "to": "server",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/elixium.config.json",
+          "!**/elixium.watchlist.json",
+          "!**/.env",
+          "!**/*.log"
         ]
       },
       {
         "from": "../node_modules",
         "to": "server/node_modules",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/elixium.config.json",
+          "!**/elixium.watchlist.json",
+          "!**/.env",
+          "!**/*.log"
         ]
       },
       {
