@@ -199,32 +199,70 @@ interface DownloadItem {
   rawData: any;
 }
 
-// Helper function to validate and normalize quality based on service
-const normalizeQuality = (quality: string, service: string): string => {
-  if (service === 'deezer') {
-    const validDeezerQualities = ['128', '320', 'flac'];
-    if (!validDeezerQualities.includes(quality)) {
-      console.log(signale.warn(`Invalid Deezer quality "${quality}". Using 320 as default.`));
-      return '320';
-    }
-    return quality;
-  } else if (service === 'qobuz') {
-    const validQobuzQualities = ['320kbps', '44khz', '96khz', '192khz'];
-    if (!validQobuzQualities.includes(quality)) {
-      // Try to map common quality names to Qobuz format
-      const qualityMap: {[key: string]: string} = {
-        '320': '320kbps',
-        cd: '44khz',
-        hifi: '96khz',
-        studio: '192khz',
-        flac: '44khz',
-      };
+/**
+ * Accept the quality names the clients actually send.
+ *
+ * The web UI stores Deezer quality as MP3_128 / MP3_320 / FLAC and Qobuz as
+ * 5 / 6 / 7 / 27 — the identifiers each service's own API uses — while this
+ * function only recognised 128 / 320 / flac and 320kbps / 44khz / 96khz /
+ * 192khz. Every value the UI saved was therefore rejected and silently
+ * replaced with the lowest common default: 320 for Deezer, 320kbps for Qobuz.
+ *
+ * The effect was invisible on a paid Deezer account, where 320 always
+ * succeeds, so the quality selector appeared to work while doing nothing. It
+ * was not invisible on a free account: 320 is not licensed there, every track
+ * failed, and a download finished with "0 files saved". Qobuz was quietly
+ * worse — hi-res selections were downloaded as MP3.
+ *
+ * Aliases are mapped rather than rejected, and anything genuinely unknown
+ * still falls back, so old configs keep working without a migration.
+ */
+const DEEZER_QUALITY_ALIASES: Record<string, string> = {
+  '128': '128',
+  mp3_128: '128',
+  '128kbps': '128',
+  '320': '320',
+  mp3_320: '320',
+  '320kbps': '320',
+  flac: 'flac',
+  lossless: 'flac',
+};
 
-      const normalizedQuality = qualityMap[quality.toLowerCase()] || '320kbps';
-      console.log(signale.warn(`Invalid Qobuz quality "${quality}". Using ${normalizedQuality} as default.`));
-      return normalizedQuality;
-    }
-    return quality;
+const QOBUZ_QUALITY_ALIASES: Record<string, string> = {
+  '5': '320kbps',
+  '320': '320kbps',
+  '320kbps': '320kbps',
+  mp3: '320kbps',
+  '6': '44khz',
+  '44khz': '44khz',
+  cd: '44khz',
+  flac: '44khz',
+  '7': '96khz',
+  '96khz': '96khz',
+  hifi: '96khz',
+  '27': '192khz',
+  '192khz': '192khz',
+  studio: '192khz',
+  hires: '192khz',
+};
+
+const normalizeQuality = (quality: string, service: string): string => {
+  const key = String(quality ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (service === 'deezer') {
+    const mapped = DEEZER_QUALITY_ALIASES[key];
+    if (mapped) return mapped;
+    console.log(signale.warn(`Unrecognised Deezer quality "${quality}". Using 320.`));
+    return '320';
+  }
+
+  if (service === 'qobuz') {
+    const mapped = QOBUZ_QUALITY_ALIASES[key];
+    if (mapped) return mapped;
+    console.log(signale.warn(`Unrecognised Qobuz quality "${quality}". Using 320kbps.`));
+    return '320kbps';
   }
 
   return quality;

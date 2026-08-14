@@ -3,3 +3,9 @@
 /binaries
 /public/assets
 /elixium-ui
+
+# Electron desktop shell: packaged output and its dependencies are build
+# artifacts, not source. Linting them broke `npm run build`, whose prebuild
+# step runs eslint, so dist silently stopped being rebuilt.
+desktop/out
+desktop/node_modules
