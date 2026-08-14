@@ -33,6 +33,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "../package.json",
+        "to": "package.json"
       }
     ],
     "directories": {
