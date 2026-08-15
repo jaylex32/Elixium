@@ -313,13 +313,24 @@ jobs:
         run: |
           mkdir -p desktop-dist
           find desktop/out -maxdepth 1 -type f \
-            \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \) \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.zip' -o -name '*.tar.gz' \) \
             -exec cp {} desktop-dist/ \;
           cd desktop-dist
           for f in *; do
             [ -e "$f" ] || continue
-            ext="${f##*.}"
-            mv "$f" "Elixium-Desktop-${{ matrix.label }}.$ext"
+            # Two-part extension for tarballs, and keep the installer and the
+            # portable build apart: both are .exe on Windows and one would
+            # otherwise overwrite the other.
+            case "$f" in
+              *.tar.gz) ext="tar.gz" ;;
+              *)        ext="${f##*.}" ;;
+            esac
+            case "$f" in
+              *[Pp]ortable*) kind="portable" ;;
+              *[Ss]etup*)    kind="setup" ;;
+              *)             kind="app" ;;
+            esac
+            mv "$f" "Elixium-Desktop-${{ matrix.label }}-$kind.$ext"
           done
           ls -la
 
