@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Music2 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
-import { useSearchPages } from '@/shared/lib/api'
+import { useSearchPages, useCharts } from '@/shared/lib/api'
 import { InfiniteSentinel } from '@/shared/components/InfiniteSentinel'
 import { extractCover } from '@/shared/lib/cover'
 import { useAppStore } from '@/store/app-store'
@@ -11,19 +11,27 @@ import { AlbumModal } from '@/shared/components/AlbumModal'
 import { CardSkeleton } from '@/shared/components/ui/Skeleton'
 import type { Service } from '@/types'
 
+/*
+ * Deezer genre ids, not search terms.
+ *
+ * These rows used to run a text search for the genre name, so "Pop" returned
+ * every album *called* Pop — U2, Queen, a Katzenjammer record — rather than
+ * pop music. Deezer's chart endpoint takes a genre id and returns the actual
+ * genre chart.
+ */
 const GENRES = [
-  { id: 'pop',        label: 'Pop',         color: '#e879f9', icon: '🎵', query: 'pop'          },
-  { id: 'rock',       label: 'Rock',         color: '#fb923c', icon: '🎸', query: 'rock'         },
-  { id: 'hiphop',     label: 'Hip-Hop',      color: '#facc15', icon: '🎤', query: 'hip hop'      },
-  { id: 'electronic', label: 'Electronic',   color: '#38bdf8', icon: '🎛️', query: 'electronic'   },
-  { id: 'jazz',       label: 'Jazz',         color: '#4ade80', icon: '🎷', query: 'jazz'         },
-  { id: 'classical',  label: 'Classical',    color: '#c084fc', icon: '🎻', query: 'classical'    },
-  { id: 'rnb',        label: 'R&B / Soul',   color: '#f87171', icon: '🎶', query: 'r&b soul'     },
-  { id: 'country',    label: 'Country',      color: '#fbbf24', icon: '🤠', query: 'country'      },
-  { id: 'latin',      label: 'Latin',        color: '#34d399', icon: '💃', query: 'latin'        },
-  { id: 'metal',      label: 'Metal',        color: '#94a3b8', icon: '🤘', query: 'metal'        },
-  { id: 'blues',      label: 'Blues',        color: '#60a5fa', icon: '🎹', query: 'blues'        },
-  { id: 'folk',       label: 'Folk',         color: '#a3e635', icon: '🪕', query: 'folk acoustic' },
+  { id: 'pop',        label: 'Pop',         color: '#e879f9', icon: '🎵', query: 'pop'          , deezerGenreId: '132' },
+  { id: 'rock',       label: 'Rock',         color: '#fb923c', icon: '🎸', query: 'rock'         , deezerGenreId: '152' },
+  { id: 'hiphop',     label: 'Hip-Hop',      color: '#facc15', icon: '🎤', query: 'hip hop'      , deezerGenreId: '116' },
+  { id: 'electronic', label: 'Electronic',   color: '#38bdf8', icon: '🎛️', query: 'electronic'   , deezerGenreId: '106' },
+  { id: 'jazz',       label: 'Jazz',         color: '#4ade80', icon: '🎷', query: 'jazz'         , deezerGenreId: '129' },
+  { id: 'classical',  label: 'Classical',    color: '#c084fc', icon: '🎻', query: 'classical'    , deezerGenreId: '98' },
+  { id: 'rnb',        label: 'R&B / Soul',   color: '#f87171', icon: '🎶', query: 'r&b soul'     , deezerGenreId: '165' },
+  { id: 'country',    label: 'Country',      color: '#fbbf24', icon: '🤠', query: 'country'      , deezerGenreId: '84' },
+  { id: 'latin',      label: 'Latin',        color: '#34d399', icon: '💃', query: 'latin'        , deezerGenreId: '197' },
+  { id: 'metal',      label: 'Metal',        color: '#94a3b8', icon: '🤘', query: 'metal'        , deezerGenreId: '464' },
+  { id: 'blues',      label: 'Blues',        color: '#60a5fa', icon: '🎹', query: 'blues'        , deezerGenreId: '153' },
+  { id: 'folk',       label: 'Folk',         color: '#a3e635', icon: '🪕', query: 'folk acoustic' , deezerGenreId: '466' },
 ]
 
 function GenreResults({
@@ -33,16 +41,19 @@ function GenreResults({
   genre: (typeof GENRES)[number]
   service: Service
 }) {
-  const {
-    data: pages,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useSearchPages(genre.query, service, 'album')
+  /*
+   * Deezer has a real genre chart; Qobuz exposes none, so it keeps the name
+   * search. Only one of these can be right, and treating a genre as a search
+   * term is what produced a "Pop" row full of albums *titled* Pop.
+   */
+  const useChart = service === 'deezer' && Boolean(genre.deezerGenreId)
 
-  // A genre had exactly one page of albums and no way to reach the rest.
-  const data = pages?.pages.flat() ?? []
+  const chart = useCharts(service, genre.deezerGenreId ?? '0', 'albums')
+  const search = useSearchPages(genre.query, service, 'album')
+  const source = useChart ? chart : search
+
+  const {isLoading, fetchNextPage, hasNextPage, isFetchingNextPage} = source
+  const data = source.data?.pages.flat() ?? []
   const { download } = useDownload()
   const [selectedAlbum, setSelectedAlbum] = useState<(AlbumCardData & { service: Service }) | null>(null)
 

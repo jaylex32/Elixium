@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState, useMemo} from 'react';
 import {
   TrendingUp,
   Sparkles,
@@ -322,9 +322,20 @@ export function HomePage() {
    * long as the service left it there. The seed is fixed per mount so the tile
    * does not shuffle under the cursor, and changes when the page is revisited.
    */
-  const [heroSeed] = useState(() => Math.random());
-  const featured =
-    heroPool.length > 0 ? toAlbum(heroPool[Math.floor(heroSeed * Math.min(heroPool.length, 12))], service) : null;
+  /*
+   * Rotates on a clock, not at random.
+   *
+   * A per-mount random seed only changed when the page remounted, which is
+   * rare in normal use, so the tile still looked frozen. Bucketing the clock
+   * moves the pick on its own every few minutes, holds it steady while
+   * someone is looking, and can actually be checked rather than hoped for.
+   */
+  const heroIndex = useMemo(() => {
+    const pool = Math.min(heroPool.length, 12);
+    return pool > 0 ? Math.floor(Date.now() / (3 * 60 * 1000)) % pool : 0;
+  }, [heroPool.length]);
+
+  const featured = heroPool.length > 0 ? toAlbum(heroPool[heroIndex], service) : null;
 
   const sections = [...COMMON_SECTIONS, ...(SERVICE_SECTIONS[service] ?? [])];
 
