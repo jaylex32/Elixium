@@ -40,7 +40,6 @@ interface Section {
 
 /** Rows both services can serve. */
 const COMMON_SECTIONS: Section[] = [
-  {type: 'new-releases', title: 'New Releases', subtitle: 'Fresh this week', icon: Sparkles},
   {type: 'trending-albums', title: 'Trending', subtitle: 'What people are playing', icon: TrendingUp},
   {type: 'popular-playlists', title: 'Popular Playlists', subtitle: 'Curated collections', icon: ListMusic},
   {type: 'top-artists', title: 'Top Artists', subtitle: 'Names worth following', icon: Users},
@@ -53,6 +52,12 @@ const COMMON_SECTIONS: Section[] = [
  */
 const SERVICE_SECTIONS: Record<string, Section[]> = {
   qobuz: [
+    // Qobuz publishes a real new-release feed (album/getFeatured,
+    // type=new-releases-full). Deezer no longer does: its
+    // editorial/0/releases endpoint returns an empty list, and the fallback
+    // standing in for it was a text search for '2025' — so Deezer gets
+    // Trending instead, which is real chart data.
+  {type: 'new-releases', title: 'New Releases', subtitle: 'Fresh this week', icon: Sparkles},
     {type: 'qobuzissims', title: 'Qobuzissims', subtitle: "Qobuz's own selection", icon: Award},
     {type: 'best-sellers', title: 'Best Sellers', subtitle: 'Most bought on Qobuz', icon: Flame},
     {type: 'most-streamed', title: 'Most Streamed', subtitle: 'Played the most right now', icon: Headphones},
@@ -125,7 +130,11 @@ function Hero({
         </button>
 
         <div className="min-w-0 flex-1 text-center sm:text-left">
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Featured release</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">
+            {/* Qobuz's feed really is a curated new release; Deezer's is chart
+                data, and calling that "featured" was untrue on both words. */}
+            {service === 'deezer' ? 'Trending now' : 'Featured release'}
+          </p>
           <h2 className="mt-1.5 text-display-sm font-bold text-text-primary">{item.title}</h2>
           <p className="mt-1 truncate text-sm text-text-secondary">{item.artist}</p>
           {item.year && <p className="mt-0.5 text-xs text-text-muted">{item.year}</p>}
@@ -171,7 +180,7 @@ function DiscoverySection({
   subtitle,
   icon: Icon,
   service,
-  skip = 0,
+  excludeId,
   onSelect,
 }: {
   type: string;
@@ -179,14 +188,15 @@ function DiscoverySection({
   subtitle: string;
   icon: React.ElementType;
   service: Service;
-  skip?: number;
+  /** Id already shown by the hero, so the row does not repeat it. */
+  excludeId?: string;
   onSelect: (album: AlbumCardData) => void;
 }) {
   const {data = [], isLoading, isError, refetch} = useDiscovery(service, type);
   const {download} = useDownload();
   const [expanded, setExpanded] = useState(false);
 
-  const items = data.slice(skip).map((item) => toAlbum(item, service));
+  const items = data.filter((item) => item.id !== excludeId).map((item) => toAlbum(item, service));
 
   /*
    * Artist feeds return people, not releases. Rendering them as album cards
@@ -294,8 +304,27 @@ export function HomePage() {
 
   // The hero borrows the first new release, so the row below skips it rather
   // than showing the same album twice.
-  const {data: newReleases = []} = useDiscovery(service, 'new-releases');
-  const featured = newReleases.length > 0 ? toAlbum(newReleases[0], service) : null;
+  /*
+   * What the hero shows, per service.
+   *
+   * Qobuz has a genuine new-release feed. Deezer's went away — its endpoint
+   * returns an empty list and the fallback behind it was a literal search for
+   * "2025", so the hero was whatever matched that string, identically, every
+   * time. Deezer gets its real chart data instead, labelled for what it is.
+   */
+  const heroType = service === 'deezer' ? 'trending-albums' : 'new-releases';
+  const {data: heroPool = []} = useDiscovery(service, heroType);
+
+  /*
+   * Rotate rather than always taking index 0.
+   *
+   * Pinning the first item meant one album out of hundreds, unchanged for as
+   * long as the service left it there. The seed is fixed per mount so the tile
+   * does not shuffle under the cursor, and changes when the page is revisited.
+   */
+  const [heroSeed] = useState(() => Math.random());
+  const featured =
+    heroPool.length > 0 ? toAlbum(heroPool[Math.floor(heroSeed * Math.min(heroPool.length, 12))], service) : null;
 
   const sections = [...COMMON_SECTIONS, ...(SERVICE_SECTIONS[service] ?? [])];
 
@@ -319,12 +348,12 @@ export function HomePage() {
         ))}
       </div>
 
-      {sections.map((section, index) => (
+      {sections.map((section) => (
         <DiscoverySection
           key={`${section.type}-${service}`}
           {...section}
           service={service}
-          skip={index === 0 && featured ? 1 : 0}
+          excludeId={featured?.id}
           onSelect={(album) => setSelected({...album, service})}
         />
       ))}
