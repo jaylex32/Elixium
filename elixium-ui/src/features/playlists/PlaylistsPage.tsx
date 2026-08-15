@@ -1,7 +1,7 @@
 import {useState, useDeferredValue} from 'react';
 import {ListMusic, Search, X, Eye} from 'lucide-react';
 import {toast} from 'sonner';
-import {useSearch} from '@/shared/lib/api';
+import {usePlaylistSearch, type PlaylistSearchService} from '@/shared/lib/api';
 import {extractCover} from '@/shared/lib/cover';
 import {useAppStore} from '@/store/app-store';
 import {useWatchlistStore} from '@/store/watchlist-store';
@@ -10,6 +10,9 @@ import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
 import {AlbumModal} from '@/shared/components/AlbumModal';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {Input} from '@/shared/components/ui/Input';
+import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
+import {getSocket} from '@/shared/lib/socket';
+import {cn} from '@/shared/lib/utils';
 import type {Service} from '@/types';
 
 type SelectedPlaylist = AlbumCardData & {service: Service};
@@ -23,12 +26,30 @@ export function PlaylistsPage() {
   const watchedPlaylists = useWatchlistStore((s) => s.watchedPlaylists);
 
   const [query, setQuery] = useState('');
+  /*
+   * Which catalogue to search, independent of the download service.
+   *
+   * Spotify is here because its playlist curation is the reason people go
+   * looking: nothing is fetched from Spotify, the converter resolves the
+   * playlist to Deezer or Qobuz tracks. Tidal is absent because its search
+   * needs an authenticated session — a Tidal link still works via URL download
+   * and the playlist watcher.
+   */
+  const [searchService, setSearchService] = useState<PlaylistSearchService>(service);
   const [selected, setSelected] = useState<SelectedPlaylist | null>(null);
 
   // Keeps typing responsive: the input updates every keystroke while the
   // query that drives fetching lags behind under load.
   const deferredQuery = useDeferredValue(query);
-  const {data = [], isLoading, isError} = useSearch(deferredQuery, service, 'playlist');
+  const {
+    data: pages,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = usePlaylistSearch(searchService, deferredQuery);
+  const data = pages?.pages.flat() ?? [];
 
   const hasQuery = deferredQuery.trim().length >= 2;
 
@@ -38,7 +59,8 @@ export function PlaylistsPage() {
     <div className="animate-fade-in space-y-6 p-4 sm:space-y-8 sm:p-6">
       <div className="space-y-3">
         <p className="text-sm text-text-muted">
-          Search playlists on {service === 'deezer' ? 'Deezer' : 'Qobuz'}, or open one you already follow.
+          Search playlists on Deezer, Qobuz or Spotify, or open one you already follow. A Spotify playlist is
+          converted to {service === 'deezer' ? 'Deezer' : 'Qobuz'} tracks when downloaded.
         </p>
 
         <div className="relative max-w-xl">
@@ -59,6 +81,24 @@ export function PlaylistsPage() {
               <X size={14} />
             </button>
           )}
+        </div>
+
+        <div className="scroll-row flex w-fit gap-1 rounded-sm border border-border bg-secondary-bg p-1">
+          {(['deezer', 'qobuz', 'spotify'] as PlaylistSearchService[]).map((id) => (
+            <button
+              key={id}
+              onClick={() => setSearchService(id)}
+              aria-pressed={searchService === id}
+              className={cn(
+                'min-h-9 shrink-0 rounded-xs px-3 text-xs font-medium capitalize transition-colors',
+                searchService === id
+                  ? 'bg-card-bg text-text-primary shadow-sm'
+                  : 'text-text-muted hover:text-text-secondary',
+              )}
+            >
+              {id}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -154,28 +194,61 @@ export function PlaylistsPage() {
                   id: r.id,
                   title: r.title,
                   artist: r.artist,
-                  cover: extractCover(r.rawData, service),
+                  cover: extractCover(r.rawData, searchService as Service),
                   type: 'playlist',
                 };
+
+                /* Only a playlist from the active service can be expanded:
+                 * /item-tracks resolves ids against that service. Anything
+                 * else downloads by URL, which is what the converter takes. */
+                const sameService = searchService === service;
+
                 return (
-                  <AlbumCard
-                    key={r.id}
-                    album={card}
-                    onClick={() => openPlaylist(card)}
-                    onDownload={() =>
-                      download({
-                        id: r.id,
-                        type: 'playlist',
-                        title: r.title,
-                        artist: r.artist,
-                        cover: card.cover,
-                        service,
-                      })
-                    }
-                  />
+                  <div key={`${r.sourceService ?? searchService}-${r.id}`} className="group relative">
+                    <AlbumCard
+                      album={card}
+                      onClick={sameService ? () => openPlaylist(card) : undefined}
+                      onDownload={() =>
+                        download({
+                          id: r.id,
+                          url: r.url,
+                          type: 'playlist',
+                          title: r.title,
+                          artist: r.artist,
+                          cover: card.cover,
+                          service,
+                        })
+                      }
+                    />
+                    {/* Watching takes the URL — the only identifier that
+                        means anything across services. */}
+                    {r.url && (
+                      <button
+                        onClick={() => {
+                          getSocket().emit('addWatchedPlaylist', {url: r.url});
+                          toast.info(`Watching ${r.title}`, {
+                            description: 'New tracks will appear in your watchlist.',
+                          });
+                        }}
+                        aria-label={`Watch ${r.title}`}
+                        title="Watch for new tracks"
+                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-black/80 lg:opacity-0 lg:group-hover:opacity-100"
+                      >
+                        <Eye size={14} />
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
+          )}
+
+          {!isLoading && !isError && data.length > 0 && (
+            <InfiniteSentinel
+              hasMore={Boolean(hasNextPage)}
+              loading={isFetchingNextPage}
+              onLoadMore={fetchNextPage}
+            />
           )}
         </section>
       )}

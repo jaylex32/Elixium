@@ -282,3 +282,115 @@ export function useVerifyService() {
     },
   });
 }
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+export type ChartKind = 'tracks' | 'albums' | 'artists' | 'playlists';
+export interface ChartGenre {
+  id: string;
+  name: string;
+  picture?: string;
+}
+
+export function useChartGenres(service: Service) {
+  return useQuery<ChartGenre[]>({
+    queryKey: ['chart-genres', service],
+    queryFn: async () => (await http.get('/charts/genres', {params: {service}})).data as ChartGenre[],
+    staleTime: 1000 * 60 * 60,
+  });
+}
+
+const CHART_PAGE_SIZE = 50;
+
+export function useCharts(service: Service, genreId: string, kind: ChartKind) {
+  return useInfiniteQuery<RawSearchResult[]>({
+    queryKey: ['charts', service, genreId, kind],
+    initialPageParam: 0,
+    queryFn: async ({pageParam}) => {
+      const res = await http.get('/charts', {
+        params: {service, genreId, kind, limit: CHART_PAGE_SIZE, offset: pageParam as number},
+      });
+      return (Array.isArray(res.data) ? res.data : []) as RawSearchResult[];
+    },
+    getNextPageParam: (last, all) => (last.length < CHART_PAGE_SIZE ? undefined : all.length * CHART_PAGE_SIZE),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+// ── Playlist search across services ──────────────────────────────────────────
+export type PlaylistSearchService = 'deezer' | 'qobuz' | 'spotify';
+
+/** A playlist result carries the share URL, which is what downloads take. */
+export interface PlaylistResult extends RawSearchResult {
+  url?: string;
+  sourceService?: PlaylistSearchService;
+}
+
+export function usePlaylistSearch(service: PlaylistSearchService, query: string) {
+  return useInfiniteQuery<PlaylistResult[]>({
+    queryKey: ['playlist-search', service, query],
+    initialPageParam: 0,
+    queryFn: async ({pageParam}) => {
+      if (query.trim().length < 2) return [];
+      const res = await http.get('/playlist-search', {
+        params: {service, query: query.trim(), limit: 30, offset: pageParam as number},
+      });
+      return (Array.isArray(res.data) ? res.data : []) as PlaylistResult[];
+    },
+    getNextPageParam: (last, all) => (last.length < 30 ? undefined : all.length * 30),
+    enabled: query.trim().length >= 2,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+// ── Favorites ────────────────────────────────────────────────────────────────
+export interface FavoriteRecord {
+  id: string;
+  type: 'track' | 'album' | 'artist' | 'playlist';
+  service: Service;
+  title: string;
+  artist?: string;
+  cover?: string;
+  duration?: string;
+  addedAt: number;
+}
+
+export function useFavorites(type?: FavoriteRecord['type']) {
+  return useQuery<FavoriteRecord[]>({
+    queryKey: ['favorites', type ?? 'all'],
+    queryFn: async () => (await http.get('/favorites', {params: {type}})).data as FavoriteRecord[],
+    staleTime: 1000 * 10,
+  });
+}
+
+export function useToggleFavorite() {
+  return useMutation({
+    mutationFn: async (record: Omit<FavoriteRecord, 'addedAt'>) =>
+      (await http.post('/favorites/toggle', record)).data as {favorited: boolean; favorites: FavoriteRecord[]},
+  });
+}
+
+export function useClearFavorites() {
+  return useMutation({mutationFn: async () => (await http.delete('/favorites')).data as FavoriteRecord[]});
+}
+
+// ── Server log ───────────────────────────────────────────────────────────────
+export interface LogEntry {
+  seq: number;
+  at: number;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export function useLogBacklog() {
+  return useQuery<LogEntry[]>({
+    queryKey: ['logs'],
+    queryFn: async () => (await http.get('/logs')).data as LogEntry[],
+    // The socket delivers new lines; this is only the history on first paint.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useClearLogs() {
+  return useMutation({mutationFn: async () => (await http.delete('/logs')).data as LogEntry[]});
+}

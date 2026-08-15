@@ -4,6 +4,10 @@ import got from 'got';
 import AdmZip from 'adm-zip';
 import type {SearchResult} from './interactive-types';
 import type {ArtistContent, ArtistContentKind} from './artist-content';
+import type {Charts, ChartKind} from './charts';
+import type {FavoritesStore, FavoriteType} from './favorites-store';
+import type {PlaylistSearch, PlaylistSearchService} from './playlist-search';
+import {getLogEntries, clearLogEntries} from './log-buffer';
 
 interface WebRestDependencies {
   app: Express;
@@ -11,6 +15,9 @@ interface WebRestDependencies {
   deezer: any;
   qobuz: any;
   artistContent: ArtistContent;
+  charts: Charts;
+  favorites: FavoritesStore;
+  playlistSearch: PlaylistSearch;
   performDeezerSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
   performQobuzSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
   getDiscoveryContentRest: (service: string, type: string, limit: number) => Promise<any[]>;
@@ -39,6 +46,9 @@ export const registerWebRestRoutes = ({
   deezer,
   qobuz,
   artistContent,
+  charts,
+  favorites,
+  playlistSearch,
   performDeezerSearch,
   performQobuzSearch,
   getDiscoveryContentRest,
@@ -99,6 +109,78 @@ export const registerWebRestRoutes = ({
     } catch (error: any) {
       res.status(500).json({error: error.message});
     }
+  });
+
+  // ── Charts ────────────────────────────────────────────────────────────────
+  app.get('/api/charts/genres', async (req, res) => {
+    try {
+      const service = String(req.query.service || 'deezer').toLowerCase();
+      res.json(await charts.getChartGenres(service));
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
+  app.get('/api/charts', async (req, res) => {
+    try {
+      const service = String(req.query.service || 'deezer').toLowerCase();
+      const genreId = String(req.query.genreId || '0');
+      const kind = String(req.query.kind || 'tracks').toLowerCase() as ChartKind;
+      const limit = Number(req.query.limit || 50);
+      const offset = Number(req.query.offset || 0);
+      res.json(await charts.getCharts(service, genreId, kind, limit, offset));
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
+  // ── Playlist search, across services ──────────────────────────────────────
+  app.get('/api/playlist-search', async (req, res) => {
+    try {
+      const service = String(req.query.service || 'deezer').toLowerCase() as PlaylistSearchService;
+      const query = String(req.query.query || '');
+      const limit = Number(req.query.limit || 30);
+      const offset = Number(req.query.offset || 0);
+      res.json(await playlistSearch.searchPlaylists(service, query, limit, offset));
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
+  // ── Favorites ─────────────────────────────────────────────────────────────
+  app.get('/api/favorites', (req, res) => {
+    const type = req.query.type ? (String(req.query.type) as FavoriteType) : undefined;
+    const service = req.query.service ? String(req.query.service) : undefined;
+    res.json(favorites.list(type, service));
+  });
+
+  app.post('/api/favorites/toggle', (req, res) => {
+    try {
+      const {id, type, service, title, artist, cover, duration} = req.body || {};
+      if (!id || !type || !service || !title) {
+        return res.status(400).json({error: 'id, type, service and title are required'});
+      }
+      res.json(favorites.toggle({id: String(id), type, service, title, artist, cover, duration}));
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
+  app.delete('/api/favorites', (req, res) => {
+    const {id, type, service} = req.query;
+    if (!id) return res.json(favorites.clear());
+    res.json(favorites.remove(String(service || ''), String(type || ''), String(id)));
+  });
+
+  // ── Server log ────────────────────────────────────────────────────────────
+  app.get('/api/logs', (req, res) => {
+    const since = Number(req.query.since || 0);
+    res.json(getLogEntries(since));
+  });
+
+  app.delete('/api/logs', (_req, res) => {
+    clearLogEntries();
+    res.json([]);
   });
 
   app.get('/api/discovery', async (req, res) => {

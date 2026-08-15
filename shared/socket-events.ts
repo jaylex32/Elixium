@@ -114,6 +114,9 @@ export interface WatchlistQueueItemsPayload {
 // ── Event maps ───────────────────────────────────────────────────────────────
 
 export interface ServerToClientEvents {
+  /** One line of server output, streamed to the Logs page as it happens. */
+  logLine: (payload: {seq: number; at: number; level: 'info' | 'warn' | 'error'; message: string}) => void;
+
   // Downloads
   downloadProgress: (payload: DownloadProgressPayload) => void;
   downloadComplete: (payload: DownloadCompletePayload) => void;

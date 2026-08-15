@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import {readFileSync, existsSync} from 'fs';
-import {deezer, qobuz} from './core';
+import {deezer, qobuz, spotify} from './core';
 import {parseInfo, parseQobuzUrl} from './core';
 import qdlt from './lib/download-qobuz-track';
 import {parseToQobuz} from './lib/to-qobuz-parser';
@@ -16,7 +16,7 @@ import {commonPath, formatSecondsReadable, sanitizeFilename} from './lib/util';
 import {terminalProgress} from './lib/terminal-progress';
 import pkg from '../package.json';
 import {buildCommand, ensureLegacyNodeOptions, printBanner} from './app/cli';
-import {APP_BRAND, APP_COMMAND, DEFAULT_CONFIG_FILE} from './app/brand';
+import {APP_BRAND, APP_COMMAND, DEFAULT_CONFIG_FILE, FAVORITES_DATA_FILE} from './app/brand';
 import {createCatalogSearch} from './app/catalog-search';
 import {createCliDownloads} from './app/cli-downloads';
 import {createExplorer} from './app/explorer';
@@ -27,6 +27,10 @@ import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
 import {createArtistContent} from './app/artist-content';
+import {createCharts} from './app/charts';
+import {createFavoritesStore} from './app/favorites-store';
+import {createPlaylistSearch} from './app/playlist-search';
+import {installLogCapture, attachLogBroadcast} from './app/log-buffer';
 import {registerApiV1} from './app/api/v1';
 import {installProcessGuard} from './app/process-guard';
 import {
@@ -72,6 +76,11 @@ dotenv.config({path: path.join(path.dirname(process.execPath), '.env'), override
 dotenv.config({override: false});
 
 installProcessGuard();
+
+/* Tee console output into a ring buffer so the Logs page can show what the
+ * engine is doing. Installed before anything else logs, or the first lines -
+ * the ones that explain a bad start - are the ones that get missed. */
+installLogCapture();
 ensureLegacyNodeOptions();
 printBanner(pkg.version);
 
@@ -312,6 +321,8 @@ const setupWebServer = () => {
   io = new SocketIOServer(server, {
     cors: buildCorsOptions(conf),
   });
+  // Stream new log lines to every connected client.
+  attachLogBroadcast(io);
 
   io.use((socket, next) => {
     const handshake = socket.handshake;
@@ -387,6 +398,9 @@ const setupWebServer = () => {
     deezer,
     qobuz,
     artistContent,
+    charts,
+    favorites,
+    playlistSearch,
     performDeezerSearch,
     performQobuzSearch,
     getDiscoveryContentRest,
@@ -660,6 +674,43 @@ const artistContent = createArtistContent({
   makeHttpRequest,
   ensureQobuzSearchReady: () => initQobuzForSearch(),
 });
+
+/** Ranked charts per genre; separate from the editorial Discover lists. */
+const charts = createCharts({
+  qobuz,
+  makeHttpRequest,
+  ensureQobuzSearchReady: () => initQobuzForSearch(),
+});
+
+/** Playlist search across Deezer, Qobuz and Spotify. */
+const playlistSearch = createPlaylistSearch({
+  deezer,
+  qobuz,
+  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  setSpotifyAnonymousToken: () => spotify.setSpotifyAnonymousToken(),
+  getSpotifyApi: () => spotify.spotifyApi,
+  getSpotifyCredentials: () => {
+    /* Read from disk each time rather than caching: Settings rewrites this
+     * file, and credentials entered mid-session should take effect without a
+     * restart. `cookies` is not part of the typed config key set, which is why
+     * this reads the file instead of going through conf.get. */
+    try {
+      const raw = fs.readFileSync(path.resolve(options.configFile), 'utf8');
+      const cookies = JSON.parse(raw)?.cookies ?? {};
+      return {clientId: cookies.spotifyClientId, clientSecret: cookies.spotifyClientSecret};
+    } catch {
+      return {};
+    }
+  },
+});
+
+/*
+ * Favourites live beside the config file, not in the working directory. The
+ * desktop app runs the engine with its cwd in app data while the config is
+ * passed explicitly, so resolving against cwd would put them in different
+ * places depending on how the engine was started.
+ */
+const favorites = createFavoritesStore(path.join(path.dirname(path.resolve(options.configFile)), FAVORITES_DATA_FILE));
 
 const {startDownloadProcess} = createDownloadQueueRuntime({
   conf,

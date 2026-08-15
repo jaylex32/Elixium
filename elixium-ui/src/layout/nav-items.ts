@@ -1,4 +1,17 @@
-import {Home, Search, Download, Eye, Library, Music2, Link2, ListMusic, Settings} from 'lucide-react';
+import {
+  Home,
+  Search,
+  Download,
+  Eye,
+  Library,
+  Music2,
+  Link2,
+  ListMusic,
+  Settings,
+  TrendingUp,
+  Heart,
+  ScrollText,
+} from 'lucide-react';
 import type {Page, Service} from '@/store/app-store';
 
 export interface NavItem {
@@ -13,12 +26,15 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   {id: 'home', icon: Home, label: 'Home'},
   {id: 'search', icon: Search, label: 'Search'},
+  {id: 'charts', icon: TrendingUp, label: 'Charts'},
   {id: 'downloads', icon: Download, label: 'Downloads', shortLabel: 'Files'},
+  {id: 'favorites', icon: Heart, label: 'Favorites', shortLabel: 'Saved'},
   {id: 'watchlist', icon: Eye, label: 'Watchlist', shortLabel: 'Watch'},
   {id: 'library', icon: Library, label: 'Library'},
   {id: 'genres', icon: Music2, label: 'Genres'},
   {id: 'url-download', icon: Link2, label: 'URL Download', shortLabel: 'Link'},
   {id: 'playlists', icon: ListMusic, label: 'Playlists', shortLabel: 'Lists'},
+  {id: 'logs', icon: ScrollText, label: 'Logs'},
   {id: 'settings', icon: Settings, label: 'Settings'},
 ];
 
@@ -43,6 +59,9 @@ export const SERVICE_ITEMS: {id: Service; label: string; color: string}[] = [
 /** Display titles per page, used by the header and the error-boundary label. */
 export const PAGE_TITLES: Record<Page, string> = {
   home: 'Discover',
+  charts: 'Charts',
+  favorites: 'Favorites',
+  logs: 'Logs',
   search: 'Search',
   downloads: 'Downloads',
   watchlist: 'Watchlist',

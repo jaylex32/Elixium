@@ -32,17 +32,23 @@ const UrlDownloadPage = lazy(() =>
   import('@/features/url-download/UrlDownloadPage').then((m) => ({default: m.UrlDownloadPage})),
 );
 const PlaylistsPage = lazy(() => import('@/features/playlists/PlaylistsPage').then((m) => ({default: m.PlaylistsPage})));
+const ChartsPage = lazy(() => import('@/features/charts/ChartsPage').then((m) => ({default: m.ChartsPage})));
+const FavoritesPage = lazy(() => import('@/features/favorites/FavoritesPage').then((m) => ({default: m.FavoritesPage})));
+const LogsPage = lazy(() => import('@/features/logs/LogsPage').then((m) => ({default: m.LogsPage})));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then((m) => ({default: m.SettingsPage})));
 
 const PAGE_MAP = {
   home: HomePage,
   search: SearchPage,
+  charts: ChartsPage,
+  favorites: FavoritesPage,
   downloads: DownloadsPage,
   watchlist: WatchlistPage,
   library: LibraryPage,
   genres: GenresPage,
   'url-download': UrlDownloadPage,
   playlists: PlaylistsPage,
+  logs: LogsPage,
   settings: SettingsPage,
 } as const;
 
