@@ -11,7 +11,7 @@ import chalk from 'chalk';
 import signale from '../lib/signale';
 import {saveLayout} from './util';
 import type {trackType} from '../core/deezer/types';
-import {GeoBlocked} from '../core/deezer/lib/get-url';
+import {GeoBlocked, WrongLicense} from '../core/deezer/lib/get-url';
 import Config from './config';
 import {terminalProgress} from './terminal-progress';
 
@@ -177,7 +177,24 @@ const downloadTrack = async ({
     try {
       trackData = await deezer.getTrackDownloadUrl(track, quality);
     } catch (err) {
-      if (!(err instanceof GeoBlocked) || !track.FALLBACK) {
+      /*
+       * A licence refusal has to reach the quality ladder below.
+       *
+       * WrongLicense was rethrown straight out of here, so it never got to the
+       * `fallbackQuality` branch a few lines down — the one case that branch
+       * exists for. On an account without FLAC or 320, every track died with
+       * "Your account can't stream MP3_320 tracks" rather than stepping down
+       * to a tier the account is licensed for, and a whole album finished with
+       * nothing saved. Streaming never showed this because it walks its own
+       * ladder, which is why a track could play but not download.
+       *
+       * Leaving trackData undefined lets the existing fallback take over; it
+       * already knows how to walk 9 -> 3 -> 1.
+       */
+      const licenceRefused = err instanceof WrongLicense;
+      if (licenceRefused && fallbackQuality && quality !== 1) {
+        // Fall through with no data so the ladder below retries lower.
+      } else if (!(err instanceof GeoBlocked) || !track.FALLBACK) {
         throw err;
       }
     }
