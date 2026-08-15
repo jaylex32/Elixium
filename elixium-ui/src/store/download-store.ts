@@ -23,6 +23,16 @@ export interface HistoryEntry {
   cover?: string;
   count: number;
   completedAt: number;
+  /**
+   * Whether the job actually produced files.
+   *
+   * History recorded only a count, so every finished job looked alike: a batch
+   * that ended "complete — 0 files saved" was filed with the same green tick as
+   * a real success. That left the Done and Failed tabs nothing to select on,
+   * which is why picking one changed the header but never the list.
+   */
+  status: 'done' | 'error';
+  error?: string;
 }
 
 /** A source track the conversion could not match on the target service. */
@@ -165,16 +175,19 @@ export const useDownloadStore = create<DownloadState>()(
        * queue-wide event lands — so an item the server marked completed
        * individually finished correctly but left no trace in history.
        */
-      const justFinished = status === 'done' && existing?.status !== 'done';
-      const history = justFinished
+      const justSettled = (status === 'done' || status === 'error') && existing?.status !== status;
+      const history = justSettled
         ? [
             {
               id,
               title: updated[id].title,
               artist: updated[id].artist,
               cover: updated[id].cover,
-              count: updated[id].total || 1,
+              // A failed item saved nothing; claiming its track total would put
+              // "13 tracks" beside a job that produced no files.
+              count: status === 'done' ? updated[id].total || 1 : 0,
               completedAt: Date.now(),
+              status,
             },
             ...s.history.filter((h) => h.id !== id),
           ].slice(0, 100)
@@ -201,24 +214,52 @@ export const useDownloadStore = create<DownloadState>()(
       const updated = {...s.active};
       const finished: string[] = [];
 
+      /*
+       * "Complete" with nothing saved is a failure.
+       *
+       * The server emits downloadComplete queue-wide whether or not any track
+       * survived, so a whole album refused by Deezer arrived here as a success
+       * and was filed with a green tick. The file count is the honest signal.
+       */
+      const succeeded = count > 0;
+      const settled: HistoryEntry['status'] = succeeded ? 'done' : 'error';
+
       for (const [id, entry] of Object.entries(updated)) {
         if (entry.status !== 'done' && entry.status !== 'error') {
-          updated[id] = {...entry, status: 'done', percentage: 100};
+          updated[id] = {
+            ...entry,
+            status: settled,
+            percentage: succeeded ? 100 : entry.percentage,
+            error: succeeded ? entry.error : entry.error ?? 'No tracks were saved',
+          };
           finished.push(id);
         }
       }
 
-      const newHistory = finished.map((id) => ({
+      const newHistory: HistoryEntry[] = finished.map((id) => ({
         id,
         title: updated[id].title,
         artist: updated[id].artist,
         cover: updated[id].cover,
         count,
         completedAt: Date.now(),
+        status: settled,
       }));
 
+      /*
+       * Repair rows a per-item event already filed as done.
+       *
+       * Deezer reports each track of a refused album as "completed" before the
+       * queue-wide result lands, so those entries were written optimistically.
+       * The batch result is the authority on whether files reached disk.
+       */
+      const batchIds = new Set(Object.keys(updated));
+      const previous = succeeded
+        ? s.history
+        : s.history.map((h) => (batchIds.has(h.id) && h.status === 'done' ? {...h, status: settled, count: 0} : h));
+
       // onProgress may already have filed some of these; keep one per id.
-      const merged = [...newHistory, ...s.history].filter(
+      const merged = [...newHistory, ...previous].filter(
         (entry, index, list) => list.findIndex((e) => e.id === entry.id) === index,
       );
 
@@ -265,7 +306,13 @@ export const useDownloadStore = create<DownloadState>()(
       return {
         active: updated,
         history: [
-          {id: itemId, title: entry?.title ?? 'Download', count, completedAt: Date.now()},
+          {
+            id: itemId,
+            title: entry?.title ?? 'Download',
+            count,
+            completedAt: Date.now(),
+            status: count > 0 ? 'done' : 'error',
+          } as HistoryEntry,
           ...s.history.slice(0, 49),
         ],
         isRunning: Object.values(updated).some((d) => d.status !== 'done' && d.status !== 'error'),
@@ -273,25 +320,44 @@ export const useDownloadStore = create<DownloadState>()(
     }),
 
   onError: (itemId, message) =>
-    set((s) => ({
-      active: {
-        ...s.active,
-        [itemId]: {
-          ...(s.active[itemId] ?? {
-            itemId,
-            title: 'Download',
-            status: 'error',
-            current: 0,
-            total: 1,
-            startedAt: Date.now(),
-            percentage: 0,
-          }),
+    set((s) => {
+      const row: ActiveDownload = {
+        ...(s.active[itemId] ?? {
+          itemId,
+          title: 'Download',
           status: 'error',
-          error: message,
-        },
-      },
-      isRunning: false,
-    })),
+          current: 0,
+          total: 1,
+          startedAt: Date.now(),
+          percentage: 0,
+        }),
+        status: 'error',
+        error: message,
+      };
+
+      return {
+        active: {...s.active, [itemId]: row},
+        /*
+         * A failure that leaves no trace cannot be reviewed later, and the
+         * Failed tab exists precisely to review them. Errors were only ever
+         * held in `active`, so dismissing a row erased the fact it happened.
+         */
+        history: [
+          {
+            id: itemId,
+            title: row.title,
+            artist: row.artist,
+            cover: row.cover,
+            count: 0,
+            completedAt: Date.now(),
+            status: 'error',
+            error: message,
+          } as HistoryEntry,
+          ...s.history.filter((h) => h.id !== itemId),
+        ].slice(0, 100),
+        isRunning: false,
+      };
+    }),
 
   clear: (itemId) =>
     set((s) => {
@@ -330,6 +396,24 @@ export const useDownloadStore = create<DownloadState>()(
     }),
     {
       name: 'elixium-downloads',
+      version: 1,
+      /*
+       * Stamp a status onto history saved before this field existed.
+       *
+       * Without it every stored entry reads as neither done nor failed and
+       * disappears from both tabs. A saved job that produced no files was a
+       * failure, whatever the tick beside it used to suggest.
+       */
+      migrate: ((persisted: {history?: HistoryEntry[]} | undefined, version: number) => {
+        if (!persisted || version >= 1) return persisted as DownloadState;
+        return {
+          ...persisted,
+          history: (persisted.history ?? []).map((h) => ({
+            ...h,
+            status: h.status ?? ((h.count ?? 0) > 0 ? 'done' : 'error'),
+          })),
+        } as DownloadState;
+      }) as never,
       /*
        * Only completed work survives a reload. In-flight rows are tied to a
        * server process that will not resume them, so restoring them would show

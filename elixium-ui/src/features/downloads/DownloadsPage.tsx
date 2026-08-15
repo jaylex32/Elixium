@@ -179,7 +179,24 @@ export function DownloadsPage() {
     return matches(d.title) || matches(d.artist ?? '') || matches(d.currentTrack ?? '');
   });
 
-  const visibleHistory = history.filter((h) => !query.trim() || matches(h.title) || matches(h.artist ?? ''));
+  /*
+   * History obeys the tab too.
+   *
+   * Only the active rows were filtered, so selecting Done or Failed left the
+   * whole "Completed earlier" list on screen unchanged — and since finished
+   * rows are retired from `active` a few seconds after they land, history is
+   * usually the entire list. The filter looked broken because in practice it
+   * was filtering an empty collection.
+   */
+  const visibleHistory = history.filter((h) => {
+    if (filter === 'active') return false; // Nothing in history is still running.
+    if (filter === 'done' && h.status !== 'done') return false;
+    if (filter === 'failed' && h.status !== 'error') return false;
+    return !query.trim() || matches(h.title) || matches(h.artist ?? '');
+  });
+
+  const historyDone = history.filter((h) => h.status === 'done').length;
+  const historyFailed = history.filter((h) => h.status === 'error').length;
 
   const nothingAtAll = downloads.length === 0 && history.length === 0 && reports.length === 0;
 
@@ -237,14 +254,16 @@ export function DownloadsPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="scroll-row flex gap-1 rounded-sm border border-border bg-secondary-bg p-1">
             {FILTERS.map((f) => {
+              // Counts span both lists, or a tab would read 0 while showing
+              // rows from history.
               const count =
                 f.id === 'all'
-                  ? downloads.length
+                  ? downloads.length + history.length
                   : f.id === 'active'
                     ? activeCount
                     : f.id === 'done'
-                      ? doneCount
-                      : errorCount;
+                      ? doneCount + historyDone
+                      : errorCount + historyFailed;
               return (
                 <button
                   key={f.id}
@@ -285,8 +304,16 @@ export function DownloadsPage() {
         </div>
       )}
 
-      {downloads.length > 0 && visible.length === 0 && (
-        <p className="py-10 text-center text-sm text-text-muted">Nothing matches this filter.</p>
+      {/* Both lists have to be empty before saying nothing matched — history
+          alone is usually what a filter selects. */}
+      {downloads.length + history.length > 0 && visible.length === 0 && visibleHistory.length === 0 && (
+        <p className="py-10 text-center text-sm text-text-muted">
+          {filter === 'failed'
+            ? 'No failed downloads.'
+            : filter === 'active'
+              ? 'Nothing is downloading right now.'
+              : 'Nothing matches this filter.'}
+        </p>
       )}
 
       {/* History survives a reload and stays visible alongside active work,
@@ -301,28 +328,37 @@ export function DownloadsPage() {
           </div>
 
           <div className="space-y-2">
-            {visibleHistory.slice(0, 30).map((h) => (
-              <div
-                key={`${h.id}-${h.completedAt}`}
-                className="rows-track flex items-center gap-3 rounded-md border border-border bg-card-bg px-3 py-2.5"
-              >
-                {h.cover ? (
-                  <img src={h.cover} alt="" loading="lazy" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
-                ) : (
-                  <CheckCircle2 size={16} className="shrink-0 text-success" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-text-primary">{h.title}</p>
-                  <p className="truncate text-xs text-text-muted">
-                    {h.artist ? `${h.artist} · ` : ''}
-                    {h.count} track{h.count > 1 ? 's' : ''}
-                  </p>
+            {visibleHistory.slice(0, 30).map((h) => {
+              const failed = h.status === 'error';
+              return (
+                <div
+                  key={`${h.id}-${h.completedAt}`}
+                  className={cn(
+                    'rows-track flex items-center gap-3 rounded-md border px-3 py-2.5',
+                    failed ? 'border-danger/20 bg-danger/5' : 'border-border bg-card-bg',
+                  )}
+                >
+                  {h.cover ? (
+                    <img src={h.cover} alt="" loading="lazy" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
+                  ) : failed ? (
+                    <AlertCircle size={16} className="shrink-0 text-danger" />
+                  ) : (
+                    <CheckCircle2 size={16} className="shrink-0 text-success" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-text-primary">{h.title}</p>
+                    <p className="truncate text-xs text-text-muted">
+                      {h.artist ? `${h.artist} · ` : ''}
+                      {/* "0 track" read as a successful download of nothing. */}
+                      {failed ? (h.error ?? 'Failed') : `${h.count} track${h.count === 1 ? '' : 's'}`}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-text-muted">
+                    {new Date(h.completedAt).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
+                  </span>
                 </div>
-                <span className="shrink-0 text-xs text-text-muted">
-                  {new Date(h.completedAt).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
