@@ -168,6 +168,12 @@ const createWindow = () => {
     backgroundColor: '#0f1116',
     show: false,
     title: 'Elixium',
+    /*
+     * Windows takes the window icon from the executable and macOS from the
+     * bundle, but Linux takes it from here — and so does `npm start` on every
+     * platform, which is otherwise the bare Electron logo.
+     */
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       // The page is our own UI over loopback, but there is no reason to grant
       // it Node access it does not use.

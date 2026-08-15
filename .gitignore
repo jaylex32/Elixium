@@ -144,3 +144,9 @@ release/
 desktop/node_modules/
 desktop/out/
 desktop/launch.log
+
+# Icons generated from elixium-icon.svg by desktop/make-icons.js, which runs
+# from prestart/predist. The web UI's PNG copies are committed instead — the
+# Vite build has no equivalent hook to regenerate them.
+desktop/build/
+desktop/assets/

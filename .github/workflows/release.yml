@@ -84,6 +84,11 @@ jobs:
           npx tsc
           node sync-public.js
 
+      - name: Generate icons
+        # Renders the icon set from elixium-icon.svg with nothing but Node, so
+        # the three runners cannot produce three different icons.
+        run: node desktop/make-icons.js
+
       - name: Package binary
         # `pkg .` rather than a path to the entry file — passing a file makes
         # pkg ignore the `pkg.assets` config in package.json, which is how the
@@ -99,6 +104,20 @@ jobs:
           found=$(ls | head -1)
           if [ "$found" != "${{ matrix.binary }}" ]; then mv "$found" "${{ matrix.binary }}"; fi
           ls -la
+
+      # No custom icon on the packaged server binary, deliberately.
+      #
+      # pkg inherits Node's icon and version resource, and neither way of
+      # changing that is safe: rewriting the finished executable's resources
+      # with rcedit relays out the file and detaches the virtual filesystem pkg
+      # appended to it — the binary still launches and still prints its help,
+      # then fails with "Pkg: Error reading from file." as soon as it needs a
+      # bundled asset. Stamping the cached base binary beforehand instead is
+      # rejected by pkg's own hash check, which refetches a clean copy.
+      #
+      # The desktop app is the build most people install and it carries the
+      # icon properly, so the server binary keeps Node's rather than risking a
+      # download that is subtly broken.
 
       - name: Sign for macOS
         if: startsWith(matrix.os, 'macos')
@@ -200,9 +219,101 @@ jobs:
           name: elixium-${{ matrix.label }}
           path: elixium-${{ matrix.label }}.*
 
+  desktop:
+    name: desktop-${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows-x64
+            arch: x64
+          - os: macos-latest
+            label: macos-arm64
+            arch: arm64
+          - os: macos-latest
+            label: macos-x64
+            arch: x64
+          - os: ubuntu-latest
+            label: linux-x64
+            arch: x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the engine and interface
+        # The desktop shell packages ../dist/src and ../node_modules verbatim,
+        # so the engine has to be compiled before electron-builder runs.
+        run: |
+          npm ci --ignore-scripts
+          npm ci --ignore-scripts --prefix elixium-ui
+          npm run build --prefix elixium-ui
+          npx eslint . --fix || true
+          npx tsc
+          node sync-public.js
+
+      - name: Install desktop dependencies
+        run: npm install --prefix desktop --no-audit --no-fund
+
+      - name: Build desktop app
+        if: ${{ !startsWith(matrix.os, 'macos') }}
+        working-directory: desktop
+        # predist regenerates the icon set, so Windows gets the .ico and Linux
+        # the sized PNGs without either being committed.
+        run: npm run dist -- --${{ matrix.arch }}
+
+      - name: Build desktop app (macOS)
+        if: startsWith(matrix.os, 'macos')
+        working-directory: desktop
+        # Two steps on purpose. electron-builder skips signing when it finds no
+        # certificate, and an unsigned arm64 bundle is killed by the kernel on
+        # launch rather than merely warned about — so the .app is ad-hoc signed
+        # between being built and being wrapped in the .dmg. This does not clear
+        # Gatekeeper; it makes the app runnable once the user allows it.
+        run: |
+          node make-icons.js
+          npx electron-builder --mac dir --${{ matrix.arch }}
+          app=$(find out -maxdepth 2 -name '*.app' | head -1)
+          [ -n "$app" ] || { echo "::error::no .app was produced"; exit 1; }
+          codesign --force --deep --sign - "$app"
+          codesign --verify --verbose "$app"
+          codesign -dv "$app" 2>&1 | grep -q 'Signature=adhoc' \
+            || { echo "::error::desktop app is not signed"; exit 1; }
+          npx electron-builder --mac dmg --${{ matrix.arch }} --prepackaged "$app"
+          node check-no-secrets.js
+
+      - name: Collect installers
+        shell: bash
+        # Only the installers; out/ also holds the unpacked tree and electron's
+        # own build cache, which are far larger and of no use to anyone.
+        run: |
+          mkdir -p desktop-dist
+          find desktop/out -maxdepth 1 -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \) \
+            -exec cp {} desktop-dist/ \;
+          cd desktop-dist
+          for f in *; do
+            [ -e "$f" ] || continue
+            ext="${f##*.}"
+            mv "$f" "Elixium-Desktop-${{ matrix.label }}.$ext"
+          done
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elixium-desktop-${{ matrix.label }}
+          path: desktop-dist/*
+          if-no-files-found: error
+
   publish:
     name: Attach to release
-    needs: build
+    needs: [build, desktop]
     # `always()` so a runner that never gets scheduled cannot hold the whole
     # release hostage. macos-13 (Intel) is scarce on the free tier and sat
     # queued for over ten minutes while the other three were already built —
