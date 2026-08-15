@@ -5,6 +5,8 @@ import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
 import {useAppStore} from '@/store/app-store';
+import {getSocket} from '@/shared/lib/socket';
+import {toast} from 'sonner';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {useSearchHistoryStore} from '@/store/search-history-store';
@@ -159,6 +161,20 @@ export function SearchPage() {
   const [selectedAlbum, setSelectedAlbum] = useState<(AlbumCardData & {service: Service}) | null>(null);
 
   const service = useAppStore((s) => s.service);
+
+  /*
+   * Following a playlist takes a URL — the server accepts Spotify and Tidal
+   * links too, so an id alone means nothing to it. For a result we are already
+   * showing, the canonical URL follows from its id and service.
+   */
+  const watchPlaylist = (id: string, title: string) => {
+    const url =
+      service === 'deezer'
+        ? `https://www.deezer.com/playlist/${id}`
+        : `https://play.qobuz.com/playlist/${id}`;
+    getSocket().emit('addWatchedPlaylist', {url});
+    toast.success(`Watching ${title}`, {description: 'New tracks will appear in your watchlist.'});
+  };
   const setTrack = usePlayerStore((s) => s.setTrack);
   const {download} = useDownload();
 
@@ -465,6 +481,7 @@ export function SearchPage() {
                         onDownload={() =>
                           download({id: r.id, type: 'playlist', title: r.title, artist: r.artist, cover: card.cover, service})
                         }
+                        onWatch={() => watchPlaylist(r.id, r.title)}
                       />
                     );
                   })}

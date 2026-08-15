@@ -1,4 +1,4 @@
-import {Download, Play, Music2} from 'lucide-react';
+import {Download, Play, Music2, Eye} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 
@@ -15,12 +15,14 @@ export interface AlbumCardData {
 interface AlbumCardProps {
   album: AlbumCardData;
   onDownload?: () => void;
+  /** Playlist only: follow it for new tracks. Omitted for albums. */
+  onWatch?: () => void;
   onPlay?: () => void;
   onClick?: () => void;
   className?: string;
 }
 
-export function AlbumCard({album, onDownload, onPlay, onClick, className}: AlbumCardProps) {
+export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, className}: AlbumCardProps) {
   return (
     <div
       className={cn(
@@ -77,6 +79,21 @@ export function AlbumCard({album, onDownload, onPlay, onClick, className}: Album
               className="h-10 w-10 rounded-full shadow-lg"
             >
               <Download size={18} />
+            </Button>
+          )}
+          {onWatch && (
+            <Button
+              size="icon"
+              variant="secondary"
+              aria-label="Watch for new tracks"
+              title="Watch for new tracks"
+              onClick={(e) => {
+                e.stopPropagation();
+                onWatch();
+              }}
+              className="h-10 w-10 rounded-full shadow-lg"
+            >
+              <Eye size={18} />
             </Button>
           )}
         </div>

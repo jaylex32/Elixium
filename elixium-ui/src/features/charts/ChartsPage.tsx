@@ -4,6 +4,8 @@ import {useCharts, useChartGenres, useChartCountries, useCountryChart, type Char
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
 import {useAppStore} from '@/store/app-store';
+import {getSocket} from '@/shared/lib/socket';
+import {toast} from 'sonner';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
@@ -61,6 +63,13 @@ export function ChartsPage() {
   /* Qobuz has no chart API; its stand-ins are album lists only, so the other
      tabs would silently return nothing. Saying so beats an empty grid. */
   const qobuzUnsupported = service === 'qobuz' && !countryId && kind !== 'albums';
+
+  const watchPlaylist = (id: string, title: string) => {
+    const url =
+      service === 'deezer' ? `https://www.deezer.com/playlist/${id}` : `https://play.qobuz.com/playlist/${id}`;
+    getSocket().emit('addWatchedPlaylist', {url});
+    toast.success(`Watching ${title}`, {description: 'New tracks will appear in your watchlist.'});
+  };
 
   const playAll = (startIndex: number) => {
     const tracks = items.map((r) =>
@@ -233,6 +242,7 @@ export function ChartsPage() {
                     key={r.id}
                     album={card}
                     onClick={() => setSelected({...card, service})}
+                    onWatch={effectiveKind === 'playlists' ? () => watchPlaylist(r.id, r.title) : undefined}
                     onDownload={() =>
                       download({
                         id: r.id,

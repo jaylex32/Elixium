@@ -1,10 +1,13 @@
-import {Download, Music2, X, Play, Pause} from 'lucide-react';
+import {Download, Music2, X, Play, Pause, Eye} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {formatDuration, toSeconds} from '@/shared/lib/utils';
 import {useItemTracks, type ItemType} from '@/shared/lib/api';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {Button} from '@/shared/components/ui/Button';
+import {FavoriteButton} from '@/shared/components/FavoriteButton';
+import {getSocket} from '@/shared/lib/socket';
+import {toast} from 'sonner';
 import {TrackRowSkeleton} from '@/shared/components/ui/Skeleton';
 import {TrackActions} from '@/shared/components/TrackActions';
 import type {Service} from '@/types';
@@ -36,6 +39,29 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
   const {data, isLoading, isError} = useItemTracks(itemType, album.id, album.service, open);
   const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
   const {download} = useDownload();
+
+  /*
+   * Watching is a playlist-only action, and this modal is where every playlist
+   * in the app opens — from Search, Charts, Favorites and the Playlists page.
+   * The button previously existed only on the Playlists page's own search
+   * results, so opening a playlist anywhere else offered no way to follow it.
+   *
+   * The server's addWatchedPlaylist takes a URL, not an id, because it also
+   * accepts Spotify and Tidal links. For a playlist we already have open the
+   * canonical URL is derivable from its id and service.
+   */
+  const isPlaylist = album.type === 'playlist';
+  const playlistUrl = isPlaylist
+    ? album.service === 'deezer'
+      ? `https://www.deezer.com/playlist/${album.id}`
+      : `https://play.qobuz.com/playlist/${album.id}`
+    : undefined;
+
+  const watchPlaylist = () => {
+    if (!playlistUrl) return;
+    getSocket().emit('addWatchedPlaylist', {url: playlistUrl});
+    toast.success(`Watching ${album.title}`, {description: 'New tracks will appear in your watchlist.'});
+  };
 
   const tracks = data?.tracks ?? [];
 
@@ -131,6 +157,24 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
             <div className="flex shrink-0 items-center gap-2 pt-0.5">
               {/* Labelled action collapses to an icon on phones; the footer
                   keeps a full-width equivalent so nothing is lost. */}
+              <FavoriteButton
+                item={{
+                  id: album.id,
+                  type: (album.type as 'album' | 'playlist') ?? 'album',
+                  service: album.service,
+                  title: album.title,
+                  artist: album.artist,
+                  cover: album.cover,
+                }}
+              />
+
+              {isPlaylist && (
+                <Button variant="secondary" size="sm" onClick={watchPlaylist}>
+                  <Eye size={14} />
+                  Watch
+                </Button>
+              )}
+
               <Button size="sm" onClick={handleDownloadAlbum} className="hidden sm:inline-flex">
                 <Download size={14} />
                 Download
