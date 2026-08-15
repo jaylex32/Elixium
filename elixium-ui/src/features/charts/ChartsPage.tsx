@@ -26,6 +26,14 @@ const KINDS: {id: ChartKind; label: string}[] = [
   {id: 'playlists', label: 'Playlists'},
 ];
 
+/*
+ * Radix rejects an empty-string option value outright — it reserves "" to mean
+ * "cleared, show the placeholder". The genre/country switch needs a real value
+ * for its default choice, so it carries a sentinel and is mapped back to the
+ * empty countryId the rest of the page tests against.
+ */
+const GENRE_MODE = '__genres__';
+
 const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
 
 /**
@@ -98,10 +106,10 @@ export function ChartsPage() {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {service === 'deezer' && countries.length > 0 && (
             <Select
-              value={countryId}
-              onValueChange={setCountryId}
+              value={countryId || GENRE_MODE}
+              onValueChange={(value) => setCountryId(value === GENRE_MODE ? '' : value)}
               options={[
-                {value: '', label: 'By genre'},
+                {value: GENRE_MODE, label: 'By genre'},
                 ...countries.map((c) => ({value: c.id, label: c.name})),
               ]}
               placeholder="Country"

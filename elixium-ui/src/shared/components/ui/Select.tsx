@@ -17,6 +17,18 @@ interface SelectProps {
 }
 
 export function Select({value, onValueChange, options, placeholder, disabled, className}: SelectProps) {
+  /*
+   * Radix throws if an item value is an empty string — it reserves "" for
+   * "cleared, show the placeholder". Thrown from render that takes down the
+   * whole page rather than degrading one control, which is what it did to the
+   * Charts page. Dropping the option keeps the rest usable and says why.
+   */
+  const safeOptions = options.filter((opt) => {
+    if (opt.value !== '') return true;
+    console.warn(`Select: dropped option "${opt.label}" — an empty value is not allowed.`);
+    return false;
+  });
+
   return (
     <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectPrimitive.Trigger
@@ -39,7 +51,7 @@ export function Select({value, onValueChange, options, placeholder, disabled, cl
           className="z-modal min-w-[8rem] overflow-hidden rounded-xl border border-border bg-card-bg shadow-xl animate-fade-in"
         >
           <SelectPrimitive.Viewport className="p-1">
-            {options.map((opt) => (
+            {safeOptions.map((opt) => (
               <SelectPrimitive.Item
                 key={opt.value}
                 value={opt.value}
