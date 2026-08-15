@@ -1,5 +1,5 @@
 import axios from 'axios';
-import {useQuery, useMutation} from '@tanstack/react-query';
+import {useQuery, useMutation, useInfiniteQuery} from '@tanstack/react-query';
 import type {Service, RawSearchResult, RawDiscoveryItem, ItemTracksResponse} from '@/types';
 import {getToken, notifyAuthRequired, withToken} from './auth-token';
 
@@ -87,6 +87,78 @@ export function useSearch(query: string, service: Service, type: string) {
     },
     enabled: query.trim().length >= 2,
     staleTime: 1000 * 60 * 2,
+  });
+}
+
+/** How many results one page of search asks for. */
+export const SEARCH_PAGE_SIZE = 50;
+
+/**
+ * Search, one page at a time.
+ *
+ * The catalog APIs cap a response at a page, so a search stopped dead at 50
+ * results with no way to reach the rest. Both services take an offset, so the
+ * pages simply continue from where the last one ended.
+ *
+ * A short page means the end of the catalog: neither service reports a total,
+ * so running out is the only reliable signal that there is nothing more.
+ */
+export function useSearchPages(query: string, service: Service, type: string) {
+  return useInfiniteQuery<RawSearchResult[]>({
+    queryKey: ['search', service, type, query],
+    initialPageParam: 0,
+    queryFn: async ({pageParam}) => {
+      if (!query || query.trim().length < 2) return [];
+      const res = await http.post('/search', {
+        query: query.trim(),
+        service,
+        type,
+        limit: SEARCH_PAGE_SIZE,
+        offset: pageParam as number,
+      });
+      return (Array.isArray(res.data) ? res.data : res.data?.results ?? []) as RawSearchResult[];
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < SEARCH_PAGE_SIZE ? undefined : allPages.length * SEARCH_PAGE_SIZE,
+    enabled: query.trim().length >= 2,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+// ── Artist content ───────────────────────────────────────────────────────────
+export type ArtistContentKind = 'albums' | 'tracks' | 'playlists';
+
+/** Page size per artist tab; albums and playlists are grids, tracks a list. */
+const ARTIST_PAGE_SIZE: Record<ArtistContentKind, number> = {albums: 30, tracks: 50, playlists: 30};
+
+/**
+ * One artist's albums, top tracks or related playlists, paged.
+ *
+ * The artist view used to show top tracks only, so there was no route from an
+ * artist to their discography — the albums endpoint existed on the server and
+ * nothing called it.
+ */
+export function useArtistContent(
+  kind: ArtistContentKind,
+  artistId: string,
+  service: Service,
+  artistName?: string,
+  enabled = true,
+) {
+  const limit = ARTIST_PAGE_SIZE[kind];
+
+  return useInfiniteQuery<RawSearchResult[]>({
+    queryKey: ['artist-content', service, kind, artistId],
+    initialPageParam: 0,
+    queryFn: async ({pageParam}) => {
+      const res = await http.get('/artist-content', {
+        params: {service, artistId, kind, artistName, limit, offset: pageParam as number},
+      });
+      return (Array.isArray(res.data) ? res.data : []) as RawSearchResult[];
+    },
+    getNextPageParam: (lastPage, allPages) => (lastPage.length < limit ? undefined : allPages.length * limit),
+    enabled: !!artistId && enabled,
+    staleTime: 1000 * 60 * 5,
   });
 }
 

@@ -14,6 +14,7 @@ import {getSocket} from '@/shared/lib/socket';
 import {socketSend} from '@/shared/lib/socket-client';
 import {ScheduleEditor} from './ScheduleEditor';
 import {FavoriteGenres} from './FavoriteGenres';
+import {WatchPlaylistForm} from './WatchPlaylistForm';
 import {ReleaseTypeFilter} from './ReleaseTypeFilter';
 
 interface WatchlistState {
@@ -394,12 +395,14 @@ export function WatchlistPage() {
           visible on the Playlists page, with no way to grab just their new
           tracks. Each row here downloads exactly what the last scan found.
         */}
-        <TabsContent value="playlists" className="mt-5 space-y-2">
+        <TabsContent value="playlists" className="mt-5 space-y-3">
+          <WatchPlaylistForm />
+
           {watchedPlaylists.length === 0 ? (
             <div className="py-20 text-center text-text-muted">
               <ListMusic size={40} className="mx-auto mb-3 opacity-30" />
               <p className="font-medium text-text-secondary">No playlists being watched</p>
-              <p className="mt-1 text-sm">Add one from the Watchlist to track its new tracks.</p>
+              <p className="mt-1 text-sm">Paste a playlist link above to start tracking its new tracks.</p>
             </div>
           ) : (
             watchedPlaylists.map((p) => {

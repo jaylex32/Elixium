@@ -44,6 +44,8 @@ export interface RawSearchResult {
   album: string;
   duration: string;
   year?: number | null;
+  /** ISO `YYYY-MM-DD` when the service supplies one — used by the newest sort. */
+  releaseDate?: string | null;
   type: 'track' | 'album' | 'artist' | 'playlist';
   rawData: Record<string, unknown>;
 }

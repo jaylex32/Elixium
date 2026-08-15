@@ -121,6 +121,27 @@ export const searchMusic = (
   requestLight({query, start, nb, suggest: true, artist_suggest: true, top_tracks: true}, 'deezer.pageSearch');
 
 /**
+ * Catalog search that can actually be paged.
+ *
+ * `deezer.pageSearch` accepts a `start` and then ignores it: asking for offset
+ * 0, 50 and 100 returns the identical first page every time, which is why the
+ * interface could never show more than the first 50 results. `search.music`
+ * honours the offset and reports a growing total as it walks the catalog.
+ *
+ * Kept separate from `searchMusic` rather than replacing it. That one passes
+ * `suggest` and `top_tracks`, and the Spotify/Tidal/YouTube converters lean on
+ * that fuzzy behaviour to match a track they only know by name — swapping it
+ * for a strict search would quietly worsen conversion hit rates.
+ */
+export const searchMusicPaged = (
+  query: string,
+  type: searchTypesProp = 'TRACK',
+  nb = 50,
+  start = 0,
+): Promise<{data: any[]; total: number}> =>
+  requestLight({query, start, nb, output: type, filter: 'ALL'}, 'search.music');
+
+/**
  * Get details about current user
  */
 export const getUser = async (): Promise<userType> => requestGet('user_getInfo');

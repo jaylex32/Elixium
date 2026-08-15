@@ -8,13 +8,29 @@ interface CatalogSearchDependencies {
   ensureQobuzSearchReady: () => Promise<void>;
 }
 
+/**
+ * Normalise whatever a service calls a release date into `YYYY-MM-DD`.
+ *
+ * Deezer sends `PHYSICAL_RELEASE_DATE` and Qobuz `release_date_original`, both
+ * as strings but not always parseable — placeholders like `0000-00-00` turn up
+ * and would sort as a real date far in the past.
+ */
+const toReleaseDate = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+};
+
 export const createCatalogSearch = ({deezer, qobuz, ensureQobuzSearchReady}: CatalogSearchDependencies) => {
   const performDeezerSearch = async (query: string, type: string, limit = 50, offset = 0): Promise<SearchResult[]> => {
     const searchTypes = type.toUpperCase() as 'TRACK' | 'ALBUM' | 'ARTIST' | 'PLAYLIST';
-    const searchResult = await deezer.searchMusic(query, [searchTypes], limit, offset);
+    /* searchMusicPaged, not searchMusic: the latter's endpoint ignores the
+     * offset and hands back page one forever, so results stopped at 50. */
+    const searchResult = await deezer.searchMusicPaged(query, searchTypes, limit, offset);
 
     const results: SearchResult[] = [];
-    const data = searchResult[searchTypes]?.data || [];
+    const data = searchResult?.data || [];
 
     for (const item of data) {
       if (type === 'track') {
@@ -28,6 +44,7 @@ export const createCatalogSearch = ({deezer, qobuz, ensureQobuzSearchReady}: Cat
           year: (track as any).PHYSICAL_RELEASE_DATE
             ? new Date((track as any).PHYSICAL_RELEASE_DATE).getFullYear()
             : null,
+          releaseDate: toReleaseDate((track as any).PHYSICAL_RELEASE_DATE),
           type: 'track',
           rawData: track,
         });
@@ -40,6 +57,7 @@ export const createCatalogSearch = ({deezer, qobuz, ensureQobuzSearchReady}: Cat
           album: album.ALB_TITLE,
           duration: `${album.NUMBER_TRACK} tracks`,
           year: album.PHYSICAL_RELEASE_DATE ? new Date(album.PHYSICAL_RELEASE_DATE).getFullYear() : null,
+          releaseDate: toReleaseDate(album.PHYSICAL_RELEASE_DATE),
           type: 'album',
           rawData: album,
         });
@@ -86,6 +104,7 @@ export const createCatalogSearch = ({deezer, qobuz, ensureQobuzSearchReady}: Cat
           album: item.album?.title || 'N/A',
           duration: formatSecondsReadable(Number(item.duration)),
           year: item.album?.release_date_original ? new Date(item.album.release_date_original).getFullYear() : null,
+          releaseDate: toReleaseDate(item.album?.release_date_original),
           type: 'track',
           maximum_bit_depth: item.maximum_bit_depth,
           maximum_sampling_rate: item.maximum_sampling_rate,
@@ -104,6 +123,7 @@ export const createCatalogSearch = ({deezer, qobuz, ensureQobuzSearchReady}: Cat
           album: item.title,
           duration: `${item.tracks_count} tracks`,
           year: item.release_date_original ? new Date(item.release_date_original).getFullYear() : null,
+          releaseDate: toReleaseDate(item.release_date_original),
           type: 'album',
           maximum_bit_depth: item.maximum_bit_depth,
           maximum_sampling_rate: item.maximum_sampling_rate,

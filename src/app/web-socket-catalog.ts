@@ -1,14 +1,12 @@
 import type {Socket} from 'socket.io';
-import {formatSecondsReadable} from '../lib/util';
 import type {SearchResult} from './interactive-types';
+import type {ArtistContent} from './artist-content';
 
 interface WebSocketCatalogDependencies {
   socket: Socket;
-  deezer: any;
-  qobuz: any;
+  artistContent: ArtistContent;
   performDeezerSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
   performQobuzSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
-  makeHttpRequest: (url: string) => Promise<any>;
   ensureQobuzSearchReady: () => Promise<void>;
   parseToQobuz: (url: string) => Promise<any>;
   parseDeezerUrl: (url: string) => Promise<any>;
@@ -16,11 +14,9 @@ interface WebSocketCatalogDependencies {
 
 export const registerCatalogSocketHandlers = ({
   socket,
-  deezer,
-  qobuz,
+  artistContent,
   performDeezerSearch,
   performQobuzSearch,
-  makeHttpRequest,
   ensureQobuzSearchReady,
   parseToQobuz,
   parseDeezerUrl,
@@ -41,42 +37,15 @@ export const registerCatalogSocketHandlers = ({
     }
   });
 
+  /*
+   * Artist lists now come from the shared artist-content module, which the
+   * REST surface serves too. Keeping two copies of the Deezer and Qobuz
+   * shapes meant a fix to one silently left the other wrong.
+   */
   socket.on('getArtistAlbums', async (data) => {
     try {
       const {service, artistId, limit = 30, offset = 0} = data || {};
-      let items: any[] = [];
-      if (service === 'deezer') {
-        const url = `https://api.deezer.com/artist/${encodeURIComponent(artistId)}/albums?limit=${Number(
-          limit,
-        )}&index=${Number(offset)}`;
-        const resp = await makeHttpRequest(url);
-        items = (resp && resp.data) || [];
-        items = items.map((a: any) => ({
-          id: String(a.id),
-          title: a.title,
-          artist: a.artist?.name || 'Unknown Artist',
-          type: 'album',
-          duration: `${a.nb_tracks || 0} tracks`,
-          rawData: a,
-        }));
-      } else if (service === 'qobuz') {
-        await ensureQobuzSearchReady();
-        const resp = await (qobuz as any).qobuzRequest?.('artist/get', {
-          artist_id: artistId,
-          extra: 'albums',
-          offset: Number(offset),
-          limit: Number(limit),
-        });
-        const albums = resp?.albums?.items || [];
-        items = albums.map((a: any) => ({
-          id: String(a.id),
-          title: a.title,
-          artist: a.artist?.name || 'Unknown Artist',
-          type: 'album',
-          duration: `${a.tracks_count || 0} tracks`,
-          rawData: a,
-        }));
-      }
+      const items = await artistContent.getArtistAlbums(service, artistId, Number(limit), Number(offset));
       socket.emit('artistAlbums', {artistId, items});
     } catch (error: any) {
       socket.emit('artistAlbumsError', {artistId: data?.artistId, message: error.message});
@@ -86,41 +55,7 @@ export const registerCatalogSocketHandlers = ({
   socket.on('getArtistTracks', async (data) => {
     try {
       const {service, artistId, limit = 50, offset = 0} = data || {};
-      let items: any[] = [];
-      if (service === 'deezer') {
-        const url = `https://api.deezer.com/artist/${encodeURIComponent(artistId)}/top?limit=${Number(
-          limit,
-        )}&index=${Number(offset)}`;
-        const resp = await makeHttpRequest(url);
-        const tracks = (resp && resp.data) || [];
-        items = tracks.map((t: any) => ({
-          id: String(t.id),
-          title: t.title + (t.version ? ` ${t.version}` : ''),
-          artist: t.artist?.name || 'Unknown Artist',
-          album: t.album?.title || '',
-          type: 'track',
-          duration: formatSecondsReadable(Number(t.duration || 0)),
-          rawData: t,
-        }));
-      } else if (service === 'qobuz') {
-        await ensureQobuzSearchReady();
-        const resp = await (qobuz as any).qobuzRequest?.('artist/get', {
-          artist_id: artistId,
-          extra: 'tracks',
-          offset: Number(offset),
-          limit: Number(limit),
-        });
-        const tracks = resp?.tracks?.items || [];
-        items = tracks.map((t: any) => ({
-          id: String(t.id),
-          title: t.title + (t.version ? ` (${t.version})` : ''),
-          artist: t.performer?.name || 'Unknown Artist',
-          album: t.album?.title || '',
-          type: 'track',
-          duration: formatSecondsReadable(Number(t.duration || 0)),
-          rawData: t,
-        }));
-      }
+      const items = await artistContent.getArtistTracks(service, artistId, Number(limit), Number(offset));
       socket.emit('artistTracks', {artistId, items});
     } catch (error: any) {
       socket.emit('artistTracksError', {artistId: data?.artistId, message: error.message});
@@ -130,32 +65,13 @@ export const registerCatalogSocketHandlers = ({
   socket.on('getArtistPlaylists', async (data) => {
     try {
       const {service, artistId, artistName, limit = 30, offset = 0} = data || {};
-      const query = artistName && String(artistName).trim().length > 0 ? artistName : String(artistId);
-      let items: any[] = [];
-      if (service === 'deezer') {
-        const result = await deezer.searchMusic(query, ['PLAYLIST'], Number(limit), Number(offset));
-        const dataArr = (result as any).PLAYLIST?.data || [];
-        items = dataArr.map((p: any) => ({
-          id: String(p.PLAYLIST_ID || p.id),
-          title: p.TITLE || p.title,
-          artist: p.PARENT_USERNAME || p.user?.name || 'Deezer',
-          type: 'playlist',
-          duration: `${p.NB_SONG || p.nb_tracks || 0} tracks`,
-          rawData: p,
-        }));
-      } else if (service === 'qobuz') {
-        await ensureQobuzSearchReady();
-        const result = await qobuz.searchMusic(query, 'playlist', Number(limit), Number(offset));
-        const dataArr = (result as any).playlists?.items || [];
-        items = dataArr.map((p: any) => ({
-          id: String(p.id),
-          title: p.name,
-          artist: p.owner?.name || 'Qobuz',
-          type: 'playlist',
-          duration: `${p.tracks_count || 0} tracks`,
-          rawData: p,
-        }));
-      }
+      const items = await artistContent.getArtistPlaylists(
+        service,
+        artistId,
+        artistName,
+        Number(limit),
+        Number(offset),
+      );
       socket.emit('artistPlaylists', {artistId, items});
     } catch (error: any) {
       socket.emit('artistPlaylistsError', {artistId: data?.artistId, message: error.message});

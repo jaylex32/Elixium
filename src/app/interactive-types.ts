@@ -5,6 +5,13 @@ export interface SearchResult {
   album: string;
   duration: string;
   year?: number | null;
+  /**
+   * Full release date, ISO `YYYY-MM-DD`, when the service gives one.
+   *
+   * `year` alone cannot order a year's worth of releases, which is what a
+   * newest-first sort actually needs — every 2026 album would tie.
+   */
+  releaseDate?: string | null;
   type: string;
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;

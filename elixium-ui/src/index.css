@@ -107,6 +107,33 @@
   --info-color: #5bc0de;
 }
 
+/* A neutral dark, for when the tinted themes are too much.
+ *
+ * Every other dark theme here carries a hue through its greys — ember warms
+ * them, nocturne turns them teal. This one is genuinely neutral, and it stops
+ * short of black: #0b0b0c rather than #000. Pure black against white text is a
+ * harsh edge that smears on OLED panels while scrolling, and it leaves nowhere
+ * below the page to put a raised surface, so cards have to glow brighter than
+ * the content to separate. Starting a shade up keeps the whole elevation
+ * ladder available and still reads as black in a dark room. */
+[data-theme='obsidian'] {
+  --primary-bg: #0b0b0c;
+  --secondary-bg: #131315;
+  --card-bg: #191a1c;
+  --surface-bg: #212225;
+  --accent-bg: #2a2b2f;
+  --border-color: #313236;
+  --primary-accent: #7c8cff;
+  --secondary-accent: #a5b0ff;
+  --text-primary: #f2f3f5;
+  --text-secondary: #b6b9c0;
+  --text-muted: #7d818a;
+  --success-color: #4ec27a;
+  --warning-color: #e0a94a;
+  --error-color: #e5615c;
+  --info-color: #5aa9e6;
+}
+
 [data-theme='nocturne-pulse'] {
   --primary-bg: #050a0a;
   --secondary-bg: #0a1414;

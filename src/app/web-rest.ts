@@ -3,12 +3,14 @@ import type {Server as SocketIOServer} from 'socket.io';
 import got from 'got';
 import AdmZip from 'adm-zip';
 import type {SearchResult} from './interactive-types';
+import type {ArtistContent, ArtistContentKind} from './artist-content';
 
 interface WebRestDependencies {
   app: Express;
   io: SocketIOServer;
   deezer: any;
   qobuz: any;
+  artistContent: ArtistContent;
   performDeezerSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
   performQobuzSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
   getDiscoveryContentRest: (service: string, type: string, limit: number) => Promise<any[]>;
@@ -36,6 +38,7 @@ export const registerWebRestRoutes = ({
   io,
   deezer,
   qobuz,
+  artistContent,
   performDeezerSearch,
   performQobuzSearch,
   getDiscoveryContentRest,
@@ -57,6 +60,42 @@ export const registerWebRestRoutes = ({
       }
 
       res.json(results);
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
+  /**
+   * One artist's albums, top tracks or related playlists.
+   *
+   * Paged, because an artist with a long back catalogue does not fit one
+   * response and the artist view loads more as it is scrolled.
+   */
+  app.get('/api/artist-content', async (req, res) => {
+    try {
+      const service = String(req.query.service || '').toLowerCase();
+      const artistId = String(req.query.artistId || '');
+      const kind = String(req.query.kind || 'albums').toLowerCase() as ArtistContentKind;
+      const artistName = req.query.artistName ? String(req.query.artistName) : undefined;
+      const limit = Number(req.query.limit || 30);
+      const offset = Number(req.query.offset || 0);
+
+      if (!service || !artistId) {
+        return res.status(400).json({error: 'Missing service or artistId'});
+      }
+
+      let items: SearchResult[] = [];
+      if (kind === 'albums') {
+        items = await artistContent.getArtistAlbums(service, artistId, limit, offset);
+      } else if (kind === 'tracks') {
+        items = await artistContent.getArtistTracks(service, artistId, limit, offset);
+      } else if (kind === 'playlists') {
+        items = await artistContent.getArtistPlaylists(service, artistId, artistName, limit, offset);
+      } else {
+        return res.status(400).json({error: `Unknown kind: ${kind}`});
+      }
+
+      res.json(items);
     } catch (error: any) {
       res.status(500).json({error: error.message});
     }

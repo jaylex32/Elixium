@@ -7,6 +7,7 @@ export type Service = 'deezer' | 'qobuz';
 
 export const THEMES = [
   {id: 'ember-signal', label: 'Ember Signal'},
+  {id: 'obsidian', label: 'Obsidian (true dark)'},
   {id: 'nocturne-pulse', label: 'Nocturne Pulse'},
   {id: 'sterling-deck', label: 'Sterling Deck'},
   {id: 'verdant-luxe', label: 'Verdant Luxe'},

@@ -1,6 +1,7 @@
 import {useState, useEffect, useMemo} from 'react';
 import {Search, X, Clock, Trash2, Play, Pause, Music2, ArrowUpDown} from 'lucide-react';
-import {useSearch} from '@/shared/lib/api';
+import {useSearchPages, SEARCH_PAGE_SIZE} from '@/shared/lib/api';
+import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
 import {useAppStore} from '@/store/app-store';
@@ -19,7 +20,7 @@ import {TrackActions} from '@/shared/components/TrackActions';
 import type {RawSearchResult, Service} from '@/types';
 
 type SearchType = 'track' | 'album' | 'artist' | 'playlist';
-type SortMode = 'relevance' | 'title' | 'duration';
+type SortMode = 'relevance' | 'newest' | 'title' | 'duration';
 
 const TYPE_TABS: {value: SearchType; label: string}[] = [
   {value: 'track', label: 'Tracks'},
@@ -30,9 +31,26 @@ const TYPE_TABS: {value: SearchType; label: string}[] = [
 
 const SORTS: {value: SortMode; label: string}[] = [
   {value: 'relevance', label: 'Relevance'},
+  {value: 'newest', label: 'Newest'},
   {value: 'title', label: 'A–Z'},
   {value: 'duration', label: 'Longest'},
 ];
+
+/**
+ * Sortable release time for a result.
+ *
+ * Prefers the full date the backend now sends; `year` is the fallback for
+ * anything the service only dated to a year, and it has to be a year boundary
+ * rather than 0 so those results still order against dated ones instead of
+ * sinking to the bottom together.
+ */
+function releasedAt(r: RawSearchResult): number {
+  if (r.releaseDate) {
+    const parsed = Date.parse(r.releaseDate);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return r.year ? Date.UTC(r.year, 0, 1) : 0;
+}
 
 const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
 
@@ -144,8 +162,21 @@ export function SearchPage() {
   const setTrack = usePlayerStore((s) => s.setTrack);
   const {download} = useDownload();
 
-  const {data = [], isLoading, isFetching} = useSearch(query, service, type);
-  const spinning = isLoading || isFetching;
+  const {
+    data: pages,
+    isLoading,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useSearchPages(query, service, type);
+
+  // Flattened once: every consumer below wants one list, not pages.
+  const data = useMemo(() => pages?.pages.flat() ?? [], [pages]);
+
+  // Only the first page counts as "spinning" — a later page must not blank the
+  // results already on screen and bounce the user back to the top.
+  const spinning = isLoading || (isFetching && !isFetchingNextPage);
 
   const {entries: recentSearches, record, remove, clear} = useSearchHistoryStore();
 
@@ -169,12 +200,30 @@ export function SearchPage() {
     if (sort === 'relevance') return data;
     const copy = [...data];
     if (sort === 'title') return copy.sort((a, b) => a.title.localeCompare(b.title));
+    if (sort === 'newest') return copy.sort((a, b) => releasedAt(b) - releasedAt(a));
     return copy.sort((a, b) => toSeconds(b.duration) - toSeconds(a.duration));
   }, [data, sort]);
 
   const idle = query.trim().length < 2;
   const isEmpty = !idle && !spinning && data.length === 0;
-  const showSort = type === 'track' && results.length > 1;
+  /*
+   * Not every sort applies to every type. Duration is a real length only for
+   * tracks — for an album the field holds "12 tracks", which sorts as zero and
+   * looks broken. Artists and playlists carry no release date either.
+   */
+  const availableSorts = useMemo(() => {
+    if (type === 'track') return SORTS;
+    if (type === 'album') return SORTS.filter((s) => s.value !== 'duration');
+    return SORTS.filter((s) => s.value === 'relevance' || s.value === 'title');
+  }, [type]);
+
+  const showSort = results.length > 1 && availableSorts.length > 1;
+
+  // A sort that no longer applies would otherwise silently keep ordering the
+  // list by a field the new type does not have.
+  useEffect(() => {
+    if (!availableSorts.some((s) => s.value === sort)) setSort('relevance');
+  }, [availableSorts, sort]);
 
   const playAll = (startIndex: number) => {
     const tracks = results.map((r) =>
@@ -282,7 +331,7 @@ export function SearchPage() {
                   {showSort && (
                     <div className="flex items-center gap-1 rounded-sm border border-border bg-secondary-bg p-0.5">
                       <ArrowUpDown size={12} className="ml-1.5 text-text-muted" />
-                      {SORTS.map((s) => (
+                      {availableSorts.map((s) => (
                         <button
                           key={s.value}
                           onClick={() => setSort(s.value)}
@@ -341,6 +390,13 @@ export function SearchPage() {
                   ))}
                 </div>
               )}
+
+                  <InfiniteSentinel
+                    hasMore={Boolean(hasNextPage)}
+                    loading={isFetchingNextPage}
+                    onLoadMore={fetchNextPage}
+                    endLabel={results.length > SEARCH_PAGE_SIZE ? `That's everything — ${results.length} results` : undefined}
+                  />
             </TabsContent>
 
             <TabsContent value="album">
@@ -361,6 +417,13 @@ export function SearchPage() {
                   })}
                 </div>
               )}
+
+                  <InfiniteSentinel
+                    hasMore={Boolean(hasNextPage)}
+                    loading={isFetchingNextPage}
+                    onLoadMore={fetchNextPage}
+                    endLabel={results.length > SEARCH_PAGE_SIZE ? `That's everything — ${results.length} results` : undefined}
+                  />
             </TabsContent>
 
             <TabsContent value="artist">
@@ -380,6 +443,13 @@ export function SearchPage() {
                   ))}
                 </div>
               )}
+
+                  <InfiniteSentinel
+                    hasMore={Boolean(hasNextPage)}
+                    loading={isFetchingNextPage}
+                    onLoadMore={fetchNextPage}
+                    endLabel={results.length > SEARCH_PAGE_SIZE ? `That's everything — ${results.length} results` : undefined}
+                  />
             </TabsContent>
 
             <TabsContent value="playlist">
@@ -400,6 +470,13 @@ export function SearchPage() {
                   })}
                 </div>
               )}
+
+                  <InfiniteSentinel
+                    hasMore={Boolean(hasNextPage)}
+                    loading={isFetchingNextPage}
+                    onLoadMore={fetchNextPage}
+                    endLabel={results.length > SEARCH_PAGE_SIZE ? `That's everything — ${results.length} results` : undefined}
+                  />
             </TabsContent>
           </div>
         </TabsRoot>

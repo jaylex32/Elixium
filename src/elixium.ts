@@ -26,6 +26,7 @@ import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
+import {createArtistContent} from './app/artist-content';
 import {registerApiV1} from './app/api/v1';
 import {installProcessGuard} from './app/process-guard';
 import {
@@ -385,6 +386,7 @@ const setupWebServer = () => {
     io,
     deezer,
     qobuz,
+    artistContent,
     performDeezerSearch,
     performQobuzSearch,
     getDiscoveryContentRest,
@@ -445,11 +447,9 @@ const setupWebServer = () => {
 
     registerCatalogSocketHandlers({
       socket,
-      deezer,
-      qobuz,
+      artistContent,
       performDeezerSearch,
       performQobuzSearch,
-      makeHttpRequest,
       ensureQobuzSearchReady: () => initQobuzForSearch(),
       parseToQobuz,
       parseDeezerUrl: parseInfo,
@@ -651,6 +651,14 @@ const {getDiscoveryContentRest, getItemTracksRest, makeHttpRequest} = createWebD
   ensureQobuzSearchReady: () => initQobuzForSearch(),
   toStandardTrack,
   getQobuzConfig,
+});
+
+/** Artist albums, top tracks and related playlists, shared by REST and sockets. */
+const artistContent = createArtistContent({
+  deezer,
+  qobuz,
+  makeHttpRequest,
+  ensureQobuzSearchReady: () => initQobuzForSearch(),
 });
 
 const {startDownloadProcess} = createDownloadQueueRuntime({
