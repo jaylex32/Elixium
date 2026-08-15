@@ -61,6 +61,16 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
   } = usePlayerStore();
   const {settings} = useSettingsStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  /*
+   * Where playback should resume, captured once on mount.
+   *
+   * The store rehydrates the saved position, but the audio element starts at
+   * zero and immediately reports it, so the restored value was overwritten
+   * before anything could use it. Holding it in a ref keeps it out of reach
+   * of that until the element is ready to be seeked.
+   */
+  const restoreAtRef = useRef(usePlayerStore.getState().currentTime);
   const isMobile = useIsMobile();
   const warnedPreviewFor = useRef<string | null>(null);
 
@@ -152,7 +162,13 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         onCanPlay={() => setIsBuffering(false)}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          /* Until the restore seek has happened, the element reports 0 — and
+             writing that back would overwrite the very position we saved, which
+             is why the player came back at the start of the track. */
+          if (restoreAtRef.current > 0) return;
+          setCurrentTime(e.currentTarget.currentTime);
+        }}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onEnded={() => {
           if (repeat === 'one' && audioRef.current) {

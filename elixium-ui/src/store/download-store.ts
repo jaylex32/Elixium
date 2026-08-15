@@ -419,8 +419,30 @@ export const useDownloadStore = create<DownloadState>()(
        * server process that will not resume them, so restoring them would show
        * downloads that are not running.
        */
-      partialize: (s) =>
-        ({history: s.history, reports: s.reports} as DownloadState),
+      /*
+       * Finished work and the rows still on screen both survive a reload.
+       *
+       * In-flight rows used to be dropped, on the grounds that the server will
+       * not resume them — but dropping them also erased the record that they
+       * were ever started, so reopening showed nothing where a half-finished
+       * album had been. They are kept and marked instead.
+       */
+      partialize: (s) => ({history: s.history, reports: s.reports, active: s.active} as DownloadState),
+
+      onRehydrateStorage: () => (state?: DownloadState) => {
+        if (!state?.active) return;
+        for (const [id, entry] of Object.entries(state.active)) {
+          if (entry.status !== 'done' && entry.status !== 'error') {
+            state.active[id] = {
+              ...entry,
+              status: 'error',
+              error: 'Interrupted — Elixium was closed before this finished',
+            };
+          }
+        }
+        // Nothing can still be running in a process that just started.
+        state.isRunning = false;
+      },
     },
   ),
 );

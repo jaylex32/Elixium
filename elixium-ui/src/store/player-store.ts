@@ -226,7 +226,30 @@ export const usePlayerStore = create<PlayerState>()(
       // Preferences persist; playback state does not — restoring a paused
       // track across reloads without its audio loaded is worse than starting
       // clean.
-      partialize: (s) => ({volume: s.volume, shuffle: s.shuffle, repeat: s.repeat} as PlayerState),
+      /*
+       * The queue survives a restart, paused and at its saved position.
+       *
+       * A music player forgetting what was playing is the one thing it must
+       * not do. isPlaying is deliberately excluded: no audio element exists on
+       * first paint, so restoring "playing" would run a progress bar over
+       * silence. It comes back paused, on the right track, at the right
+       * second, ready for the play button.
+       */
+      partialize: (s) =>
+        ({
+          volume: s.volume,
+          shuffle: s.shuffle,
+          repeat: s.repeat,
+          currentTrack: s.currentTrack,
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentTime: s.currentTime,
+          duration: s.duration,
+        } as PlayerState),
+
+      onRehydrateStorage: () => (state?: PlayerState) => {
+        if (state) state.isPlaying = false;
+      },
     },
   ),
 );
