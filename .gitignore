@@ -145,6 +145,11 @@ desktop/node_modules/
 desktop/out/
 desktop/launch.log
 
+# pkg's Node base binaries, kept in the workspace so the icon stamped onto the
+# Windows one cannot leak into a shared cache and become the base for other
+# projects built on the same machine.
+.pkg-cache/
+
 # Icons generated from elixium-icon.svg by desktop/make-icons.js, which runs
 # from prestart/predist. The web UI's PNG copies are committed instead — the
 # Vite build has no equivalent hook to regenerate them.

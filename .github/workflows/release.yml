@@ -24,6 +24,11 @@ jobs:
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    env:
+      # Keep pkg's base binaries inside the workspace. The Windows build edits
+      # one of them to attach the icon, and that should not leak into a shared
+      # cache where it would silently become the base for unrelated builds.
+      PKG_CACHE_PATH: ${{ github.workspace }}/.pkg-cache
     strategy:
       # One platform failing should not discard the binaries that did build.
       fail-fast: false
@@ -95,6 +100,33 @@ jobs:
         # web interface came to be missing from the v1.1.0 binaries.
         run: npx pkg . --targets ${{ matrix.target }} --out-path dist-bin
 
+      - name: Stamp the Windows icon and repackage
+        if: startsWith(matrix.os, 'windows')
+        # The run above also populated the cache with pkg's Node base binary.
+        # Stamping that and packaging again is the only safe order: editing the
+        # finished executable's resources detaches the filesystem pkg appended
+        # to it. See stamp-win-base.js for why, and why the stamped copy has to
+        # be named `built-`.
+        run: |
+          node stamp-win-base.js ${{ matrix.target }}
+          npx pkg . --targets ${{ matrix.target }} --out-path dist-bin
+
+      - name: Check the Windows binary still reads its payload
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        # A detached payload is not visible in the file listing and does not
+        # stop the binary launching — it surfaces only when something is read
+        # out of the bundle. Asking for the help text does exactly that, so a
+        # broken binary fails here instead of on a user's machine.
+        run: |
+          if ! ./dist-bin/elixium.exe --help > help.txt 2>&1; then
+            echo "::error::the packaged binary did not run"; cat help.txt; exit 1
+          fi
+          if grep -q "Error reading from file" help.txt; then
+            echo "::error::the packaged binary lost its bundled filesystem"; cat help.txt; exit 1
+          fi
+          echo "binary runs and reads its payload"
+
       - name: Normalise binary name
         shell: bash
         run: |
@@ -104,20 +136,6 @@ jobs:
           found=$(ls | head -1)
           if [ "$found" != "${{ matrix.binary }}" ]; then mv "$found" "${{ matrix.binary }}"; fi
           ls -la
-
-      # No custom icon on the packaged server binary, deliberately.
-      #
-      # pkg inherits Node's icon and version resource, and neither way of
-      # changing that is safe: rewriting the finished executable's resources
-      # with rcedit relays out the file and detaches the virtual filesystem pkg
-      # appended to it — the binary still launches and still prints its help,
-      # then fails with "Pkg: Error reading from file." as soon as it needs a
-      # bundled asset. Stamping the cached base binary beforehand instead is
-      # rejected by pkg's own hash check, which refetches a clean copy.
-      #
-      # The desktop app is the build most people install and it carries the
-      # icon properly, so the server binary keeps Node's rather than risking a
-      # download that is subtly broken.
 
       - name: Sign for macOS
         if: startsWith(matrix.os, 'macos')
