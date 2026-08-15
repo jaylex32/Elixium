@@ -76,6 +76,21 @@ jobs:
         # is a no-op off Termux but must not fail the build.
         run: npm ci --ignore-scripts
 
+      - name: Check no source file is hidden from git
+        shell: bash
+        # v1.2.0 failed on every platform because a bare `logs` rule in
+        # .gitignore matched src/features/logs, so the Logs page was never
+        # committed. It compiled locally and did not exist in the checkout, and
+        # nothing caught that until four runners had already failed.
+        run: |
+          hidden=$(git ls-files --others --ignored --exclude-standard             -- 'src/**/*.ts' 'src/**/*.tsx' 'shared/**/*.ts' 'elixium-ui/src/**/*.ts' 'elixium-ui/src/**/*.tsx')
+          if [ -n "$hidden" ]; then
+            echo "::error::source files are gitignored and missing from the checkout:"
+            echo "$hidden"
+            exit 1
+          fi
+          echo "no source file is hidden from git"
+
       - name: Build web interface
         run: |
           npm ci --ignore-scripts --prefix elixium-ui
@@ -264,6 +279,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Check no source file is hidden from git
+        shell: bash
+        # v1.2.0 failed on every platform because a bare `logs` rule in
+        # .gitignore matched src/features/logs, so the Logs page was never
+        # committed. It compiled locally and did not exist in the checkout, and
+        # nothing caught that until four runners had already failed.
+        run: |
+          hidden=$(git ls-files --others --ignored --exclude-standard             -- 'src/**/*.ts' 'src/**/*.tsx' 'shared/**/*.ts' 'elixium-ui/src/**/*.ts' 'elixium-ui/src/**/*.tsx')
+          if [ -n "$hidden" ]; then
+            echo "::error::source files are gitignored and missing from the checkout:"
+            echo "$hidden"
+            exit 1
+          fi
+          echo "no source file is hidden from git"
 
       - name: Build the engine and interface
         # The desktop shell packages ../dist/src and ../node_modules verbatim,
