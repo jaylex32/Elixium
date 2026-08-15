@@ -22,6 +22,15 @@ interface ChartsDependencies {
 
 export type ChartKind = 'tracks' | 'albums' | 'artists' | 'playlists';
 
+export interface ChartCountry {
+  /** The official chart playlist's id. */
+  id: string;
+  /** Country name, taken from the playlist title ("Top Brazil" -> "Brazil"). */
+  name: string;
+  picture?: string;
+  trackCount?: number;
+}
+
 export interface ChartGenre {
   id: string;
   name: string;
@@ -45,7 +54,83 @@ const QOBUZ_FEATURED_TYPE: Record<string, string> = {
   'new-releases': 'new-releases',
 };
 
+/** Deezer's own account for official country charts. */
+const CHART_OWNER = 'Deezer Charts';
+
+/** Discovery is a handful of searches; the result barely changes day to day. */
+const COUNTRY_CACHE_MS = 6 * 60 * 60 * 1000;
+
 export const createCharts = ({qobuz, makeHttpRequest, ensureQobuzSearchReady}: ChartsDependencies) => {
+  let countryCache: {at: number; countries: ChartCountry[]} | null = null;
+
+  /**
+   * The per-country charts, the way deemix shows them.
+   *
+   * Deezer's public API has no country-chart endpoint — /chart takes a genre,
+   * and /editorial turns out to list genres too. What it does publish is one
+   * official "Top <Country>" playlist per market, owned by the Deezer Charts
+   * account, so these are found by searching for those and keeping the ones
+   * that account actually owns.
+   *
+   * Discovered rather than hardcoded on purpose. A list of ids checked by hand
+   * was wrong within minutes: three of nine pointed at the wrong country
+   * ("Top Honduras" under Spain, "Top Germany" under Mexico) and over half had
+   * become someone's private "Favorite tracks". Searching re-derives the list
+   * every few hours instead of rotting silently.
+   */
+  const getChartCountries = async (): Promise<ChartCountry[]> => {
+    if (countryCache && Date.now() - countryCache.at < COUNTRY_CACHE_MS) return countryCache.countries;
+
+    const seen = new Map<string, ChartCountry>();
+
+    // Several passes: one search page does not reach every market, and the
+    // ranking differs per term.
+    for (const query of ['Top', 'Top 100', 'charts']) {
+      for (const index of [0, 25, 50, 75]) {
+        const url = `https://api.deezer.com/search/playlist?q=${encodeURIComponent(query)}&limit=25&index=${index}`;
+        let response: any;
+        try {
+          response = await makeHttpRequest(url);
+        } catch {
+          // One failed page must not lose the ones that worked.
+          continue;
+        }
+
+        for (const playlist of (response && response.data) || []) {
+          if (playlist?.user?.name !== CHART_OWNER) continue;
+          const title = String(playlist.title || '');
+          if (!title.toLowerCase().startsWith('top ')) continue;
+
+          seen.set(String(playlist.id), {
+            id: String(playlist.id),
+            name: title.replace(/^top\s+/i, '').trim() || title,
+            picture: playlist.picture_medium || playlist.picture,
+            trackCount: Number(playlist.nb_tracks || 0),
+          });
+        }
+      }
+    }
+
+    const countries = [...seen.values()].sort((a, b) => {
+      // Worldwide first; it is the default anyone wants.
+      if (/worldwide/i.test(a.name)) return -1;
+      if (/worldwide/i.test(b.name)) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (countries.length > 0) countryCache = {at: Date.now(), countries};
+    return countries;
+  };
+
+  /** Tracks of one country chart, in chart order. */
+  const getCountryChart = async (playlistId: string, limit = 50, offset = 0): Promise<SearchResult[]> => {
+    const url = `https://api.deezer.com/playlist/${encodeURIComponent(playlistId)}/tracks?limit=${Number(
+      limit,
+    )}&index=${Number(offset)}`;
+    const response = await makeHttpRequest(url);
+    return mapDeezerChart('tracks', (response && response.data) || []);
+  };
+
   /** The genres a chart can be filtered to. Genre 0 is Deezer's overall chart. */
   const getChartGenres = async (service: string): Promise<ChartGenre[]> => {
     if (service === 'qobuz') return QOBUZ_CHART_GENRES;
@@ -151,7 +236,7 @@ export const createCharts = ({qobuz, makeHttpRequest, ensureQobuzSearchReady}: C
     return [];
   };
 
-  return {getChartGenres, getCharts};
+  return {getChartGenres, getCharts, getChartCountries, getCountryChart};
 };
 
 export type Charts = ReturnType<typeof createCharts>;

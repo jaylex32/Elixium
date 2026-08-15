@@ -55,6 +55,51 @@ const findFreePort = () =>
     });
   });
 
+/** Is this exact port free right now? */
+const isPortFree = (port) =>
+  new Promise((resolve) => {
+    const probe = createServer();
+    probe.unref();
+    probe.once('error', () => resolve(false));
+    probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
+  });
+
+/**
+ * Reuse the same port between launches.
+ *
+ * This is not a nicety. The window loads http://127.0.0.1:<port>, and every
+ * browser storage API is scoped to the origin — which includes the port. A
+ * fresh port each launch therefore means a fresh, empty localStorage each
+ * launch, so the theme, the download history, recent searches and everything
+ * else the interface remembers silently reset every time the app was reopened.
+ * It looked like settings "not saving"; nothing was ever loaded to begin with.
+ *
+ * The port is remembered in app data and reused whenever it is still free,
+ * falling back to a new one only if something else has taken it — which keeps
+ * the origin stable in practice without hardcoding a port that could collide
+ * with an Elixium server the user already runs.
+ */
+const resolveStablePort = async () => {
+  const portFile = path.join(dataDir, 'port.json');
+
+  try {
+    const saved = Number(JSON.parse(fs.readFileSync(portFile, 'utf8')).port);
+    if (Number.isInteger(saved) && saved > 1024 && saved < 65536 && (await isPortFree(saved))) {
+      return saved;
+    }
+  } catch {
+    // No remembered port yet, or it is unusable — fall through and pick one.
+  }
+
+  const port = await findFreePort();
+  try {
+    fs.writeFileSync(portFile, JSON.stringify({port}), 'utf8');
+  } catch {
+    // Not fatal: the app still runs, it just will not remember state next time.
+  }
+  return port;
+};
+
 /**
  * Locate the compiled server.
  *
@@ -100,7 +145,7 @@ const startServer = async () => {
   const entry = resolveServerEntry();
   if (!entry) throw new Error('Could not find the Elixium engine inside this build.');
 
-  serverPort = await findFreePort();
+  serverPort = await resolveStablePort();
 
   /*
    * No --openssl-legacy-provider here, deliberately.

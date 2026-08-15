@@ -67,16 +67,27 @@ export function extractCover(rawData: Raw | undefined | null, service: string): 
     if (typeof v === 'string' && v.startsWith('http')) return v;
   }
 
-  // md5_image hash (public API tracks)
-  const md5 = rawData.md5_image as string | undefined;
-  if (typeof md5 === 'string' && md5) {
-    return `https://e-cdns-images.dzcdn.net/images/cover/${md5}/500x500-000000-80-0-0.jpg`;
-  }
-
-  // Fallback: any picture_* field
+  /*
+   * Ready-made picture URLs, before any hash is reconstructed.
+   *
+   * A chart playlist carries both `picture_*` URLs and an `md5_image`, and the
+   * md5 branch used to win — building an /images/cover/ path for what is a
+   * playlist image, which 404s. That is why playlist artwork was blank in
+   * Charts while album artwork beside it was fine. A URL the service handed us
+   * is always more trustworthy than one assembled from a hash and a guess at
+   * the kind.
+   */
   for (const key of ['picture_xl', 'picture_big', 'picture_medium', 'picture'] as const) {
     const v = rawData[key] as string | undefined;
     if (typeof v === 'string' && v.startsWith('http')) return v;
+  }
+
+  // md5_image hash (public API tracks, albums and playlists). picture_type
+  // names the CDN folder — 'cover' for albums, 'playlist', 'artist'.
+  const md5 = rawData.md5_image as string | undefined;
+  if (typeof md5 === 'string' && md5) {
+    const kind = typeof rawData.picture_type === 'string' && rawData.picture_type ? rawData.picture_type : 'cover';
+    return `https://e-cdns-images.dzcdn.net/images/${kind}/${md5}/500x500-000000-80-0-0.jpg`;
   }
 
   return undefined;

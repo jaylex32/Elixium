@@ -4,6 +4,8 @@ import {persist} from 'zustand/middleware';
 export interface Settings {
   deezerArl: string;
   spotifySpDc: string;
+  spotifyClientId: string;
+  spotifyClientSecret: string;
   qobuzAppId: string;
   qobuzSecrets: string;
   qobuzToken: string;
@@ -42,6 +44,8 @@ export interface Settings {
 const defaults: Settings = {
   deezerArl: '',
   spotifySpDc: '',
+  spotifyClientId: '',
+  spotifyClientSecret: '',
   qobuzAppId: '',
   qobuzSecrets: '',
   qobuzToken: '',

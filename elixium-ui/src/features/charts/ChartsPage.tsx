@@ -1,6 +1,6 @@
 import {useState, useMemo} from 'react';
 import {TrendingUp, Play, Music2} from 'lucide-react';
-import {useCharts, useChartGenres, type ChartKind} from '@/shared/lib/api';
+import {useCharts, useChartGenres, useChartCountries, useCountryChart, type ChartKind} from '@/shared/lib/api';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
 import {useAppStore} from '@/store/app-store';
@@ -37,6 +37,9 @@ export function ChartsPage() {
   const service = useAppStore((s) => s.service);
   const [kind, setKind] = useState<ChartKind>('tracks');
   const [genreId, setGenreId] = useState('0');
+  /* Country charts are a separate axis: Deezer publishes them as official
+     "Top <Country>" playlists rather than through the /chart endpoint. */
+  const [countryId, setCountryId] = useState('');
   const [selected, setSelected] = useState<(AlbumCardData & {service: Service}) | null>(null);
 
   const {download} = useDownload();
@@ -44,17 +47,20 @@ export function ChartsPage() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   const {data: genres = []} = useChartGenres(service);
-  const {data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage} = useCharts(
-    service,
-    genreId,
-    kind,
-  );
+  const {data: countries = []} = useChartCountries(service === 'deezer');
 
-  const items = useMemo(() => data?.pages.flat() ?? [], [data]);
+  const genreQuery = useCharts(service, genreId, kind);
+  const countryQuery = useCountryChart(countryId, Boolean(countryId));
+
+  // One source or the other; a country chart is always a track list.
+  const source = countryId ? countryQuery : genreQuery;
+  const {isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage} = source;
+  const items = useMemo(() => source.data?.pages.flat() ?? [], [source.data]);
+  const effectiveKind: ChartKind = countryId ? 'tracks' : kind;
 
   /* Qobuz has no chart API; its stand-ins are album lists only, so the other
      tabs would silently return nothing. Saying so beats an empty grid. */
-  const qobuzUnsupported = service === 'qobuz' && kind !== 'albums';
+  const qobuzUnsupported = service === 'qobuz' && !countryId && kind !== 'albums';
 
   const playAll = (startIndex: number) => {
     const tracks = items.map((r) =>
@@ -81,6 +87,19 @@ export function ChartsPage() {
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {service === 'deezer' && countries.length > 0 && (
+            <Select
+              value={countryId}
+              onValueChange={setCountryId}
+              options={[
+                {value: '', label: 'By genre'},
+                ...countries.map((c) => ({value: c.id, label: c.name})),
+              ]}
+              placeholder="Country"
+              className="h-9 w-44"
+            />
+          )}
+
           <Select
             value={genreId}
             onValueChange={setGenreId}
@@ -89,7 +108,7 @@ export function ChartsPage() {
             className="h-9 w-44"
           />
 
-          <div className="scroll-row flex gap-1 rounded-sm border border-border bg-secondary-bg p-1">
+          <div className={cn('scroll-row flex gap-1 rounded-sm border border-border bg-secondary-bg p-1', countryId && 'hidden')}>
             {KINDS.map((k) => (
               <button
                 key={k.id}
@@ -116,13 +135,13 @@ export function ChartsPage() {
 
       {!qobuzUnsupported && (
         <>
-          {isLoading && (kind === 'tracks' ? <ListSkeleton count={12} /> : <GridSkeleton />)}
+          {isLoading && (effectiveKind === 'tracks' ? <ListSkeleton count={12} /> : <GridSkeleton />)}
           {isError && <ErrorState title="Could not load charts" onRetry={() => refetch()} />}
           {!isLoading && !isError && items.length === 0 && (
             <EmptyState title="No chart entries" hint="Try a different genre." />
           )}
 
-          {!isLoading && !isError && items.length > 0 && kind === 'tracks' && (
+          {!isLoading && !isError && items.length > 0 && effectiveKind === 'tracks' && (
             <>
               <div className="mb-3">
                 <Button size="sm" variant="secondary" onClick={() => playAll(0)}>
@@ -187,7 +206,7 @@ export function ChartsPage() {
             </>
           )}
 
-          {!isLoading && !isError && items.length > 0 && kind === 'artists' && (
+          {!isLoading && !isError && items.length > 0 && effectiveKind === 'artists' && (
             <div className={GRID}>
               {items.map((r) => (
                 <ArtistCard
@@ -198,7 +217,7 @@ export function ChartsPage() {
             </div>
           )}
 
-          {!isLoading && !isError && items.length > 0 && (kind === 'albums' || kind === 'playlists') && (
+          {!isLoading && !isError && items.length > 0 && (effectiveKind === 'albums' || effectiveKind === 'playlists') && (
             <div className={GRID}>
               {items.map((r) => {
                 const card: AlbumCardData = {
@@ -207,7 +226,7 @@ export function ChartsPage() {
                   artist: r.artist,
                   cover: extractCover(r.rawData, service),
                   year: r.year ?? undefined,
-                  type: kind === 'albums' ? 'album' : 'playlist',
+                  type: effectiveKind === 'albums' ? 'album' : 'playlist',
                 };
                 return (
                   <AlbumCard
@@ -217,7 +236,7 @@ export function ChartsPage() {
                     onDownload={() =>
                       download({
                         id: r.id,
-                        type: kind === 'albums' ? 'album' : 'playlist',
+                        type: effectiveKind === 'albums' ? 'album' : 'playlist',
                         title: r.title,
                         artist: r.artist,
                         cover: card.cover,

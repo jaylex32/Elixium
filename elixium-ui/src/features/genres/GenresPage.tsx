@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Music2 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
-import { useSearch } from '@/shared/lib/api'
+import { useSearchPages } from '@/shared/lib/api'
+import { InfiniteSentinel } from '@/shared/components/InfiniteSentinel'
 import { extractCover } from '@/shared/lib/cover'
 import { useAppStore } from '@/store/app-store'
 import { useDownload } from '@/shared/hooks/useDownload'
@@ -32,7 +33,16 @@ function GenreResults({
   genre: (typeof GENRES)[number]
   service: Service
 }) {
-  const { data = [], isLoading } = useSearch(genre.query, service, 'album')
+  const {
+    data: pages,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useSearchPages(genre.query, service, 'album')
+
+  // A genre had exactly one page of albums and no way to reach the rest.
+  const data = pages?.pages.flat() ?? []
   const { download } = useDownload()
   const [selectedAlbum, setSelectedAlbum] = useState<(AlbumCardData & { service: Service }) | null>(null)
 
@@ -55,7 +65,7 @@ function GenreResults({
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {data.slice(0, 24).map((r) => {
+          {data.map((r) => {
             const album: AlbumCardData = {
               id: r.id,
               title: r.title,
@@ -76,6 +86,14 @@ function GenreResults({
             )
           })}
         </div>
+      )}
+
+      {!isLoading && data.length > 0 && (
+        <InfiniteSentinel
+          hasMore={Boolean(hasNextPage)}
+          loading={isFetchingNextPage}
+          onLoadMore={fetchNextPage}
+        />
       )}
 
       {selectedAlbum && (
@@ -129,7 +147,7 @@ export function GenresPage() {
 
       {selectedGenre && (
         <GenreResults key={`${selectedGenre.id}-${service}`} genre={selectedGenre} service={service} />
-      )}
+      )}
     </div>
   )
 }

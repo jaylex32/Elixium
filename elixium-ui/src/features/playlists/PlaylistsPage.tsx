@@ -45,6 +45,7 @@ export function PlaylistsPage() {
     data: pages,
     isLoading,
     isError,
+    error,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -181,9 +182,11 @@ export function PlaylistsPage() {
               ))}
             </div>
           ) : isError ? (
+            /* The server explains *why*: Spotify search needs credentials,
+               Qobuz needs a login. A fixed hint hid all of that. */
             <EmptyState
               title="Could not search playlists"
-              hint="Check your service credentials in Settings."
+              hint={error instanceof Error ? error.message : 'Check your service credentials in Settings.'}
             />
           ) : data.length === 0 ? (
             <EmptyState title="No playlists matched" hint="Try a shorter or more general search term." />
@@ -232,7 +235,10 @@ export function PlaylistsPage() {
                         }}
                         aria-label={`Watch ${r.title}`}
                         title="Watch for new tracks"
-                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-black/80 lg:opacity-0 lg:group-hover:opacity-100"
+                        /* Always visible, and above the card. Hover-only put
+                           it behind the card's own overlay on desktop and made
+                           it unreachable on touch, so it read as missing. */
+                        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-md transition-colors hover:bg-accent"
                       >
                         <Eye size={14} />
                       </button>

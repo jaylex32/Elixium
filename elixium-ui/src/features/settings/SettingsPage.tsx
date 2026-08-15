@@ -110,7 +110,7 @@ export function SettingsPage() {
     socket.once(
       'settings',
       (data: {
-        cookies?: {arl?: string; sp_dc?: string};
+        cookies?: {arl?: string; sp_dc?: string; spotifyClientId?: string; spotifyClientSecret?: string};
         qobuz?: {app_id?: string; secrets?: string; token?: string};
         concurrency?: number;
         paths?: {deezer?: string; qobuz?: string};
@@ -128,6 +128,8 @@ export function SettingsPage() {
         update({
           deezerArl: data.cookies?.arl ?? '',
           spotifySpDc: data.cookies?.sp_dc ?? '',
+          spotifyClientId: data.cookies?.spotifyClientId ?? '',
+          spotifyClientSecret: data.cookies?.spotifyClientSecret ?? '',
           qobuzAppId: String(data.qobuz?.app_id ?? ''),
           qobuzSecrets: data.qobuz?.secrets ?? '',
           qobuzToken: data.qobuz?.token ?? '',
@@ -165,7 +167,12 @@ export function SettingsPage() {
       // Omitted until the server's values have loaded — see `loaded` above.
       ...(loaded
         ? {
-            cookies: {arl: settings.deezerArl, sp_dc: settings.spotifySpDc},
+            cookies: {
+              arl: settings.deezerArl,
+              sp_dc: settings.spotifySpDc,
+              spotifyClientId: settings.spotifyClientId,
+              spotifyClientSecret: settings.spotifyClientSecret,
+            },
             qobuz: {
               app_id: settings.qobuzAppId,
               secrets: settings.qobuzSecrets,

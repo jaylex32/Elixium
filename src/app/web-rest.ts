@@ -121,6 +121,26 @@ export const registerWebRestRoutes = ({
     }
   });
 
+  app.get('/api/charts/countries', async (_req, res) => {
+    try {
+      res.json(await charts.getChartCountries());
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
+  app.get('/api/charts/country', async (req, res) => {
+    try {
+      const playlistId = String(req.query.playlistId || '');
+      if (!playlistId) return res.status(400).json({error: 'Missing playlistId'});
+      const limit = Number(req.query.limit || 50);
+      const offset = Number(req.query.offset || 0);
+      res.json(await charts.getCountryChart(playlistId, limit, offset));
+    } catch (error: any) {
+      res.status(500).json({error: error.message});
+    }
+  });
+
   app.get('/api/charts', async (req, res) => {
     try {
       const service = String(req.query.service || 'deezer').toLowerCase();

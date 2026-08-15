@@ -301,6 +301,39 @@ export function useChartGenres(service: Service) {
 
 const CHART_PAGE_SIZE = 50;
 
+export interface ChartCountry {
+  id: string;
+  name: string;
+  picture?: string;
+  trackCount?: number;
+}
+
+/** Official per-country charts, the way deemix lists them. */
+export function useChartCountries(enabled = true) {
+  return useQuery<ChartCountry[]>({
+    queryKey: ['chart-countries'],
+    queryFn: async () => (await http.get('/charts/countries')).data as ChartCountry[],
+    staleTime: 1000 * 60 * 60,
+    enabled,
+  });
+}
+
+export function useCountryChart(playlistId: string, enabled = true) {
+  return useInfiniteQuery<RawSearchResult[]>({
+    queryKey: ['country-chart', playlistId],
+    initialPageParam: 0,
+    queryFn: async ({pageParam}) => {
+      const res = await http.get('/charts/country', {
+        params: {playlistId, limit: CHART_PAGE_SIZE, offset: pageParam as number},
+      });
+      return (Array.isArray(res.data) ? res.data : []) as RawSearchResult[];
+    },
+    getNextPageParam: (last, all) => (last.length < CHART_PAGE_SIZE ? undefined : all.length * CHART_PAGE_SIZE),
+    enabled: Boolean(playlistId) && enabled,
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
 export function useCharts(service: Service, genreId: string, kind: ChartKind) {
   return useInfiniteQuery<RawSearchResult[]>({
     queryKey: ['charts', service, genreId, kind],

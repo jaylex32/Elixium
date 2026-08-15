@@ -51,6 +51,8 @@ export const registerOperationsSocketHandlers = ({
         cookies: {
           arl: conf.get('cookies.arl'),
           sp_dc: configAny.get('cookies.sp_dc'),
+          spotifyClientId: configAny.get('cookies.spotifyClientId'),
+          spotifyClientSecret: configAny.get('cookies.spotifyClientSecret'),
         },
         qobuz: {
           app_id: conf.get('qobuz.app_id'),
@@ -120,6 +122,15 @@ export const registerOperationsSocketHandlers = ({
         if (data.cookies.arl) {
           conf.set('cookies.arl', data.cookies.arl);
           setIsDeezerDownloadReady(false);
+        }
+        // Spotify developer-app credentials, used for playlist search. The
+        // web-player token is rate-limited off /v1/search, so this is the only
+        // reliable route.
+        if (data.cookies.spotifyClientId !== undefined) {
+          configAny.set('cookies.spotifyClientId', data.cookies.spotifyClientId);
+        }
+        if (data.cookies.spotifyClientSecret !== undefined) {
+          configAny.set('cookies.spotifyClientSecret', data.cookies.spotifyClientSecret);
         }
         if (data.cookies.sp_dc) {
           configAny.set('cookies.sp_dc', data.cookies.sp_dc);
