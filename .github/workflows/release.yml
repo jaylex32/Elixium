@@ -382,6 +382,14 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      # The changelog lives in the repo, and this job otherwise never checks it
+      # out — so the release was created with generated notes instead of the
+      # written ones, silently, because --notes-file was pointed at a path that
+      # did not exist here.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
       - uses: actions/download-artifact@v4
         with:
           path: assets
