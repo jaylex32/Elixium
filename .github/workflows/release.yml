@@ -333,7 +333,7 @@ jobs:
           codesign --verify --verbose "$app"
           codesign -dv "$app" 2>&1 | grep -q 'Signature=adhoc' \
             || { echo "::error::desktop app is not signed"; exit 1; }
-          npx electron-builder --mac dmg --${{ matrix.arch }} --prepackaged "$app"
+          npx electron-builder --mac dmg zip --${{ matrix.arch }} --prepackaged "$app"
           node check-no-secrets.js
 
       - name: Collect installers
@@ -397,6 +397,17 @@ jobs:
           if [ -z "$(ls -A assets 2>/dev/null)" ]; then
             echo "::error::no binaries were produced"
             exit 1
+          fi
+          # A tag is not a release: `gh release upload` fails with "release not
+          # found" unless one already exists, which is how a run that built all
+          # ten artifacts still published nothing.
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            notes="CHANGELOG-${TAG#v}.md"
+            if [ -f "$notes" ]; then
+              gh release create "$TAG" --title "Elixium ${TAG#v}" --notes-file "$notes" --repo "${{ github.repository }}"
+            else
+              gh release create "$TAG" --title "Elixium ${TAG#v}" --generate-notes --repo "${{ github.repository }}"
+            fi
           fi
           # --clobber so re-running replaces assets rather than erroring, and
           # the release itself keeps its notes, URL and creation date.
