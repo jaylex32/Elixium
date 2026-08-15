@@ -122,17 +122,29 @@ export const getTrackDownloadUrl = async (
     }
   }
 
-  // Fallback to the old method
-  const filename = getSongFileName(track, quality); // encrypted file name
-  const url = `https://e-cdns-proxy-${track.MD5_ORIGIN[0]}.dzcdn.net/mobile/1/${filename}`;
-  const fileSize = await testUrl(url);
-  if (fileSize > 0) {
-    return {
-      trackUrl: url,
-      isEncrypted: url.includes('/mobile/') || url.includes('/media/'),
-      fileSize: fileSize,
-    };
+  /*
+   * Fallback to the legacy CDN URL, but only when the data for it exists.
+   *
+   * MD5_ORIGIN is absent from the track payload on some accounts — free ones
+   * in particular — and indexing it unguarded threw "Cannot read properties of
+   * undefined (reading '0')" for every single track. That surfaced as a whole
+   * album failing with an error naming nothing recognisable, hiding whatever
+   * the real reason was: the licence refusal or geo-block captured above, or
+   * simply that the modern endpoint returned no URL.
+   */
+  if (typeof track.MD5_ORIGIN === 'string' && track.MD5_ORIGIN.length > 0) {
+    const filename = getSongFileName(track, quality); // encrypted file name
+    const url = `https://e-cdns-proxy-${track.MD5_ORIGIN[0]}.dzcdn.net/mobile/1/${filename}`;
+    const fileSize = await testUrl(url);
+    if (fileSize > 0) {
+      return {
+        trackUrl: url,
+        isEncrypted: url.includes('/mobile/') || url.includes('/media/'),
+        fileSize: fileSize,
+      };
+    }
   }
+
   if (wrongLicense) {
     throw wrongLicense;
   }

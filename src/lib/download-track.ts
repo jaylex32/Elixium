@@ -240,9 +240,28 @@ const downloadTrack = async ({
       coverSize = 56;
       headers.range = 'bytes=0-1023';
     } else if (existsSync(tmpfile)) {
+      /*
+       * Resume from a partial file, but only when resuming makes sense.
+       *
+       * A leftover temp file at or beyond the expected size makes the Range
+       * header ask for bytes past the end, and the CDN answers 416 — which
+       * failed the download permanently, and kept failing on every retry
+       * because the same stale file was still there. Restarting is cheap and
+       * always correct; resuming past the end never is.
+       */
       const tmpfilestat = statSync(tmpfile);
-      downloaded = tmpfilestat.size;
-      headers.range = 'bytes=' + tmpfilestat.size + '-';
+      const expected = Number(trackData.fileSize) || 0;
+      if (expected > 0 && tmpfilestat.size >= expected) {
+        try {
+          unlinkSync(tmpfile);
+        } catch {
+          // If it cannot be removed the write below will overwrite it anyway.
+        }
+        downloaded = 0;
+      } else {
+        downloaded = tmpfilestat.size;
+        headers.range = 'bytes=' + tmpfilestat.size + '-';
+      }
     }
 
     fileSize = trackData.fileSize;
