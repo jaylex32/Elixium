@@ -1,5 +1,5 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
-import {Check, ChevronDown} from 'lucide-react';
+import {Check, ChevronDown, ChevronUp} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 
 export interface SelectOption {
@@ -48,9 +48,18 @@ export function Select({value, onValueChange, options, placeholder, disabled, cl
         <SelectPrimitive.Content
           position="popper"
           sideOffset={4}
-          className="z-modal min-w-[8rem] overflow-hidden rounded-xl border border-border bg-card-bg shadow-xl animate-fade-in"
+          /*
+           * Bounded to the space actually available below the trigger, and
+           * scrollable within it. With overflow-hidden and no height limit a
+           * long list — country charts run to 48 entries — ran off the bottom
+           * of the window with everything past the fold unreachable.
+           */
+          className="z-modal flex max-h-[var(--radix-select-content-available-height)] min-w-[8rem] flex-col overflow-hidden rounded-xl border border-border bg-card-bg shadow-xl animate-fade-in"
         >
-          <SelectPrimitive.Viewport className="p-1">
+          <SelectPrimitive.ScrollUpButton className="flex h-6 shrink-0 items-center justify-center bg-card-bg text-text-muted">
+            <ChevronUp size={14} />
+          </SelectPrimitive.ScrollUpButton>
+          <SelectPrimitive.Viewport className="max-h-[inherit] overflow-y-auto p-1">
             {safeOptions.map((opt) => (
               <SelectPrimitive.Item
                 key={opt.value}
@@ -67,6 +76,10 @@ export function Select({value, onValueChange, options, placeholder, disabled, cl
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>
+
+          <SelectPrimitive.ScrollDownButton className="flex h-6 shrink-0 items-center justify-center bg-card-bg text-text-muted">
+            <ChevronDown size={14} />
+          </SelectPrimitive.ScrollDownButton>
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>

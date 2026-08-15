@@ -63,14 +63,23 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   /*
-   * Where playback should resume, captured once on mount.
+   * Where the restored track should resume, captured once on mount.
    *
-   * The store rehydrates the saved position, but the audio element starts at
-   * zero and immediately reports it, so the restored value was overwritten
-   * before anything could use it. Holding it in a ref keeps it out of reach
-   * of that until the element is ready to be seeked.
+   * Tied to the track id, and cleared the first time the element is ready.
+   * An earlier version kept only the number and used it to suppress
+   * timeupdate, which froze the seek bar at 0:00 for every subsequent track:
+   * nothing ever cleared it, so position stopped being reported at all.
    */
-  const restoreAtRef = useRef(usePlayerStore.getState().currentTime);
+  const restoreRef = useRef<{id: string; time: number} | null>(
+    // useRef has no lazy initialiser; the IIFE runs on every render but only
+    // the first result is kept, and reading the store is cheap.
+    (() => {
+      const saved = usePlayerStore.getState();
+      return saved.currentTrack && saved.currentTime > 0
+        ? {id: saved.currentTrack.id, time: saved.currentTime}
+        : null;
+    })(),
+  );
   const isMobile = useIsMobile();
   const warnedPreviewFor = useRef<string | null>(null);
 
@@ -159,16 +168,24 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
     <>
       <audio
         ref={audioRef}
-        onCanPlay={() => setIsBuffering(false)}
+        onCanPlay={(e) => {
+          setIsBuffering(false);
+          /* Resume the restored track where it left off, once the element can
+             actually seek. Cleared unconditionally so a later track is never
+             dragged back to an old position. */
+          const restore = restoreRef.current;
+          restoreRef.current = null;
+          if (restore && restore.id === currentTrack?.id && restore.time > 0) {
+            try {
+              e.currentTarget.currentTime = restore.time;
+            } catch {
+              /* Some sources refuse an early seek; not worth failing over. */
+            }
+          }
+        }}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
-        onTimeUpdate={(e) => {
-          /* Until the restore seek has happened, the element reports 0 — and
-             writing that back would overwrite the very position we saved, which
-             is why the player came back at the start of the track. */
-          if (restoreAtRef.current > 0) return;
-          setCurrentTime(e.currentTarget.currentTime);
-        }}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onEnded={() => {
           if (repeat === 'one' && audioRef.current) {
