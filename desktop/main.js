@@ -218,7 +218,11 @@ const registerDesktopHandlers = () => {
       title: 'Choose a download folder',
       // defaultPath on a folder that no longer exists opens the dialog at an
       // arbitrary location, so it is only passed when it resolves.
-      defaultPath: currentPath && fs.existsSync(currentPath) ? currentPath : undefined,
+      defaultPath: (() => {
+        if (!currentPath) return dataDir;
+        const resolved = path.isAbsolute(currentPath) ? currentPath : path.join(dataDir, currentPath);
+        return fs.existsSync(resolved) ? resolved : dataDir;
+      })(),
       properties: ['openDirectory', 'createDirectory'],
       buttonLabel: 'Use this folder',
     });
@@ -227,14 +231,25 @@ const registerDesktopHandlers = () => {
 
   ipcMain.handle('elixium:open-folder', async (_event, target) => {
     if (!target) return false;
+
+    /*
+     * Resolve relative paths against the engine's working directory.
+     *
+     * The defaults are relative — "./Music/Deezer" — and the engine runs with
+     * its cwd in app data, so that is where downloads land. Handing the raw
+     * string to the OS resolved it against whatever the shell's cwd happened
+     * to be, which is why the default path simply would not open.
+     */
+    const resolved = path.isAbsolute(target) ? target : path.join(dataDir, target);
+
     try {
       // Downloads folders do not exist until the first download; opening a
       // missing path fails silently and reads as a dead button.
-      fs.mkdirSync(target, {recursive: true});
+      fs.mkdirSync(resolved, {recursive: true});
     } catch {
       /* openPath reports the real problem below. */
     }
-    const error = await shell.openPath(target);
+    const error = await shell.openPath(resolved);
     return !error;
   });
 };

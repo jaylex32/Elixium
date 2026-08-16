@@ -1,5 +1,5 @@
 import {useState, useEffect, useMemo} from 'react';
-import {Search, X, Clock, Trash2, Play, Pause, Music2, ArrowUpDown} from 'lucide-react';
+import {Search, X, Clock, Trash2, Play, Pause, Music2, ArrowUpDown, CheckSquare} from 'lucide-react';
 import {useSearchPages, SEARCH_PAGE_SIZE} from '@/shared/lib/api';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
@@ -188,6 +188,8 @@ export function SearchPage() {
   const selectionActive = useSelectionStore((s) => s.active);
   const selectionItems = useSelectionStore((s) => s.items);
   const toggleSelect = useSelectionStore((s) => s.toggle);
+  const setSelectionActive = useSelectionStore((s) => s.setActive);
+  const selectMany = useSelectionStore((s) => s.selectMany);
   const beginSelect = useSelectionStore((s) => s.beginWith);
 
   /*
@@ -370,6 +372,42 @@ export function SearchPage() {
                     <Button size="sm" variant="secondary" onClick={() => playAll(0)}>
                       <Play size={13} />
                       Play all
+                    </Button>
+                  )}
+
+                  {/* Tracks show their position, not a checkbox, until this is
+                      pressed — without it there was no way to begin selecting
+                      them at all. Cards can be ticked on hover; rows cannot. */}
+                  <Button
+                    size="sm"
+                    variant={selectionActive ? 'default' : 'ghost'}
+                    onClick={() => setSelectionActive(!selectionActive)}
+                    className={selectionActive ? undefined : 'text-text-muted'}
+                    title={selectionActive ? 'Leave selection mode' : 'Select several at once'}
+                  >
+                    <CheckSquare size={13} />
+                    {selectionActive ? 'Done' : 'Select'}
+                  </Button>
+
+                  {selectionActive && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-text-muted"
+                      onClick={() =>
+                        selectMany(
+                          results.map((r) => ({
+                            id: r.id,
+                            type: type as 'track' | 'album' | 'artist' | 'playlist',
+                            service,
+                            title: r.title,
+                            artist: r.artist,
+                            cover: extractCover(r.rawData, service),
+                          })),
+                        )
+                      }
+                    >
+                      Select all
                     </Button>
                   )}
                   {showSort && (

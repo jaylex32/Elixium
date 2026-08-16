@@ -34,14 +34,28 @@ function Section({title, icon: Icon, children}: {title: string; icon: React.Elem
  * label roughly 88px on a 360px screen, so "Deezer ARL" wrapped to two lines
  * and its helper text collapsed into a one-word-per-line ribbon.
  */
-function Field({label, description, children}: {label: string; description?: string; children: React.ReactNode}) {
+function Field({
+  label,
+  description,
+  children,
+  wide,
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+  /** Give the control most of the row — for file paths and other long values. */
+  wide?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-1.5 py-1 sm:flex-row sm:items-start sm:gap-4">
       <div className="min-w-0 flex-1 sm:pt-0.5">
         <p className="text-sm font-medium text-text-primary">{label}</p>
         {description && <p className="mt-0.5 text-xs text-text-muted">{description}</p>}
       </div>
-      <div className="w-full shrink-0 sm:w-56">{children}</div>
+      {/* The default column is sized for a toggle or a short select. A download
+          path plus Browse and Open needs far more than 224px, which is why the
+          path box looked cramped to the point of being unusable. */}
+      <div className={cn('w-full shrink-0', wide ? 'sm:w-[30rem] sm:max-w-[60%]' : 'sm:w-56')}>{children}</div>
     </div>
   );
 }
@@ -340,14 +354,14 @@ export function SettingsPage() {
         {/* Browse and Open act on the machine running the engine, which is
             where downloads actually land — not on whichever device happens to
             be displaying this page. */}
-        <Field label="Deezer downloads">
+        <Field label="Deezer downloads" wide>
           <PathField
             value={settings.downloadPath}
             onChange={(v) => update({downloadPath: v})}
             placeholder="e.g. C:\Music\Deezer"
           />
         </Field>
-        <Field label="Qobuz downloads">
+        <Field label="Qobuz downloads" wide>
           <PathField
             value={settings.qobuzDownloadPath}
             onChange={(v) => update({qobuzDownloadPath: v})}

@@ -58,7 +58,7 @@ export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, classNam
       {/* Cover */}
       <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-surface-bg shadow-sm">
         {selectable && (
-          <div className="absolute left-2 top-2 z-10">
+          <div className="absolute left-1.5 top-1.5 z-20">
             <SelectCheckbox
               selected={isSelected}
               alwaysVisible={selectionActive}

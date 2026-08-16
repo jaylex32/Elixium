@@ -3,9 +3,15 @@ import {cn} from '@/shared/lib/utils';
 /**
  * The standard explicit marker.
  *
- * A filled "E" square rather than the word, which is what every music service
- * uses and what people recognise at a glance in a dense list. Kept to the text
- * line height so it sits inline with a title without changing the row's rhythm.
+ * Outlined rather than filled. The first version was a solid block using the
+ * muted text colour with the page background as its letter — which on a dark
+ * theme is dark-on-dark, so it read as a black smudge and was effectively
+ * invisible. An outline inherits `currentColor`, so it takes the colour of
+ * whatever text it sits beside and stays legible in every theme without
+ * hardcoding a palette entry.
+ *
+ * Slightly larger than the surrounding text and never shrunk below 14px: at the
+ * cap height of a 12px label the letter is unreadable.
  */
 export function ExplicitBadge({className}: {className?: string}) {
   return (
@@ -16,8 +22,10 @@ export function ExplicitBadge({className}: {className?: string}) {
       aria-label="Explicit"
       title="Explicit content"
       className={cn(
-        'inline-flex h-[1.1em] w-[1.1em] shrink-0 items-center justify-center rounded-[0.2em]',
-        'bg-text-muted/70 text-[0.7em] font-bold leading-none text-primary-bg',
+        'inline-flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[3px]',
+        'border border-current text-[10px] font-bold leading-none opacity-70',
+        // Sits with the text baseline rather than riding above it.
+        'translate-y-[0.5px]',
         className,
       )}
     >

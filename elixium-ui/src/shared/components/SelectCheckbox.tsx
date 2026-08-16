@@ -34,17 +34,22 @@ export function SelectCheckbox({selected, onToggle, label, alwaysVisible, classN
         onToggle();
       }}
       className={cn(
-        'flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border-2 transition-all',
+        /* 20px, not 24. The larger box crowded the play control on a card and
+           read as the primary action rather than a secondary one. */
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border transition-all duration-fast',
         selected
-          ? 'border-accent bg-accent text-white'
-          : 'border-white/70 bg-black/40 text-transparent backdrop-blur-sm hover:border-accent',
+          ? 'border-accent bg-accent text-white shadow-sm'
+          : // Solid backing rather than a translucent one: over pale artwork a
+            // semi-transparent box vanished into the cover, which is why it
+            // sometimes looked as though there was no checkbox at all.
+            'border-white/80 bg-black/65 text-transparent shadow-sm hover:border-accent hover:bg-black/80',
         // Touch has no hover, so anything not permanently shown must at least
         // appear as soon as the mode is on.
         selected || alwaysVisible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
         className,
       )}
     >
-      <Check size={14} strokeWidth={3} />
+      <Check size={12} strokeWidth={3.5} />
     </button>
   );
 }

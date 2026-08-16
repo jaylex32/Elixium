@@ -23,6 +23,8 @@ export function UrlDownloadPage() {
   const [urls, setUrls] = useState<ParsedUrl[]>([]);
   const {downloadUrl} = useDownload();
   const {setPage} = useAppStore();
+  // Which catalogue a converted link should resolve into.
+  const service = useAppStore((s) => s.service);
 
   const extractUrls = (text: string): string[] =>
     text
@@ -43,7 +45,9 @@ export function UrlDownloadPage() {
     const socket = getSocket();
 
     extracted.forEach((url) => {
-      socket.emit('parseUrl', {url});
+      // Without the service the server assumes Qobuz for any non-Deezer link,
+      // so the preview disagreed with what the download actually did.
+      socket.emit('parseUrl', {url, service});
     });
 
     // Use a single persistent listener for all results from this batch
@@ -103,7 +107,20 @@ export function UrlDownloadPage() {
     }
 
     ready.forEach((item) => {
-      const svc = item.url.includes('deezer.com') ? ('deezer' as const) : ('qobuz' as const);
+      /*
+       * A native link belongs to its own service; everything else converts
+       * into the one currently selected.
+       *
+       * This used to read "deezer.com ? deezer : qobuz", so a Spotify, Tidal or
+       * YouTube link was downloaded from Qobuz no matter which service the user
+       * had chosen — picking Deezer and pasting a Spotify playlist silently
+       * fetched it from Qobuz.
+       */
+      const svc = item.url.includes('deezer.com')
+        ? ('deezer' as const)
+        : item.url.includes('qobuz.com')
+          ? ('qobuz' as const)
+          : service;
       downloadUrl(item.url, {
         title: item.title ?? item.url,
         artist: item.artist,
