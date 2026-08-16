@@ -746,6 +746,17 @@ const qobuzWatchlist = createQobuzWatchlistService({
   conf,
   qobuz,
   ensureQobuzSearchReady: () => initQobuzForSearch(),
+  // Lets the watchlist follow Deezer artists, not just Qobuz ones. Reuses the
+  // same paged fetch the artist view uses rather than a second implementation.
+  fetchDeezerArtistAlbums: async (artistId: string) => {
+    const collected: any[] = [];
+    for (let offset = 0; offset < 300; offset += 100) {
+      const page = await artistContent.getArtistAlbums('deezer', artistId, 100, offset);
+      collected.push(...page);
+      if (page.length < 100) break;
+    }
+    return collected;
+  },
   dispatchQueueItems: async (queueItems, options) => {
     if (!Array.isArray(queueItems) || !queueItems.length) return;
 

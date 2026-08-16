@@ -32,13 +32,30 @@ interface QobuzWatchlistDependencies {
   conf: Config | any;
   qobuz: any;
   ensureQobuzSearchReady: () => Promise<void>;
+  /**
+   * Deezer's albums for an artist, in Deezer's own shape.
+   *
+   * The watchlist began as Qobuz-only and every lookup went to Qobuz, so a
+   * watched Deezer artist was queried with a Deezer id against the wrong
+   * catalogue — it silently found nothing forever.
+   */
+  fetchDeezerArtistAlbums?: (artistId: string) => Promise<any[]>;
   dispatchQueueItems?: (queueItems: any[], options?: {autoStart?: boolean; source?: string}) => Promise<void> | void;
   broadcastState?: (state: any) => void;
 }
 
 interface WatchedArtistInput {
   id: string;
-  name: string;
+  /**
+   * What the interface actually sends.
+   *
+   * The socket payload has always used `artistId`, while this module read
+   * `id` — so every added artist resolved to `String(undefined)`, they all
+   * shared one key, and each new one silently overwrote the last. Only ever
+   * one artist could be watched.
+   */
+  artistId?: string;
+  name?: string;
   image?: string;
   service?: string;
 }
@@ -469,6 +486,7 @@ export const createQobuzWatchlistService = ({
   conf,
   qobuz,
   ensureQobuzSearchReady,
+  fetchDeezerArtistAlbums,
   dispatchQueueItems,
   broadcastState,
 }: QobuzWatchlistDependencies) => {
@@ -501,10 +519,19 @@ export const createQobuzWatchlistService = ({
     });
   };
 
+  /** The id the interface sent, under either name. */
+  const artistKeyOf = (artist: WatchedArtistInput): string => String(artist.artistId ?? artist.id ?? '').trim();
+
+  const normaliseService = (service?: string): WatchedArtistRecord['service'] =>
+    String(service || '').toLowerCase() === 'deezer' ? 'deezer' : 'qobuz';
+
   const toWatchedArtist = (artist: WatchedArtistInput): WatchedArtistRecord => ({
-    id: String(artist.id),
+    id: artistKeyOf(artist),
     name: String(artist.name || 'Unknown Artist'),
-    service: 'qobuz',
+    // Whichever service the artist actually came from. This was pinned to
+    // 'qobuz', so a Deezer artist was stored as a Qobuz one and every later
+    // lookup for it went to the wrong catalogue.
+    service: normaliseService(artist.service),
     image: String(artist.image || ''),
     lastCheckedAt: null,
     status: 'idle',
@@ -743,13 +770,21 @@ export const createQobuzWatchlistService = ({
   };
 
   const addWatchedArtist = (artist: WatchedArtistInput) => {
+    const id = artistKeyOf(artist);
+    if (!id) throw new Error('That artist has no id, so it cannot be watched.');
+
+    const service = normaliseService(artist.service);
+
     const state = store.update((draft) => {
-      const id = String(artist.id);
-      const existing = draft.watchedArtists.find((entry) => String(entry.id) === id);
+      /* Matched on service *and* id: the two catalogues number their artists
+         independently, so the same id routinely means different people. */
+      const existing = draft.watchedArtists.find(
+        (entry) => String(entry.id) === id && normaliseService(entry.service) === service,
+      );
       if (existing) {
         existing.name = String(artist.name || existing.name);
         existing.image = String(artist.image || existing.image || '');
-        existing.service = 'qobuz';
+        existing.service = service;
         return;
       }
       draft.watchedArtists.unshift(toWatchedArtist(artist));
@@ -789,7 +824,46 @@ export const createQobuzWatchlistService = ({
     });
   };
 
+  /**
+   * Deezer albums, translated into the shape the rest of this module expects.
+   *
+   * Everything downstream — release classification, the discography snapshot,
+   * the owned-album check — was written against Qobuz's payload. Mapping here
+   * means one adapter instead of a service branch in each of them.
+   */
+  const fetchDeezerAlbumsFor = async (artist: WatchedArtistRecord) => {
+    if (!fetchDeezerArtistAlbums) return [];
+    const albums = await fetchDeezerArtistAlbums(String(artist.id));
+
+    return albums.map((album: any) => {
+      const raw = album?.rawData ?? album;
+      return {
+        id: String(raw?.id ?? album?.id ?? ''),
+        title: String(raw?.title ?? album?.title ?? 'Unknown Album'),
+        // Deezer's artist/albums payload omits the artist object entirely, so
+        // the owned-by check would reject every album without this.
+        artist: {id: String(artist.id), name: artist.name},
+        release_date_original: raw?.release_date ?? null,
+        tracks_count: Number(raw?.nb_tracks) || 0,
+        duration: Number(raw?.duration) || 0,
+        // Deezer is lossy-only; 16-bit keeps the quality rules meaningful
+        // rather than leaving them comparing against undefined.
+        maximum_bit_depth: 16,
+        image: {
+          large: raw?.cover_xl || raw?.cover_big || raw?.cover_medium || '',
+          small: raw?.cover_medium || '',
+          thumbnail: raw?.cover_small || '',
+        },
+        version: raw?.record_type && String(raw.record_type).toLowerCase() !== 'album' ? String(raw.record_type) : '',
+      };
+    });
+  };
+
   const fetchAllArtistAlbums = async (artist: WatchedArtistRecord) => {
+    // Deezer artists take the adapter above; Qobuz keeps its paged path below,
+    // untouched.
+    if (artist.service === 'deezer') return fetchDeezerAlbumsFor(artist);
+
     const albumById = new Map<string, any>();
     let offset = 0;
     let total = Number.MAX_SAFE_INTEGER;
@@ -1425,7 +1499,7 @@ export const createQobuzWatchlistService = ({
     });
 
     try {
-      await ensureQobuzSearchReady();
+      if (watchedArtist.service !== 'deezer') await ensureQobuzSearchReady();
       const albums = await fetchAllArtistAlbums(watchedArtist);
       // Snapshot the discography while we have it. Library reads this rather
       // than the candidate queue, which empties as releases are downloaded.

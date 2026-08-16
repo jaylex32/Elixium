@@ -101,7 +101,16 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
   };
 
   const watchArtist = () => {
-    getSocket().emit('addWatchedArtist', {artistId: artist.id, name: artist.name});
+    getSocket().emit('addWatchedArtist', {
+      // Both spellings: the server reads artistId, older builds read id, and
+      // sending one of them was how every artist ended up under the same key.
+      artistId: artist.id,
+      id: artist.id,
+      name: artist.name,
+      // Without these the watchlist showed a blank avatar and assumed Qobuz.
+      image: artist.picture ?? '',
+      service: artist.service,
+    });
     toast.success(`Watching ${artist.name}`, {description: 'New releases will appear in your watchlist.'});
   };
 

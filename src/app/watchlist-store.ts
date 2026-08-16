@@ -5,7 +5,13 @@ import {WATCHLIST_DATA_FILE} from './brand';
 export interface WatchedArtistRecord {
   id: string;
   name: string;
-  service: 'qobuz';
+  /**
+   * The catalogue this artist belongs to.
+   *
+   * Was fixed at 'qobuz', which is why watching a Deezer artist stored it as a
+   * Qobuz one and every later lookup searched the wrong service.
+   */
+  service: 'qobuz' | 'deezer';
   image: string;
   lastCheckedAt: string | null;
   status: 'idle' | 'checking' | 'ready' | 'error';
