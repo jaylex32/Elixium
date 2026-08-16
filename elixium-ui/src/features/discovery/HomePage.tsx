@@ -21,6 +21,7 @@ import {
 import {useDiscovery} from '@/shared/lib/api';
 import {cn} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
+import {isExplicit} from '@/shared/lib/explicit';
 import {useAppStore, type Page} from '@/store/app-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
@@ -87,6 +88,7 @@ function toAlbum(item: RawDiscoveryItem, service: Service): AlbumCardData {
     cover: extractCover(item.rawData, service),
     year: item.year ?? undefined,
     type: item.type,
+    explicit: isExplicit(item.rawData),
   };
 }
 
@@ -218,8 +220,23 @@ function DiscoverySection({
         album={album}
         className={expanded ? undefined : 'w-[46vw] shrink-0 sm:w-44'}
         onClick={() => onSelect(album)}
+        selectable={{
+          id: album.id,
+          type: (album.type === 'playlist' ? 'playlist' : 'album') as 'album' | 'playlist',
+          service,
+          title: album.title,
+          artist: album.artist,
+          cover: album.cover,
+        }}
         onDownload={() =>
-          download({id: album.id, type: 'album', title: album.title, artist: album.artist, cover: album.cover, service})
+          download({
+            id: album.id,
+            type: album.type === 'playlist' ? 'playlist' : 'album',
+            title: album.title,
+            artist: album.artist,
+            cover: album.cover,
+            service,
+          })
         }
       />
     );
@@ -289,7 +306,7 @@ function DiscoverySection({
         // vertically. Without this the cards' hover lift and shadow are cut
         // off at the top. No negative-margin bleed — it made the row wider
         // than its container at every breakpoint.
-        <div data-row className="scroll-row flex gap-3 pb-4 pt-3 sm:gap-4">
+        <div data-row className="scroll-row flex gap-3 pb-4 pt-3 pr-6 sm:gap-4 sm:pr-10">
           {items.map(renderCard)}
         </div>
       )}

@@ -211,6 +211,15 @@ export function PlaylistsPage() {
                     <AlbumCard
                       album={card}
                       onClick={sameService ? () => openPlaylist(card) : undefined}
+                      selectable={{
+                        id: r.id,
+                        type: 'playlist',
+                        service,
+                        title: r.title,
+                        artist: r.artist,
+                        cover: card.cover,
+                        url: r.url,
+                      }}
                       onDownload={() =>
                         download({
                           id: r.id,

@@ -194,6 +194,14 @@ export function FavoritesPage() {
                     cover: entry.cover,
                     type: entry.type,
                   }}
+                  selectable={{
+                    id: entry.id,
+                    type: entry.type as 'album' | 'playlist',
+                    service: entry.service,
+                    title: entry.title,
+                    artist: entry.artist,
+                    cover: entry.cover,
+                  }}
                   onClick={() =>
                     setSelected({
                       id: entry.id,

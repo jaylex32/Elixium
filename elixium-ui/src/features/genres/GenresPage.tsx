@@ -4,6 +4,7 @@ import { cn } from '@/shared/lib/utils'
 import { useSearchPages, useCharts } from '@/shared/lib/api'
 import { InfiniteSentinel } from '@/shared/components/InfiniteSentinel'
 import { extractCover } from '@/shared/lib/cover'
+import { isExplicit } from '@/shared/lib/explicit'
 import { useAppStore } from '@/store/app-store'
 import { useDownload } from '@/shared/hooks/useDownload'
 import { AlbumCard, type AlbumCardData } from '@/shared/components/AlbumCard'
@@ -84,12 +85,14 @@ function GenreResults({
               cover: extractCover(r.rawData, service),
               year: r.year ?? undefined,
               type: r.type,
+              explicit: isExplicit(r.rawData),
             }
             return (
               <AlbumCard
                 key={r.id}
                 album={album}
                 onClick={() => setSelectedAlbum({ ...album, service })}
+                selectable={{ id: r.id, type: 'album', service, title: r.title, artist: r.artist, cover: album.cover }}
                 onDownload={() =>
                   download({ id: r.id, type: 'album', title: r.title, artist: r.artist, cover: album.cover, service })
                 }
