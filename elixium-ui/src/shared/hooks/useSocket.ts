@@ -107,34 +107,47 @@ export function useSocket() {
       }
 
       /*
-       * A queued playlist arrives wrapped: {type: 'playlist', service:
-       * 'user-playlist', tracks: [...]}. That "service" names the wrapper, not
-       * a download target — forwarding it verbatim would ask the server to
-       * download from a service that does not exist. The target is whichever
-       * service the app is pointed at.
+       * Group by the service each item came from.
+       *
+       * This read queue[0].service and applied it to everything, so a mixed
+       * batch — a Deezer artist and a Qobuz one both scanned — sent all of it
+       * to whichever happened to be first, and half the ids meant nothing to
+       * that service.
+       *
+       * A queued playlist arrives wrapped as {type: 'playlist', service:
+       * 'user-playlist', tracks: [...]}, where "service" names the wrapper
+       * rather than a download target; anything unrecognised falls back to the
+       * service the app is currently pointed at.
        */
-      const itemService = queue[0]?.service;
-      const service: 'deezer' | 'qobuz' =
-        itemService === 'deezer' || itemService === 'qobuz'
-          ? itemService
-          : useAppStore.getState().service;
-      const quality = service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality;
+      const fallbackService = useAppStore.getState().service;
+      const groups = new Map<'deezer' | 'qobuz', Array<Record<string, unknown>>>();
+
+      for (const item of queue) {
+        const raw = item?.service;
+        const target: 'deezer' | 'qobuz' = raw === 'deezer' || raw === 'qobuz' ? raw : fallbackService;
+        if (!groups.has(target)) groups.set(target, []);
+        (groups.get(target) as Array<Record<string, unknown>>).push(item);
+      }
 
       setRunning(true);
-      s.emit('startDownload', {
-        queue,
-        service,
-        quality,
-        settings: {
+
+      for (const [service, items] of groups) {
+        const quality = service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality;
+        s.emit('startDownload', {
+          queue: items,
+          service,
           quality,
-          concurrency: settings.concurrency,
-          trackNumber: settings.trackNumbering,
-          fallbackTrack: settings.fallbackTrack,
-          fallbackQuality: settings.fallbackQuality,
-          deezerDownloadCover: settings.coverArt,
-          qobuzDownloadCover: settings.coverArt,
-        },
-      });
+          settings: {
+            quality,
+            concurrency: settings.concurrency,
+            trackNumber: settings.trackNumbering,
+            fallbackTrack: settings.fallbackTrack,
+            fallbackQuality: settings.fallbackQuality,
+            deezerDownloadCover: settings.coverArt,
+            qobuzDownloadCover: settings.coverArt,
+          },
+        });
+      }
 
       toast.success(`Downloading ${queue.length} track${queue.length > 1 ? 's' : ''}`, {
         description: 'Progress is on the Downloads page.',

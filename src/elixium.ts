@@ -771,12 +771,6 @@ const qobuzWatchlist = createQobuzWatchlistService({
     }
 
     if (canStartServerSide) {
-      await initQobuzForDownload();
-      const qobuzQuality = normalizeQuality(((conf as any).get?.('quality.qobuz') || '44khz') as string, 'qobuz');
-      const qobuzSettings = {
-        qobuzPath: (conf as any).get?.('paths.qobuz') || './Music/Qobuz',
-        qobuzDownloadCover: (conf as any).get?.('qobuzDownloadCover'),
-      };
       const broadcastSocket = io
         ? {
             emit: (event: string, payload: any) => {
@@ -784,7 +778,52 @@ const qobuzWatchlist = createQobuzWatchlistService({
             },
           }
         : undefined;
-      await startDownloadProcess(queueItems, qobuzQuality, 'qobuz', qobuzSettings, broadcastSocket as any);
+
+      /*
+       * Dispatch per service, not as one Qobuz batch.
+       *
+       * This forced every watchlist download through Qobuz, so a watched Deezer
+       * artist produced Deezer album ids that Qobuz was then asked to fetch —
+       * answering "No result matching given argument" for every release. Each
+       * item now goes to the service it actually came from, with that service's
+       * quality and download path.
+       */
+      const byService = new Map<string, any[]>();
+      for (const item of queueItems) {
+        const service = String(item?.service || '').toLowerCase() === 'deezer' ? 'deezer' : 'qobuz';
+        if (!byService.has(service)) byService.set(service, []);
+        (byService.get(service) as any[]).push(item);
+      }
+
+      for (const [service, items] of byService) {
+        if (service === 'deezer') {
+          await initDeezerForDownload();
+          const quality = normalizeQuality(((conf as any).get?.('quality.deezer') || 'flac') as string, 'deezer');
+          await startDownloadProcess(
+            items,
+            quality,
+            'deezer',
+            {
+              deezerPath: (conf as any).get?.('paths.deezer') || './Music/Deezer',
+              deezerDownloadCover: (conf as any).get?.('deezerDownloadCover'),
+            },
+            broadcastSocket as any,
+          );
+        } else {
+          await initQobuzForDownload();
+          const quality = normalizeQuality(((conf as any).get?.('quality.qobuz') || '44khz') as string, 'qobuz');
+          await startDownloadProcess(
+            items,
+            quality,
+            'qobuz',
+            {
+              qobuzPath: (conf as any).get?.('paths.qobuz') || './Music/Qobuz',
+              qobuzDownloadCover: (conf as any).get?.('qobuzDownloadCover'),
+            },
+            broadcastSocket as any,
+          );
+        }
+      }
     }
   },
   broadcastState: (state) => {

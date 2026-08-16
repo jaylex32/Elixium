@@ -42,7 +42,7 @@ export interface WatchedPlaylistRecord {
 export interface FavoriteGenreRecord {
   id: string;
   label: string;
-  service: 'qobuz';
+  service: 'qobuz' | 'deezer';
 }
 
 export interface ProcessedAlbumRecord {
@@ -52,7 +52,7 @@ export interface ProcessedAlbumRecord {
   title: string;
   year: number | null;
   image: string;
-  service: 'qobuz';
+  service: 'qobuz' | 'deezer';
   normalizedKey: string;
   reason: 'queued' | 'duplicate' | 'dismissed' | 'downloaded';
   duplicateSource?: string;
@@ -66,7 +66,7 @@ export interface ProcessedTrackRecord {
   title: string;
   album?: string;
   image?: string;
-  service: 'qobuz';
+  service: 'qobuz' | 'deezer';
   normalizedKey: string;
   reason: 'queued' | 'duplicate' | 'dismissed' | 'downloaded';
   duplicateSource?: string;
@@ -80,7 +80,7 @@ export interface WatchlistCandidateRecord {
   title: string;
   year: number | null;
   image: string;
-  service: 'qobuz';
+  service: 'qobuz' | 'deezer';
   normalizedKey: string;
   reason: 'new' | 'duplicate' | 'already-processed' | 'needs-review' | 'filtered-type';
   releaseType?: ReleaseType;
@@ -97,7 +97,7 @@ export interface PlaylistCandidateRecord {
   title: string;
   album?: string;
   image?: string;
-  service: 'qobuz';
+  service: 'qobuz' | 'deezer';
   normalizedKey: string;
   reason: 'new' | 'duplicate' | 'already-processed' | 'needs-review' | 'filtered-type';
   releaseType?: ReleaseType;

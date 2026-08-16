@@ -1,0 +1,1 @@
+import{r as n}from"./react-DWRLRDDF.js";import{p as f}from"./index-DSdE_w1L.js";function p(t,r,e=!0){const o=n.useRef(r);o.current=r,n.useEffect(()=>{if(!e)return;const s=f(),c=u=>o.current(u);return s.on(t,c),()=>{s.off(t,c)}},[t,e])}function a(t,r){f().emit(t,r)}export{a as s,p as u};

@@ -1106,7 +1106,11 @@ export const createQobuzWatchlistService = ({
         title,
         year: album?.release_date_original ? new Date(album.release_date_original).getFullYear() : null,
         image: String(album?.image?.large || album?.image?.thumbnail || album?.image?.small || album?.cover || ''),
-        service: 'qobuz',
+        /* The artist's service, not a constant. Stamping every candidate
+         * 'qobuz' meant a watched Deezer artist produced Deezer album ids that
+         * were then downloaded through Qobuz — which answers "No result
+         * matching given argument" for every one of them. */
+        service: normaliseService(artist.service),
         normalizedKey,
         reason,
         duplicateSource: duplicateSource || undefined,
@@ -1155,7 +1159,7 @@ export const createQobuzWatchlistService = ({
         title,
         album: String(track?.album?.title || ''),
         image: String(track?.album?.image?.thumbnail || track?.album?.image?.small || track?.album?.image?.large || ''),
-        service: 'qobuz',
+        service: normaliseService((playlist as any)?.service),
         normalizedKey,
         reason,
         duplicateSource: duplicateSource || undefined,
@@ -1197,7 +1201,7 @@ export const createQobuzWatchlistService = ({
     artist: String(track?.performer?.name || track?.artist?.name || artist?.name || 'Unknown Artist'),
     album: String(track?.album?.title || playlistTitle || ''),
     type: 'track',
-    service: 'qobuz',
+    service: artist ? normaliseService(artist.service) : 'qobuz',
     duration: Number(track?.duration || 0),
     rawData: track,
   });
