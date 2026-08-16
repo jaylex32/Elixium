@@ -1241,7 +1241,7 @@ export const createQobuzWatchlistService = ({
           title: trackItem.title,
           album: trackItem.album,
           image: String(trackItem.rawData?.album?.image?.thumbnail || trackItem.rawData?.album?.image?.small || ''),
-          service: 'qobuz',
+          service: normaliseService((trackItem as any).service),
           normalizedKey,
           reason: options.reason || 'queued',
           processedAt,
@@ -1372,7 +1372,7 @@ export const createQobuzWatchlistService = ({
             },
             tracks: queueableTargets.map((candidate) => ({
               ...createTrackQueueItem(null, candidate.rawData, candidate.playlistTitle),
-              service: 'qobuz',
+              service: normaliseService(candidate.service),
             })),
           },
         ]
@@ -1393,7 +1393,7 @@ export const createQobuzWatchlistService = ({
           title: candidate.title,
           album: candidate.album,
           image: candidate.image,
-          service: 'qobuz',
+          service: normaliseService(candidate.service),
           normalizedKey: candidate.normalizedKey,
           reason: 'queued',
           processedAt,
@@ -1573,7 +1573,11 @@ export const createQobuzWatchlistService = ({
     artist: candidate.artist,
     album: candidate.title,
     type: 'album',
-    service: 'qobuz',
+    /* The candidate's own service. This was 'qobuz' regardless, and it is the
+     * builder the Watchlist download button actually uses — so a correctly
+     * tagged Deezer candidate still had its id sent to Qobuz, which answers
+     * "No result matching given argument" for every one. */
+    service: normaliseService(candidate.service),
     duration: candidate.year ? `${candidate.year}` : 'Album',
     year: candidate.year,
     rawData: candidate.rawData,
@@ -1600,7 +1604,7 @@ export const createQobuzWatchlistService = ({
             title: candidate.title,
             year: candidate.year,
             image: candidate.image,
-            service: 'qobuz',
+            service: normaliseService(candidate.service),
             normalizedKey: candidate.normalizedKey,
             reason: 'queued',
             duplicateSource: candidate.duplicateSource,
@@ -1672,7 +1676,7 @@ export const createQobuzWatchlistService = ({
             title: candidate.title,
             year: candidate.year,
             image: candidate.image,
-            service: 'qobuz',
+            service: normaliseService(candidate.service),
             normalizedKey: candidate.normalizedKey,
             reason,
             duplicateSource: candidate.duplicateSource,
@@ -1710,7 +1714,7 @@ export const createQobuzWatchlistService = ({
             title: candidate.title,
             album: candidate.album,
             image: candidate.image,
-            service: 'qobuz',
+            service: normaliseService(candidate.service),
             normalizedKey: candidate.normalizedKey,
             reason,
             duplicateSource: candidate.duplicateSource,
