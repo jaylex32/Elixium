@@ -16,7 +16,7 @@
  * of the whole app disappearing.
  */
 
-const {app, BrowserWindow, Menu, shell, dialog} = require('electron');
+const {app, BrowserWindow, Menu, shell, dialog, ipcMain} = require('electron');
 const {spawn} = require('child_process');
 const {createServer} = require('net');
 const path = require('path');
@@ -204,6 +204,41 @@ const startServer = async () => {
   await waitForServer(serverPort);
 };
 
+/**
+ * Native folder chooser and reveal, for the desktop build only.
+ *
+ * These are what make the desktop app a local program rather than a browser
+ * pointed at a server: the dialog lists this machine's folders, which are the
+ * folders this machine's engine writes to. The server build offers nothing
+ * equivalent on purpose.
+ */
+const registerDesktopHandlers = () => {
+  ipcMain.handle('elixium:pick-folder', async (_event, currentPath) => {
+    const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      title: 'Choose a download folder',
+      // defaultPath on a folder that no longer exists opens the dialog at an
+      // arbitrary location, so it is only passed when it resolves.
+      defaultPath: currentPath && fs.existsSync(currentPath) ? currentPath : undefined,
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Use this folder',
+    });
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('elixium:open-folder', async (_event, target) => {
+    if (!target) return false;
+    try {
+      // Downloads folders do not exist until the first download; opening a
+      // missing path fails silently and reads as a dead button.
+      fs.mkdirSync(target, {recursive: true});
+    } catch {
+      /* openPath reports the real problem below. */
+    }
+    const error = await shell.openPath(target);
+    return !error;
+  });
+};
+
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -224,6 +259,8 @@ const createWindow = () => {
       // it Node access it does not use.
       nodeIntegration: false,
       contextIsolation: true,
+      // The only channel between page and shell; see preload.js.
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -367,6 +404,7 @@ if (!app.requestSingleInstanceLock()) {
     fs.mkdirSync(dataDir, {recursive: true});
     try {
       await startServer();
+      registerDesktopHandlers();
       buildMenu();
       createWindow();
     } catch (error) {

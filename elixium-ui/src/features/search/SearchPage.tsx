@@ -4,6 +4,10 @@ import {useSearchPages, SEARCH_PAGE_SIZE} from '@/shared/lib/api';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
+import {isExplicit} from '@/shared/lib/explicit';
+import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
+import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {useSelectionStore} from '@/store/selection-store';
 import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {toast} from 'sonner';
@@ -64,6 +68,7 @@ function toAlbumCard(r: RawSearchResult, service: Service): AlbumCardData {
     cover: extractCover(r.rawData, service),
     year: r.year ?? undefined,
     type: r.type,
+    explicit: isExplicit(r.rawData),
   };
 }
 
@@ -74,12 +79,18 @@ function ResultRow({
   service,
   onPlay,
   onDownload,
+  selectionActive,
+  selected,
+  onToggleSelect,
 }: {
   result: RawSearchResult;
   index: number;
   service: Service;
   onPlay: () => void;
   onDownload: () => void;
+  selectionActive: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -95,7 +106,19 @@ function ResultRow({
         isActive ? 'bg-accent/10' : 'hover:bg-surface-bg',
       )}
     >
-      <span className="hidden w-6 shrink-0 text-right text-xs tabular-nums text-text-muted sm:block">{index}</span>
+      {/* Position gives way to the checkbox while selecting: both are the
+          leading column, and two of them would push the row out of line. */}
+      {selectionActive ? (
+        <SelectCheckbox
+          selected={selected}
+          alwaysVisible
+          label={`Select ${result.title}`}
+          onToggle={onToggleSelect}
+          className="ml-0.5"
+        />
+      ) : (
+        <span className="hidden w-6 shrink-0 text-right text-xs tabular-nums text-text-muted sm:block">{index}</span>
+      )}
 
       <button onClick={onPlay} className="relative h-12 w-12 shrink-0" aria-label={`Play ${result.title}`}>
         {cover ? (
@@ -120,8 +143,9 @@ function ResultRow({
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className={cn('truncate text-sm font-medium', isActive ? 'text-accent' : 'text-text-primary')}>
-          {result.title}
+        <p className={cn('flex items-center gap-1.5 text-sm font-medium', isActive ? 'text-accent' : 'text-text-primary')}>
+          <span className="truncate">{result.title}</span>
+          {isExplicit(result.rawData) && <ExplicitBadge />}
         </p>
         <p className="truncate text-xs text-text-muted">{result.artist}</p>
       </div>
@@ -161,6 +185,10 @@ export function SearchPage() {
   const [selectedAlbum, setSelectedAlbum] = useState<(AlbumCardData & {service: Service}) | null>(null);
 
   const service = useAppStore((s) => s.service);
+  const selectionActive = useSelectionStore((s) => s.active);
+  const selectionItems = useSelectionStore((s) => s.items);
+  const toggleSelect = useSelectionStore((s) => s.toggle);
+  const beginSelect = useSelectionStore((s) => s.beginWith);
 
   /*
    * Following a playlist takes a URL — the server accepts Spotify and Tidal
@@ -402,6 +430,19 @@ export function SearchPage() {
                           service,
                         })
                       }
+                      selectionActive={selectionActive}
+                      selected={Boolean(selectionItems[`${service}:track:${r.id}`])}
+                      onToggleSelect={() => {
+                        const item = {
+                          id: r.id,
+                          type: 'track' as const,
+                          service,
+                          title: r.title,
+                          artist: r.artist,
+                          cover: extractCover(r.rawData, service),
+                        };
+                        selectionActive ? toggleSelect(item) : beginSelect(item);
+                      }}
                     />
                   ))}
                 </div>
@@ -425,6 +466,7 @@ export function SearchPage() {
                         key={r.id}
                         album={album}
                         onClick={() => setSelectedAlbum({...album, service})}
+                        selectable={{id: r.id, type: 'album', service, title: r.title, artist: r.artist, cover: album.cover}}
                         onDownload={() =>
                           download({id: r.id, type: 'album', title: r.title, artist: r.artist, cover: album.cover, service})
                         }
@@ -478,6 +520,7 @@ export function SearchPage() {
                         key={r.id}
                         album={card}
                         onClick={() => setSelectedAlbum({...card, service})}
+                        selectable={{id: r.id, type: 'playlist', service, title: r.title, artist: r.artist, cover: card.cover}}
                         onDownload={() =>
                           download({id: r.id, type: 'playlist', title: r.title, artist: r.artist, cover: card.cover, service})
                         }

@@ -1,6 +1,9 @@
 import {Download, Play, Music2, Eye} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
+import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
+import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 
 export interface AlbumCardData {
   id: string;
@@ -10,6 +13,8 @@ export interface AlbumCardData {
   year?: string | number;
   tracks?: number;
   type?: string;
+  /** Shows the [E] marker beside the title. */
+  explicit?: boolean;
 }
 
 interface AlbumCardProps {
@@ -20,9 +25,25 @@ interface AlbumCardProps {
   onPlay?: () => void;
   onClick?: () => void;
   className?: string;
+  /** Makes the card selectable for bulk download; omit to opt out. */
+  selectable?: SelectableItem;
 }
 
-export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, className}: AlbumCardProps) {
+export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, className, selectable}: AlbumCardProps) {
+  const selectionActive = useSelectionStore((s) => s.active);
+  const isSelected = useSelectionStore((s) => (selectable ? Boolean(s.items[`${selectable.service}:${selectable.type}:${selectable.id}`]) : false));
+  const toggle = useSelectionStore((s) => s.toggle);
+  const beginWith = useSelectionStore((s) => s.beginWith);
+
+  /* While selecting, the whole card toggles instead of opening — opening a
+     modal mid-selection loses the run of choices the user was making. */
+  const handleClick = () => {
+    if (selectable && selectionActive) {
+      toggle(selectable);
+      return;
+    }
+    onClick?.();
+  };
   return (
     <div
       className={cn(
@@ -32,10 +53,22 @@ export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, classNam
         'transition-all duration-base ease-out hover:-translate-y-1 hover:border-accent/40 hover:bg-surface-bg hover:shadow-lg',
         className,
       )}
-      onClick={onClick}
+      onClick={handleClick}
     >
       {/* Cover */}
       <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-surface-bg shadow-sm">
+        {selectable && (
+          <div className="absolute left-2 top-2 z-10">
+            <SelectCheckbox
+              selected={isSelected}
+              alwaysVisible={selectionActive}
+              label={`Select ${album.title}`}
+              // First tick also turns selection mode on, so nothing has to be
+              // switched on before picking the thing you already wanted.
+              onToggle={() => (selectionActive ? toggle(selectable) : beginWith(selectable))}
+            />
+          </div>
+        )}
         {album.cover ? (
           <img
             src={album.cover}
@@ -101,7 +134,10 @@ export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, classNam
 
       {/* Info */}
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-text-primary truncate">{album.title}</p>
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-text-primary">
+          <span className="truncate">{album.title}</span>
+          {album.explicit && <ExplicitBadge />}
+        </p>
         <p className="text-xs text-text-muted truncate mt-0.5">{album.artist}</p>
         {(album.year || album.tracks) && (
           <p className="text-xs text-text-muted mt-1">

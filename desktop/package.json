@@ -21,6 +21,7 @@
     "productName": "Elixium",
     "files": [
       "main.js",
+      "preload.js",
       "package.json",
       "assets/icon.png",
       "!**/elixium.config.json",

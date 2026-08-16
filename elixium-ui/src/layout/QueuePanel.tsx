@@ -1,9 +1,11 @@
 import {useEffect, useRef} from 'react';
 import {motion, AnimatePresence} from 'framer-motion';
-import {X, Music2, Trash2, ChevronUp, ChevronDown, ListMusic, Play, Pause} from 'lucide-react';
+import {X, Music2, Trash2, ChevronUp, ChevronDown, ListMusic, Play, Pause, Download} from 'lucide-react';
 import {cn, formatDuration} from '@/shared/lib/utils';
 import {usePlayerStore} from '@/store/player-store';
 import {Button} from '@/shared/components/ui/Button';
+import {useDownload} from '@/shared/hooks/useDownload';
+import {toast} from 'sonner';
 
 interface QueuePanelProps {
   open: boolean;
@@ -19,6 +21,24 @@ interface QueuePanelProps {
  * operable by keyboard and screen reader.
  */
 export function QueuePanel({open, onClose}: QueuePanelProps) {
+  const {download} = useDownload();
+
+  /* The queue is a list someone has already curated by hand, so grabbing the
+     whole thing is the action most likely to be wanted here. */
+  const downloadQueue = () => {
+    for (const track of queue) {
+      download({
+        id: track.id,
+        type: 'track',
+        title: track.title,
+        artist: track.artist,
+        cover: track.cover,
+        service: track.service,
+      });
+    }
+    toast.success(`Queued ${queue.length} track${queue.length === 1 ? '' : 's'} for download`);
+  };
+
   const {queue, queueIndex, currentTrack, isPlaying, playAt, removeFromQueue, moveInQueue, clearQueue, pause, resume} =
     usePlayerStore();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -76,9 +96,15 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {queue.length > 0 && (
+                  <>
+                  <Button variant="ghost" size="sm" onClick={downloadQueue} className="text-text-secondary">
+                    <Download size={13} />
+                    Download all
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={clearQueue} className="text-text-muted">
                     Clear
                   </Button>
+                  </>
                 )}
                 <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close queue">
                   <X size={17} />
@@ -161,6 +187,24 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
                         {/* Reorder + remove. Always visible on touch, revealed on
                             hover with a pointer, since there is no hover on a phone. */}
                         <span className="flex shrink-0 items-center gap-0.5 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100 lg:group-focus-within:opacity-100">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Download ${track.title}`}
+                            title="Download this track"
+                            onClick={() =>
+                              download({
+                                id: track.id,
+                                type: 'track',
+                                title: track.title,
+                                artist: track.artist,
+                                cover: track.cover,
+                                service: track.service,
+                              })
+                            }
+                          >
+                            <Download size={15} />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon-sm"

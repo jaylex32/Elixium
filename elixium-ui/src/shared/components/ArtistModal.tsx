@@ -5,6 +5,9 @@ import {toast} from 'sonner';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {useArtistContent, type ArtistContentKind} from '@/shared/lib/api';
 import {extractCover} from '@/shared/lib/cover';
+import {isExplicit} from '@/shared/lib/explicit';
+import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
+import {useSelectionStore} from '@/store/selection-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {getSocket} from '@/shared/lib/socket';
@@ -37,6 +40,7 @@ function toCard(result: RawSearchResult, service: Service): AlbumCardData {
     cover: extractCover(result.rawData, service),
     year: result.year ?? undefined,
     type: result.type,
+    explicit: isExplicit(result.rawData),
   };
 }
 
@@ -55,6 +59,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
 
   const {download} = useDownload();
   const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
+  const selectMany = useSelectionStore((s) => s.selectMany);
 
   const {data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage} = useArtistContent(
     tab,
@@ -161,13 +166,52 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                 })}
               </div>
 
-              <div className="ml-auto flex gap-2">
+              <div className="ml-auto flex flex-wrap gap-2">
+                {tab !== 'tracks' && items.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-text-muted"
+                    onClick={() =>
+                      selectMany(
+                        items.map((item) => ({
+                          id: item.id,
+                          type: (tab === 'albums' ? 'album' : 'playlist') as 'album' | 'playlist',
+                          service: artist.service,
+                          title: item.title,
+                          artist: item.artist,
+                          cover: extractCover(item.rawData, artist.service),
+                        })),
+                      )
+                    }
+                  >
+                    Select all
+                  </Button>
+                )}
                 {tab === 'tracks' && (
                   <Button size="sm" onClick={() => playFrom(0)} disabled={tracks.length === 0}>
                     <Play size={14} />
                     Play
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  title="Download every album by this artist"
+                  onClick={() => {
+                    download({
+                      id: artist.id,
+                      type: 'artist',
+                      title: artist.name,
+                      cover: artist.picture,
+                      service: artist.service,
+                    });
+                    toast.success(`Queued ${artist.name}'s discography`);
+                  }}
+                >
+                  <Download size={14} />
+                  Discography
+                </Button>
                 <Button variant="secondary" size="sm" onClick={watchArtist}>
                   <Eye size={14} />
                   Watch
@@ -202,6 +246,14 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                         key={`${item.id}-${item.title}`}
                         album={card}
                         onClick={() => setSelected({...card, service: artist.service})}
+                        selectable={{
+                          id: item.id,
+                          type: tab === 'albums' ? 'album' : 'playlist',
+                          service: artist.service,
+                          title: item.title,
+                          artist: item.artist,
+                          cover: card.cover,
+                        }}
                         onDownload={() =>
                           download({
                             id: item.id,
@@ -265,11 +317,12 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                           <span className="min-w-0 flex-1">
                             <span
                               className={cn(
-                                'block truncate text-sm font-medium',
+                                'flex items-center gap-1.5 text-sm font-medium',
                                 isActive ? 'text-accent' : 'text-text-primary',
                               )}
                             >
-                              {track.title}
+                              <span className="truncate">{track.title}</span>
+                              {isExplicit(items[index]?.rawData) && <ExplicitBadge />}
                             </span>
                             {track.album && (
                               <span className="block truncate text-xs text-text-muted">{track.album}</span>

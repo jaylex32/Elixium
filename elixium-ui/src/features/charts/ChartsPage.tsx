@@ -3,6 +3,8 @@ import {TrendingUp, Play, Music2} from 'lucide-react';
 import {useCharts, useChartGenres, useChartCountries, useCountryChart, type ChartKind} from '@/shared/lib/api';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
 import {extractCover} from '@/shared/lib/cover';
+import {isExplicit} from '@/shared/lib/explicit';
+import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {toast} from 'sonner';
@@ -194,8 +196,9 @@ export function ChartsPage() {
                       </button>
 
                       <div className="min-w-0 flex-1">
-                        <p className={cn('truncate text-sm font-medium', isActive ? 'text-accent' : 'text-text-primary')}>
-                          {r.title}
+                        <p className={cn('flex items-center gap-1.5 text-sm font-medium', isActive ? 'text-accent' : 'text-text-primary')}>
+                          <span className="truncate">{r.title}</span>
+                          {isExplicit(r.rawData) && <ExplicitBadge />}
                         </p>
                         <p className="truncate text-xs text-text-muted">{r.artist}</p>
                       </div>
@@ -244,6 +247,7 @@ export function ChartsPage() {
                   cover: extractCover(r.rawData, service),
                   year: r.year ?? undefined,
                   type: effectiveKind === 'albums' ? 'album' : 'playlist',
+                  explicit: isExplicit(r.rawData),
                 };
                 return (
                   <AlbumCard
@@ -251,6 +255,14 @@ export function ChartsPage() {
                     album={card}
                     onClick={() => setSelected({...card, service})}
                     onWatch={effectiveKind === 'playlists' ? () => watchPlaylist(r.id, r.title) : undefined}
+                    selectable={{
+                      id: r.id,
+                      type: effectiveKind === 'albums' ? 'album' : 'playlist',
+                      service,
+                      title: r.title,
+                      artist: r.artist,
+                      cover: card.cover,
+                    }}
                     onDownload={() =>
                       download({
                         id: r.id,

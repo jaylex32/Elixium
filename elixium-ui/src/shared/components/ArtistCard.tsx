@@ -1,7 +1,11 @@
 import {useState} from 'react';
-import {User} from 'lucide-react';
+import {User, Download} from 'lucide-react';
+import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
 import {ArtistModal} from './ArtistModal';
+import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {useSelectionStore} from '@/store/selection-store';
+import {useDownload} from '@/shared/hooks/useDownload';
 import type {Artist} from '@/types';
 
 interface ArtistCardProps {
@@ -11,11 +15,34 @@ interface ArtistCardProps {
 
 export function ArtistCard({artist, className}: ArtistCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
+  const {download} = useDownload();
+
+  const selectable = {
+    id: artist.id,
+    type: 'artist' as const,
+    service: artist.service,
+    title: artist.name,
+    cover: artist.picture,
+  };
+
+  const selectionActive = useSelectionStore((s) => s.active);
+  const isSelected = useSelectionStore((s) =>
+    Boolean(s.items[`${artist.service}:artist:${artist.id}`]),
+  );
+  const toggle = useSelectionStore((s) => s.toggle);
+  const beginWith = useSelectionStore((s) => s.beginWith);
+
+  /* Whole discography in one action. useDownload has handled type 'artist'
+     all along; the control for it had simply gone missing from the card. */
+  const downloadDiscography = () => {
+    download({id: artist.id, type: 'artist', title: artist.name, cover: artist.picture, service: artist.service});
+    toast.success(`Queued ${artist.name}'s discography`, {description: 'Every album, on the Downloads page.'});
+  };
 
   return (
-    <>
+    <div className="group relative">
       <button
-        onClick={() => setModalOpen(true)}
+        onClick={() => (selectionActive ? toggle(selectable) : setModalOpen(true))}
         className={cn(
           'group flex flex-col items-center gap-3 rounded-2xl p-4 border border-border bg-card-bg',
           'hover:border-accent/40 hover:bg-surface-bg transition-all duration-200 text-left w-full',
@@ -44,7 +71,31 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
         </div>
       </button>
 
+
+      <div className="pointer-events-none absolute inset-0">
+        <div className="pointer-events-auto absolute left-2 top-2">
+          <SelectCheckbox
+            selected={isSelected}
+            alwaysVisible={selectionActive}
+            label={`Select ${artist.name}`}
+            onToggle={() => (selectionActive ? toggle(selectable) : beginWith(selectable))}
+          />
+        </div>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            downloadDiscography();
+          }}
+          aria-label={`Download ${artist.name}'s discography`}
+          title="Download full discography"
+          className="pointer-events-auto absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-md transition-colors hover:bg-accent lg:opacity-0 lg:group-hover:opacity-100"
+        >
+          <Download size={14} />
+        </button>
+      </div>
+
       <ArtistModal artist={artist} open={modalOpen} onClose={() => setModalOpen(false)} />
-    </>
+    </div>
   );
 }

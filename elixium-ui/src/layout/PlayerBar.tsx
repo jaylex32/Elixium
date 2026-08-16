@@ -1,19 +1,5 @@
 import {useRef, useEffect, useCallback, useState} from 'react';
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  ChevronUp,
-  Music2,
-  Loader2,
-  ListMusic,
-  Shuffle,
-  Repeat,
-  Repeat1,
-} from 'lucide-react';
+import {Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ChevronUp, Music2, Loader2, ListMusic, Shuffle, Repeat, Repeat1, Download} from 'lucide-react';
 import {motion, AnimatePresence} from 'framer-motion';
 import {toast} from 'sonner';
 import {cn, formatDuration} from '@/shared/lib/utils';
@@ -24,6 +10,7 @@ import {useIsMobile} from '@/shared/hooks/useMediaQuery';
 import {useMediaSession} from '@/shared/hooks/useMediaSession';
 import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
+import {useDownload} from '@/shared/hooks/useDownload';
 import {PlayerFullscreen} from './PlayerFullscreen';
 
 /** Map stored quality preferences onto the ids the stream endpoint expects. */
@@ -60,6 +47,7 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
     queue,
   } = usePlayerStore();
   const {settings} = useSettingsStore();
+  const {download} = useDownload();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   /*
@@ -290,6 +278,31 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
               <SkipForward size={18} />
             </Button>
           </div>
+
+          {/* Download what is playing. Hearing something and wanting to keep it
+              is the common case, and until now it meant finding the track again
+              in whatever list it came from. */}
+          {currentTrack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Download ${currentTrack.title}`}
+              title="Download this track"
+              className="shrink-0"
+              onClick={() =>
+                download({
+                  id: currentTrack.id,
+                  type: 'track',
+                  title: currentTrack.title,
+                  artist: currentTrack.artist,
+                  cover: currentTrack.cover,
+                  service: currentTrack.service,
+                })
+              }
+            >
+              <Download size={18} />
+            </Button>
+          )}
 
           {/* Queue is reachable at every width — it is the only way to see or
               change what plays next. */}

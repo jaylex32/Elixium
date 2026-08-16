@@ -17,6 +17,7 @@ import {HomePage} from '@/features/discovery/HomePage';
 import {PageFallback} from '@/shared/components/PageFallback';
 import {ErrorBoundary} from '@/shared/components/ErrorBoundary';
 import {PAGE_TITLES} from './nav-items';
+import {SelectionBar} from '@/shared/components/SelectionBar';
 
 /*
  * Home is imported eagerly — it is the landing page, and lazy-loading it would
@@ -151,6 +152,7 @@ export function AppShell() {
           },
         }}
       />
+      <SelectionBar />
     </div>
   );
 }

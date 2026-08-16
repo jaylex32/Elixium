@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, ArrowUpCircle, HardDrive, Sliders, RefreshCw, Mic2, FolderTree} from 'lucide-react';
+import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, ArrowUpCircle, HardDrive, Sliders, RefreshCw, Mic2, FolderTree, FolderSearch, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
@@ -10,6 +10,7 @@ import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS} from '@/s
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
+import {desktop} from '@/shared/lib/desktop';
 import {ApiAccess} from './ApiAccess';
 import {QualityProfile} from './QualityProfile';
 import {PathTemplates} from './PathTemplates';
@@ -336,17 +337,20 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Download Paths" icon={HardDrive}>
+        {/* Browse and Open act on the machine running the engine, which is
+            where downloads actually land — not on whichever device happens to
+            be displaying this page. */}
         <Field label="Deezer downloads">
-          <Input
+          <PathField
             value={settings.downloadPath}
-            onChange={(e) => update({downloadPath: e.target.value})}
+            onChange={(v) => update({downloadPath: v})}
             placeholder="e.g. C:\Music\Deezer"
           />
         </Field>
         <Field label="Qobuz downloads">
-          <Input
+          <PathField
             value={settings.qobuzDownloadPath}
-            onChange={(e) => update({qobuzDownloadPath: e.target.value})}
+            onChange={(v) => update({qobuzDownloadPath: v})}
             placeholder="e.g. C:\Music\Qobuz"
           />
         </Field>
@@ -399,6 +403,57 @@ export function SettingsPage() {
         <div className="flex justify-end">
           <Button onClick={handleSave}>
             <Save size={14} /> Save settings
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A path with Browse and Open beside it — desktop only.
+ *
+ * The buttons appear solely inside the Electron shell, where the window and the
+ * engine are the same machine, so a native dialog picks folders that downloads
+ * will actually reach. The server build keeps the text field alone: it is
+ * routinely used from another device, where a local dialog would offer folders
+ * the engine cannot see, and a filesystem browser served over HTTP would let
+ * anyone on the network enumerate the host's drives.
+ */
+function PathField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const bridge = desktop();
+
+  const browse = async () => {
+    const chosen = await bridge?.pickFolder(value.trim() || undefined);
+    if (chosen) onChange(chosen);
+  };
+
+  const open = async () => {
+    if (!value.trim()) return toast.error('Set a folder first');
+    const ok = await bridge?.openFolder(value.trim());
+    if (!ok) toast.error('Could not open that folder');
+  };
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="flex-1" />
+      {bridge && (
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={browse} className="flex-1 sm:flex-none">
+            <FolderSearch size={14} />
+            Browse
+          </Button>
+          <Button variant="ghost" size="sm" onClick={open} className="flex-1 sm:flex-none">
+            <FolderOpen size={14} />
+            Open
           </Button>
         </div>
       )}
