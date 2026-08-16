@@ -155,3 +155,4 @@ desktop/launch.log
 # Vite build has no equivalent hook to regenerate them.
 desktop/build/
 desktop/assets/
+desktop/smoke-report.txt

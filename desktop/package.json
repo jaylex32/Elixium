@@ -10,7 +10,8 @@
     "prestart": "node make-icons.js",
     "predist": "node make-icons.js",
     "dist": "electron-builder && node check-no-secrets.js",
-    "check:secrets": "node check-no-secrets.js"
+    "check:secrets": "node check-no-secrets.js",
+    "smoke": "electron smoke-render.js"
   },
   "devDependencies": {
     "electron": "^33.2.0",

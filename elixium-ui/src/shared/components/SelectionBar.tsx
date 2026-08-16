@@ -1,6 +1,7 @@
 import {Download, X, CheckSquare} from 'lucide-react';
 import {toast} from 'sonner';
-import {useSelectionStore, selectedItems} from '@/store/selection-store';
+import {useMemo} from 'react';
+import {useSelectionStore} from '@/store/selection-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {usePlayerStore} from '@/store/player-store';
 import {Button} from '@/shared/components/ui/Button';
@@ -18,7 +19,16 @@ import {cn} from '@/shared/lib/utils';
  */
 export function SelectionBar() {
   const active = useSelectionStore((s) => s.active);
-  const items = useSelectionStore(selectedItems);
+  /*
+   * Subscribe to the stable record and derive the list here.
+   *
+   * Selecting with Object.values() built a new array on every call, and zustand
+   * reads through React's useSyncExternalStore, which requires the snapshot to
+   * be referentially stable. An unstable one makes React abort the render with
+   * an infinite-loop error and paint nothing — the whole window went blank.
+   */
+  const itemMap = useSelectionStore((s) => s.items);
+  const items = useMemo(() => Object.values(itemMap), [itemMap]);
   const clear = useSelectionStore((s) => s.clear);
   const setActive = useSelectionStore((s) => s.setActive);
 

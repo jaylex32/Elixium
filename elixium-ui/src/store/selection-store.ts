@@ -70,5 +70,11 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   beginWith: (item) => set((s) => ({active: true, items: {...s.items, [keyOf(item)]: item}})),
 }));
 
-/** Selected items as a list, for the action bar and bulk download. */
-export const selectedItems = (state: SelectionState): SelectableItem[] => Object.values(state.items);
+/*
+ * Deliberately no `selectedItems` selector.
+ *
+ * One existed and was passed straight to useSelectionStore, which meant a new
+ * array on every snapshot read; React's useSyncExternalStore then aborted the
+ * render and the window went blank. Subscribe to `items` and derive the list in
+ * the component with useMemo instead.
+ */
