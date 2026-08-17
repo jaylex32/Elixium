@@ -673,7 +673,9 @@ export const createDownloadQueueRuntime = ({
 
               const artistAlbumsResponse = await qobuz.getArtistAlbums(item.id);
               const basePath = settings.qobuzPath || (conf as any).get('paths.qobuz') || './Music/Qobuz';
-              const layoutPath = (conf.get('saveLayout') as any)['qobuz-album'] || '{album.title}/{title}';
+              // qobuz-artist, not qobuz-album: this is the artist branch, and using the
+              // album template here meant the Artist template was never applied.
+              const layoutPath = (conf.get('saveLayout') as any)['qobuz-artist'] || '{album.title}/{title}';
               const fullPath = join(basePath, layoutPath);
 
               for (const album of artistAlbumsResponse.albums.items) {

@@ -58,17 +58,52 @@ export const saveLayout = ({track, album, path, minimumIntegerDigits, trackNumbe
       albumInfo.ALB_TITLE += ` (Disc ${Number(track.DISK_NUMBER).toLocaleString('en-US', {minimumIntegerDigits: 2})})`;
     }
 
-    for (const key of file) {
-      const value_album: string | undefined = dotProp.get(albumInfo, key);
-      const value_track: string | undefined = value_album || dotProp.get(track, key);
+    /*
+     * Readable aliases for Deezer's raw field names.
+     *
+     * Deezer's payload uses SCREAMING_SNAKE (`ALB_TITLE`, `ART_NAME`), which a
+     * template had to spell exactly or the placeholder resolved to nothing and
+     * left an empty folder name. The originals still work.
+     */
+    const DEEZER_ALIASES: Record<string, string> = {
+      title: 'SNG_TITLE',
+      artist: 'ART_NAME',
+      album: 'ALB_TITLE',
+      album_artist: 'ART_NAME',
+      alb_title: 'ALB_TITLE',
+      alb_artist: 'ART_NAME',
+      track_number: 'TRACK_NUMBER',
+      disc_number: 'DISK_NUMBER',
+      year: 'PHYSICAL_RELEASE_DATE',
+      release_date: 'PHYSICAL_RELEASE_DATE',
+      isrc: 'ISRC',
+      label: 'LABEL_NAME',
+      total_tracks: 'NUMBER_TRACK',
+      list_title: 'TITLE',
+      playlist: 'TITLE',
+    };
+
+    for (const rawKey of file) {
+      const key = DEEZER_ALIASES[rawKey] ?? rawKey;
+      let value_album: string | undefined = dotProp.get(albumInfo, key);
+      let value_track: string | undefined = value_album || dotProp.get(track, key);
+
+      // {year} wants the year, not the whole date.
+      if ((rawKey === 'year' || key === 'PHYSICAL_RELEASE_DATE') && value_track) {
+        const parsed = new Date(String(value_track));
+        if (!Number.isNaN(parsed.getTime()) && rawKey === 'year') {
+          value_track = String(parsed.getFullYear());
+          value_album = value_track;
+        }
+      }
       if (key === 'TRACK_NUMBER' || key === 'TRACK_POSITION' || key === 'NO_TRACK_NUMBER') {
         path = path.replace(
-          `{${key}}`,
+          `{${rawKey}}`,
           value_track ? Number(value_track).toLocaleString('en-US', {minimumIntegerDigits}) : '',
         );
         trackNumber = false;
       } else {
-        path = path.replace(`{${key}}`, value_track ? sanitizeFilename(value_track) : '');
+        path = path.replace(`{${rawKey}}`, value_track ? sanitizeFilename(value_track) : '');
       }
     }
   }
@@ -138,6 +173,36 @@ export const qobuzSaveLayout = ({
         case 'maximum_sampling_rate':
           actualKey = 'maximum_sampling_rate'; // Key is same as actualKey in this case
           break;
+        // Friendly aliases. Templates should not have to know that Qobuz calls
+        // an album's artist `album.artist.name`.
+        case 'artist':
+          actualKey = 'performer.name';
+          break;
+        case 'album':
+          actualKey = 'album.title';
+          break;
+        case 'album_artist':
+          actualKey = 'album.artist.name';
+          break;
+        case 'composer':
+          actualKey = 'composer.name';
+          break;
+        case 'label':
+          actualKey = 'album.label.name';
+          break;
+        case 'isrc':
+          actualKey = 'isrc';
+          break;
+        case 'copyright':
+          actualKey = 'copyright';
+          break;
+        case 'total_tracks':
+          actualKey = 'album.tracks_count';
+          break;
+        case 'version':
+          actualKey = 'version';
+          break;
+        case 'playlist':
         case 'list_title': // Adding case for list_title
           value = sanitizeFilename(listTitle || 'Unknown Playlist');
           break;

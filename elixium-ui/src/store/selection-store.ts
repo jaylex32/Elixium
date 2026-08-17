@@ -61,7 +61,15 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       return {items: next, active: true};
     }),
 
-  clear: () => set({items: {}}),
+  /*
+   * Clearing also leaves selection mode.
+   *
+   * It used to empty the items and keep `active` true. The bar hides itself
+   * when nothing is selected, so the mode stayed on with no way to turn it
+   * off — checkboxes remained on every card and clicking one ticked it instead
+   * of opening the album.
+   */
+  clear: () => set({items: {}, active: false}),
 
   // Leaving selection mode drops the selection: keeping it would mean a later
   // "Download selected" acts on things chosen in a context the user has left.

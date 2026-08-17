@@ -70,6 +70,10 @@
   /* Scrim for modals, which sit above it at --z-modal. */
   --z-overlay: 60;
   --z-modal: 70;
+  /* Bulk-selection bar. Above modals on purpose: albums and playlists are
+     selected from inside one, and at overlay level the bar was hidden behind
+     the very window the selecting happens in. */
+  --z-selection: 75;
   --z-toast: 80;
 }
 

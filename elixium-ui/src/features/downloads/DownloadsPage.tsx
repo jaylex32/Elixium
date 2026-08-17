@@ -1,9 +1,10 @@
-import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2, Ban, Search} from 'lucide-react';
+import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2, Ban, Search, FolderOpen} from 'lucide-react';
 import {socketSend} from '@/shared/lib/socket-client';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 import {Progress} from '@/shared/components/ui/Progress';
 import {useDownloadStore, type ActiveDownload} from '@/store/download-store';
+import {desktop} from '@/shared/lib/desktop';
 import {Input} from '@/shared/components/ui/Input';
 import {UnmatchedReports} from './UnmatchedReport';
 import {useEffect, useState} from 'react';
@@ -353,6 +354,31 @@ export function DownloadsPage() {
                       {failed ? (h.error ?? 'Failed') : `${h.count} track${h.count === 1 ? '' : 's'}`}
                     </p>
                   </div>
+                  {/* Where it landed, and a way straight to it. Finding a
+                      finished download otherwise meant remembering the naming
+                      template and walking the folder tree by hand. */}
+                  {h.folder && (
+                    <span
+                      className="hidden max-w-[16rem] truncate text-xs text-text-muted lg:block"
+                      title={h.folder}
+                    >
+                      {h.folder}
+                    </span>
+                  )}
+
+                  {h.folder && desktop() && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Open the folder for ${h.title}`}
+                      title="Open containing folder"
+                      className="shrink-0 text-text-muted"
+                      onClick={() => desktop()?.openFolder(h.folder as string)}
+                    >
+                      <FolderOpen size={14} />
+                    </Button>
+                  )}
+
                   <span className="shrink-0 text-xs text-text-muted">
                     {new Date(h.completedAt).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
                   </span>

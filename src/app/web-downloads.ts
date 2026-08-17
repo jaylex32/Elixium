@@ -11,6 +11,26 @@ interface WebDownloadsDependencies {
   trueCasePathSync: (path: string) => string;
 }
 
+/**
+ * Which naming template applies to what is being downloaded.
+ *
+ * Both services previously special-cased only playlists and sent everything
+ * else to the *track* template, so the Album and Artist templates configured in
+ * Settings were never used by anything downloaded from the interface — the one
+ * place most downloads start.
+ *
+ * A link that arrives from Spotify, Tidal or YouTube is a playlist as far as
+ * naming goes: it is a list of tracks with a name, whatever produced it.
+ */
+const layoutKeyFor = (linktype: string, service: 'deezer' | 'qobuz'): string => {
+  const kind = String(linktype || '')
+    .replace(/^(qobuz|spotify|tidal|youtube)-/, '')
+    .toLowerCase();
+
+  const key = ['album', 'artist', 'playlist'].includes(kind) ? kind : 'track';
+  return service === 'qobuz' ? `qobuz-${key}` : key;
+};
+
 export const createWebDownloads = ({
   conf,
   qobuzDownloadTrack,
@@ -147,10 +167,11 @@ export const createWebDownloads = ({
       try {
         const basePath = data.settings.qobuzPath || (conf as any).get('paths.qobuz') || './Music/Qobuz';
         let layoutPath: string;
+        const qobuzKey = layoutKeyFor(parsedData.linktype, 'qobuz');
         if (parsedData.linktype === 'qobuz-playlist' || parsedData.linktype === 'spotify-playlist') {
           layoutPath = (conf.get('saveLayout') as any)['qobuz-playlist'] || 'Playlist/{list_title}/{title}';
         } else {
-          layoutPath = (conf.get('saveLayout') as any)['qobuz-track'] || '{album.title}/{title}';
+          layoutPath = (conf.get('saveLayout') as any)[qobuzKey] || '{album.title}/{title}';
         }
 
         const wantsNoNumbers = layoutPath.includes('{no_track_number}');
@@ -234,10 +255,11 @@ export const createWebDownloads = ({
 
       try {
         const basePath = data.settings.deezerPath || (conf as any).get('paths.deezer') || './Music/Deezer';
+        const deezerKey = layoutKeyFor(parsedData.linktype, 'deezer');
         const layoutPath =
-          parsedData.linktype === 'playlist'
+          deezerKey === 'playlist'
             ? (conf.get('saveLayout') as any)['playlist'] || 'Playlist/{TITLE}/{SNG_TITLE}'
-            : (conf.get('saveLayout') as any)['track'] || '{ALB_TITLE}/{SNG_TITLE}';
+            : (conf.get('saveLayout') as any)[deezerKey] || '{ALB_TITLE}/{SNG_TITLE}';
 
         const fullPath = join(basePath, layoutPath);
 

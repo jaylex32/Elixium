@@ -33,7 +33,17 @@ export interface HistoryEntry {
    */
   status: 'done' | 'error';
   error?: string;
+  /** Folder the files landed in, so a finished row can be opened. */
+  folder?: string;
 }
+
+/** The directory part of a saved path, without importing node's path module. */
+export const folderOf = (file?: string): string | undefined => {
+  if (!file) return undefined;
+  // Windows and POSIX separators both, since the engine may run on either.
+  const cut = Math.max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
+  return cut > 0 ? file.slice(0, cut) : undefined;
+};
 
 /** A source track the conversion could not match on the target service. */
 export interface UnmatchedTrack {
@@ -85,7 +95,7 @@ interface DownloadState {
    */
   onConversionProgress: (data: DownloadProgressPayload) => void;
   onComplete: (itemId: string, count: number) => void;
-  onBatchComplete: (count: number) => void;
+  onBatchComplete: (count: number, files?: string[]) => void;
   onError: (itemId: string, message: string) => void;
   clear: (itemId: string) => void;
   clearDone: () => void;
@@ -209,7 +219,7 @@ export const useDownloadStore = create<DownloadState>()(
    * which created a phantom entry and left every real download running. Any
    * item still in flight when the batch reports done is finished.
    */
-  onBatchComplete: (count) =>
+  onBatchComplete: (count, files) =>
     set((s) => {
       const updated = {...s.active};
       const finished: string[] = [];
@@ -244,6 +254,7 @@ export const useDownloadStore = create<DownloadState>()(
         count,
         completedAt: Date.now(),
         status: settled,
+        folder: folderOf(files?.[0]),
       }));
 
       /*

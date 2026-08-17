@@ -67,7 +67,7 @@ export function SelectionBar() {
   return (
     <div
       className={cn(
-        'fixed inset-x-0 z-overlay flex justify-center px-4 pb-safe',
+        'fixed inset-x-0 z-selection flex justify-center px-4 pb-safe',
         // Clear the player when something is loaded, and the mobile bottom nav
         // in every case, so the bar never lands on top of either.
         hasTrack ? 'bottom-[calc(var(--player-height)+var(--bottom-nav-height)+12px)]' : 'bottom-[calc(var(--bottom-nav-height)+12px)]',

@@ -65,6 +65,7 @@ export default {
         'drawer-panel': 'var(--z-drawer-panel)',
         overlay: 'var(--z-overlay)',
         modal: 'var(--z-modal)',
+        selection: 'var(--z-selection)',
         toast: 'var(--z-toast)',
       },
       width: {

@@ -40,7 +40,8 @@ export function useSocket() {
 
     s.on(ON.DOWNLOAD_COMPLETE, (data) => {
       const count = data.count ?? data.files?.length ?? 1;
-      onBatchComplete(count);
+      // Saved paths travel with the completion so the row can offer to open them.
+      onBatchComplete(count, data.files);
       toast.success(`Download complete — ${count} track${count > 1 ? 's' : ''}`);
       // Retire finished rows shortly after, so the list settles back to what
       // is actually still running instead of accumulating completed entries.

@@ -1,4 +1,4 @@
-import {Download, Music2, X, Play, Pause, Eye} from 'lucide-react';
+import {Download, Music2, X, Play, Pause, Eye, CheckSquare} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {formatDuration, toSeconds} from '@/shared/lib/utils';
 import {useItemTracks, type ItemType} from '@/shared/lib/api';
@@ -10,6 +10,10 @@ import {getSocket} from '@/shared/lib/socket';
 import {toast} from 'sonner';
 import {TrackRowSkeleton} from '@/shared/components/ui/Skeleton';
 import {TrackActions} from '@/shared/components/TrackActions';
+import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
+import {isExplicit} from '@/shared/lib/explicit';
+import {useSelectionStore} from '@/store/selection-store';
 import type {Service} from '@/types';
 import {extractCover} from '@/shared/lib/cover';
 import type {AlbumCardData} from './AlbumCard';
@@ -64,6 +68,30 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
   };
 
   const tracks = data?.tracks ?? [];
+
+  /*
+   * Individual tracks inside an album or playlist can be selected too.
+   *
+   * Wanting three songs off a record rather than the whole thing is ordinary,
+   * and until now the only options here were one track at a time or all of it.
+   * The bar floats above this window, so the selection can be acted on without
+   * closing it first.
+   */
+  const selectionActive = useSelectionStore((s) => s.active);
+  const selectionItems = useSelectionStore((s) => s.items);
+  const toggleSelect = useSelectionStore((s) => s.toggle);
+  const beginSelect = useSelectionStore((s) => s.beginWith);
+  const selectMany = useSelectionStore((s) => s.selectMany);
+  const setSelectionActive = useSelectionStore((s) => s.setActive);
+
+  const asSelectable = (t: any) => ({
+    id: String(t.id),
+    type: 'track' as const,
+    service: album.service,
+    title: String(t.title ?? 'Unknown Track'),
+    artist: String(t.artist ?? album.artist ?? ''),
+    cover: album.cover,
+  });
 
   /*
    * Artwork for one row.
@@ -175,6 +203,33 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                 </Button>
               )}
 
+              {/* Pick individual tracks without leaving this window. */}
+              {tracks.length > 0 && (
+                <Button
+                  size="sm"
+                  variant={selectionActive ? 'default' : 'ghost'}
+                  className={selectionActive ? undefined : 'text-text-muted'}
+                  title={selectionActive ? 'Leave selection mode' : 'Select individual tracks'}
+                  onClick={() =>
+                    selectionActive ? setSelectionActive(false) : beginSelect(asSelectable(tracks[0]))
+                  }
+                >
+                  <CheckSquare size={14} />
+                  {selectionActive ? 'Done' : 'Select'}
+                </Button>
+              )}
+
+              {selectionActive && tracks.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-text-muted"
+                  onClick={() => selectMany(tracks.map(asSelectable))}
+                >
+                  Select all
+                </Button>
+              )}
+
               <Button size="sm" onClick={handleDownloadAlbum} className="hidden sm:inline-flex">
                 <Download size={14} />
                 Download
@@ -239,9 +294,22 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                         )}
                       </div>
 
+                      {selectionActive && (
+                        <SelectCheckbox
+                          selected={Boolean(selectionItems[`${album.service}:track:${t.id}`])}
+                          alwaysVisible
+                          label={`Select ${t.title}`}
+                          onToggle={() => toggleSelect(asSelectable(t))}
+                          className="mr-1"
+                        />
+                      )}
+
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${isActive ? 'text-accent' : 'text-text-primary'}`}>
-                          {t.title}
+                        <p
+                          className={`flex items-center gap-1.5 text-sm font-medium ${isActive ? 'text-accent' : 'text-text-primary'}`}
+                        >
+                          <span className="truncate">{t.title}</span>
+                          {isExplicit(t.rawData as Record<string, unknown>) && <ExplicitBadge />}
                         </p>
                         {t.artist && t.artist !== album.artist && (
                           <p className="text-xs text-text-muted truncate">{t.artist}</p>
