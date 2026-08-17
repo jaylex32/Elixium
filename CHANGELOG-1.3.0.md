@@ -57,6 +57,10 @@ show instead of blank avatars.
 - **Spotify, Tidal and YouTube links ignored the selected service.** Anything
   that was not a `deezer.com` link was hardcoded to Qobuz, so choosing Deezer
   and pasting a Spotify playlist silently fetched it from Qobuz.
+- **Pagination did nothing in the desktop app.** The shell scrolls inside its
+  own element rather than the page, and the loader watched the viewport — which
+  a browser tolerated and the desktop app's Chromium did not, so search and
+  album results stopped at fifty there and nowhere else.
 - **The desktop window rendered blank** — a store selector returning a fresh
   array on every read made React abort the render.
 - The explicit badge was dark-on-dark and unreadable; it is outlined now and
