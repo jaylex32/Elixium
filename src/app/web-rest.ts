@@ -96,9 +96,9 @@ export const registerWebRestRoutes = ({
 
       let items: SearchResult[] = [];
       if (kind === 'albums') {
-        items = await artistContent.getArtistAlbums(service, artistId, limit, offset);
+        items = await artistContent.getArtistAlbums(service, artistId, limit, offset, artistName);
       } else if (kind === 'tracks') {
-        items = await artistContent.getArtistTracks(service, artistId, limit, offset);
+        items = await artistContent.getArtistTracks(service, artistId, limit, offset, artistName);
       } else if (kind === 'playlists') {
         items = await artistContent.getArtistPlaylists(service, artistId, artistName, limit, offset);
       } else {

@@ -61,6 +61,48 @@ const dedupeReleases = (items: SearchResult[]): SearchResult[] => {
  * — so counting it produced "0 tracks" on every album. The record type is the
  * useful fact there anyway: it separates singles and EPs from albums.
  */
+/*
+ * Track counts for a Deezer discography, cached per artist.
+ *
+ * Deezer's public /artist/{id}/albums carries no track count — the field
+ * simply is not in the payload — while its own discography endpoint reports
+ * NUMBER_TRACK for every release in a single request.
+ *
+ * This is enrichment and nothing more: the public listing stays the source of
+ * ids, order, covers and paging, so if this call fails the cards lose a count
+ * and nothing else changes. Cached because paging asks for the same artist
+ * again with a new offset.
+ */
+const DISCOGRAPHY_TTL = 5 * 60 * 1000;
+const discographyCounts = new Map<string, {at: number; counts: Map<string, number>}>();
+
+const deezerTrackCounts = async (deezer: any, artistId: string): Promise<Map<string, number>> => {
+  const cached = discographyCounts.get(artistId);
+  if (cached && Date.now() - cached.at < DISCOGRAPHY_TTL) return cached.counts;
+
+  const counts = new Map<string, number>();
+  try {
+    const response = await deezer?.getDiscography?.(artistId, 500);
+    for (const album of response?.data ?? []) {
+      const count = Number(album?.NUMBER_TRACK || 0);
+      if (album?.ALB_ID && count > 0) counts.set(String(album.ALB_ID), count);
+    }
+  } catch {
+    // A missing count is a cosmetic loss; the listing itself is unaffected.
+  }
+
+  // Bounded so a long session browsing many artists cannot grow without limit.
+  if (discographyCounts.size > 50) discographyCounts.clear();
+  discographyCounts.set(artistId, {at: Date.now(), counts});
+  return counts;
+};
+
+/** The bare number of tracks, for the card that shows it beside the year. */
+const toTrackCount = (value: unknown): number | undefined => {
+  const count = Number(value || 0);
+  return Number.isFinite(count) && count > 0 ? count : undefined;
+};
+
 const releaseLabel = (recordType: unknown, trackCount: unknown): string => {
   const count = Number(trackCount || 0);
   if (count > 0) return `${count} track${count === 1 ? '' : 's'}`;
@@ -75,25 +117,36 @@ export const createArtistContent = ({
   makeHttpRequest,
   ensureQobuzSearchReady,
 }: ArtistContentDependencies) => {
+  /*
+   * `artistName` is the artist whose page this is.
+   *
+   * Deezer's /artist/{id}/albums does not repeat the artist on each album — it
+   * is implied by the request — so every album in a discography was labelled
+   * "Unknown Artist". The caller already knows the name; it just was not being
+   * passed down.
+   */
   const getArtistAlbums = async (
     service: string,
     artistId: string,
     limit = 30,
     offset = 0,
+    artistName?: string,
   ): Promise<SearchResult[]> => {
+    const knownArtist = artistName && String(artistName).trim().length > 0 ? String(artistName).trim() : '';
     if (service === 'deezer') {
       const url = `https://api.deezer.com/artist/${encodeURIComponent(artistId)}/albums?limit=${Number(
         limit,
       )}&index=${Number(offset)}`;
-      const response = await makeHttpRequest(url);
+      const [response, counts] = await Promise.all([makeHttpRequest(url), deezerTrackCounts(deezer, String(artistId))]);
       return dedupeReleases(
         ((response && response.data) || []).map((album: any) => ({
           id: String(album.id),
           title: album.title,
-          artist: album.artist?.name || 'Unknown Artist',
+          artist: album.artist?.name || knownArtist || 'Unknown Artist',
           album: album.title,
           type: 'album',
           duration: releaseLabel(album.record_type, album.nb_tracks),
+          trackCount: counts.get(String(album.id)) ?? toTrackCount(album.nb_tracks),
           year: toYear(album.release_date),
           releaseDate: toReleaseDate(album.release_date),
           rawData: album,
@@ -113,10 +166,11 @@ export const createArtistContent = ({
         (response?.albums?.items || []).map((album: any) => ({
           id: String(album.id),
           title: album.title,
-          artist: album.artist?.name || 'Unknown Artist',
+          artist: album.artist?.name || knownArtist || 'Unknown Artist',
           album: album.title,
           type: 'album',
           duration: releaseLabel(album.release_type, album.tracks_count),
+          trackCount: toTrackCount(album.tracks_count),
           year: toYear(album.release_date_original),
           releaseDate: toReleaseDate(album.release_date_original),
           maximum_bit_depth: album.maximum_bit_depth,
@@ -135,7 +189,9 @@ export const createArtistContent = ({
     artistId: string,
     limit = 50,
     offset = 0,
+    artistName?: string,
   ): Promise<SearchResult[]> => {
+    const knownArtist = artistName && String(artistName).trim().length > 0 ? String(artistName).trim() : '';
     if (service === 'deezer') {
       const url = `https://api.deezer.com/artist/${encodeURIComponent(artistId)}/top?limit=${Number(
         limit,
@@ -144,7 +200,7 @@ export const createArtistContent = ({
       return ((response && response.data) || []).map((track: any) => ({
         id: String(track.id),
         title: track.title + (track.version ? ` ${track.version}` : ''),
-        artist: track.artist?.name || 'Unknown Artist',
+        artist: track.artist?.name || knownArtist || 'Unknown Artist',
         album: track.album?.title || '',
         type: 'track',
         duration: formatSecondsReadable(Number(track.duration || 0)),
@@ -163,7 +219,7 @@ export const createArtistContent = ({
       return (response?.tracks?.items || []).map((track: any) => ({
         id: String(track.id),
         title: track.title + (track.version ? ` (${track.version})` : ''),
-        artist: track.performer?.name || 'Unknown Artist',
+        artist: track.performer?.name || knownArtist || 'Unknown Artist',
         album: track.album?.title || '',
         type: 'track',
         duration: formatSecondsReadable(Number(track.duration || 0)),

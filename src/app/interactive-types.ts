@@ -13,6 +13,8 @@ export interface SearchResult {
    */
   releaseDate?: string | null;
   type: string;
+  /** Tracks on a release, when the service reports one. */
+  trackCount?: number;
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
   hires?: boolean;

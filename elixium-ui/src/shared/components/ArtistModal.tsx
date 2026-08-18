@@ -41,11 +41,30 @@ const GRID = 'grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 sm:p-5';
  * by the request — so rows queued from here reached the download manager with
  * nothing to show and were listed as "Unknown Artist".
  */
+/*
+ * `PLACEHOLDER_ARTIST` is what the services' own listings put there.
+ *
+ * A discography carries no artist per album, so the server fills in this
+ * literal — which is truthy, so a plain `||` fallback never fired and every
+ * album in an artist's own view was labelled with it.
+ */
+const PLACEHOLDER_ARTIST = 'Unknown Artist';
+
+const namedArtist = (value: string | undefined, fallback: string): string =>
+  value && value.trim() && value.trim() !== PLACEHOLDER_ARTIST ? value : fallback;
+
 function toCard(result: RawSearchResult, service: Service, fallbackArtist: string): AlbumCardData {
+  const raw = result.rawData as Record<string, unknown> | undefined;
   return {
     id: result.id,
     title: result.title,
-    artist: result.artist || fallbackArtist,
+    artist: namedArtist(result.artist, fallbackArtist),
+    // Read from the release when the server did not summarise it, so the count
+    // still shows for anything that reports it under its own name.
+    tracks:
+      result.trackCount ??
+      (typeof raw?.nb_tracks === 'number' ? raw.nb_tracks : undefined) ??
+      (typeof raw?.tracks_count === 'number' ? raw.tracks_count : undefined),
     cover: extractCover(result.rawData, service),
     year: result.year ?? undefined,
     type: result.type,
@@ -100,7 +119,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
           makeTrack({
             id: t.id,
             title: t.title,
-            artist: t.artist ?? artist.name,
+            artist: namedArtist(t.artist, artist.name),
             album: typeof t.album === 'string' ? t.album : undefined,
             cover: extractCover(t.rawData, artist.service),
             duration: toSeconds(t.duration),
@@ -122,7 +141,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
       type: tab === 'albums' ? 'album' : 'playlist',
       service: artist.service,
       title: item.title,
-      artist: item.artist || artist.name,
+      artist: namedArtist(item.artist, artist.name),
       cover: extractCover(item.rawData, artist.service),
     };
   };

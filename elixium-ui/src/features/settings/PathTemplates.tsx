@@ -1,9 +1,10 @@
 import {useState} from 'react';
-import {FolderTree, RotateCcw} from 'lucide-react';
+import {FolderTree, RotateCcw, CornerDownRight} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {useSettingsStore, type Settings} from '@/store/settings-store';
 import {Input} from '@/shared/components/ui/Input';
 import {Button} from '@/shared/components/ui/Button';
+import {renderTemplate} from './template-preview';
 
 type LayoutKey = keyof Settings['layout'];
 
@@ -25,7 +26,7 @@ const SERVICES: {
   id: 'deezer' | 'qobuz';
   label: string;
   accent: string;
-  rows: {key: LayoutKey; label: string}[];
+  rows: {key: LayoutKey; label: string; row: 'track' | 'album' | 'artist' | 'playlist'}[];
   tokens: string[];
 }[] = [
   {
@@ -33,10 +34,10 @@ const SERVICES: {
     label: 'Deezer',
     accent: '#a259ff',
     rows: [
-      {key: 'track', label: 'Single track'},
-      {key: 'album', label: 'Album'},
-      {key: 'artist', label: 'Artist'},
-      {key: 'playlist', label: 'Playlist'},
+      {key: 'track', label: 'Single track', row: 'track'},
+      {key: 'album', label: 'Album', row: 'album'},
+      {key: 'artist', label: 'Artist', row: 'artist'},
+      {key: 'playlist', label: 'Playlist', row: 'playlist'},
     ],
     /*
      * Deezer substitutes any field name from its own track/album payload, so
@@ -75,10 +76,10 @@ const SERVICES: {
     label: 'Qobuz',
     accent: '#0067b3',
     rows: [
-      {key: 'qobuz-track', label: 'Single track'},
-      {key: 'qobuz-album', label: 'Album'},
-      {key: 'qobuz-artist', label: 'Artist'},
-      {key: 'qobuz-playlist', label: 'Playlist'},
+      {key: 'qobuz-track', label: 'Single track', row: 'track'},
+      {key: 'qobuz-album', label: 'Album', row: 'album'},
+      {key: 'qobuz-artist', label: 'Artist', row: 'artist'},
+      {key: 'qobuz-playlist', label: 'Playlist', row: 'playlist'},
     ],
     // Qobuz supports a fixed set, resolved by name in buildQobuzPath.
     // Qobuz names its fields in lowercase, so its templates do too.
@@ -166,7 +167,7 @@ export function PathTemplates() {
       </div>
 
       <div className="space-y-3">
-        {service.rows.map(({key, label}) => (
+        {service.rows.map(({key, label, row}) => (
           <div key={key} className="space-y-1.5">
             <label className="text-xs font-medium text-text-secondary">{label}</label>
             <Input
@@ -179,6 +180,12 @@ export function PathTemplates() {
               data-template={key}
               autoComplete="off"
               spellCheck={false}
+            />
+            <TemplatePreview
+              template={(layout[key] ?? '').trim() || DEFAULTS[key]}
+              service={service.id}
+              row={row}
+              settings={settings}
             />
           </div>
         ))}
@@ -201,10 +208,56 @@ export function PathTemplates() {
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
           Deezer uses its own SCREAMING_SNAKE field names and Qobuz uses lowercase ones — that is why the two lists
-          differ and the templates are kept separate. Any field the service returns can be used, not only those above.
-          Forward slashes create folders; the file extension is added automatically.
+          differ and the templates are kept separate. Any field the service returns can be used, not only those above;
+          anything not listed here is left as written in the preview. Forward slashes create folders; the file
+          extension follows the quality you picked.
         </p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The template resolved against a sample release, under the field that sets it.
+ *
+ * A template is only readable once you have seen what it produces — the
+ * difference between {NO_TRACK_NUMBER} and {TRACK_NUMBER} is invisible in the
+ * text and obvious in the result.
+ *
+ * Folders are muted and the filename is not, so the shape of the tree reads at
+ * a glance; it wraps rather than scrolls, because on a phone a path this long
+ * would otherwise push the whole panel sideways.
+ */
+function TemplatePreview({
+  template,
+  service,
+  row,
+  settings,
+}: {
+  template: string;
+  service: 'deezer' | 'qobuz';
+  row: 'track' | 'album' | 'artist' | 'playlist';
+  settings: Settings;
+}) {
+  const resolved = renderTemplate(template, service, row, settings);
+  if (!resolved) return null;
+
+  const parts = resolved.split('/');
+  const file = parts.pop() as string;
+
+  return (
+    <div className="flex items-start gap-1.5 pl-0.5 pt-0.5">
+      <CornerDownRight size={11} className="mt-[3px] shrink-0 text-text-muted/60" aria-hidden />
+      <p className="min-w-0 break-all font-mono text-[11px] leading-[1.6] text-text-muted">
+        <span className="sr-only">Example: </span>
+        {parts.map((part, i) => (
+          <span key={`${part}-${i}`}>
+            {part}
+            <span className="px-[3px] text-text-muted/40">/</span>
+          </span>
+        ))}
+        <span className="font-medium text-text-secondary">{file}</span>
+      </p>
     </div>
   );
 }

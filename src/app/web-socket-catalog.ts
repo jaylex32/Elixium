@@ -44,8 +44,10 @@ export const registerCatalogSocketHandlers = ({
    */
   socket.on('getArtistAlbums', async (data) => {
     try {
-      const {service, artistId, limit = 30, offset = 0} = data || {};
-      const items = await artistContent.getArtistAlbums(service, artistId, Number(limit), Number(offset));
+      // artistName travels with the request for the same reason as the REST
+      // route: a discography carries no artist on each album.
+      const {service, artistId, artistName, limit = 30, offset = 0} = data || {};
+      const items = await artistContent.getArtistAlbums(service, artistId, Number(limit), Number(offset), artistName);
       socket.emit('artistAlbums', {artistId, items});
     } catch (error: any) {
       socket.emit('artistAlbumsError', {artistId: data?.artistId, message: error.message});
@@ -54,8 +56,8 @@ export const registerCatalogSocketHandlers = ({
 
   socket.on('getArtistTracks', async (data) => {
     try {
-      const {service, artistId, limit = 50, offset = 0} = data || {};
-      const items = await artistContent.getArtistTracks(service, artistId, Number(limit), Number(offset));
+      const {service, artistId, artistName, limit = 50, offset = 0} = data || {};
+      const items = await artistContent.getArtistTracks(service, artistId, Number(limit), Number(offset), artistName);
       socket.emit('artistTracks', {artistId, items});
     } catch (error: any) {
       socket.emit('artistTracksError', {artistId: data?.artistId, message: error.message});
