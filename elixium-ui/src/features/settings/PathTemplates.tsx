@@ -43,6 +43,13 @@ const SERVICES: {
      * this lists the ones that are reliably present rather than a closed set.
      * Names are the raw API fields — SCREAMING_SNAKE, not prettified.
      */
+    /*
+     * Deezer's own field names, in its own casing.
+     *
+     * Any field on the payload resolves, so this is the useful subset rather
+     * than an exhaustive list. {list_title} used to appear here and never
+     * worked — Deezer names a playlist {TITLE}.
+     */
     tokens: [
       '{ART_NAME}',
       '{ALB_TITLE}',
@@ -51,7 +58,16 @@ const SERVICES: {
       '{TRACK_POSITION}',
       '{NO_TRACK_NUMBER}',
       '{DISK_NUMBER}',
-      '{list_title}',
+      '{NUMBER_TRACK}',
+      '{NUMBER_DISK}',
+      '{YEAR}',
+      '{PHYSICAL_RELEASE_DATE}',
+      '{ISRC}',
+      '{UPC}',
+      '{COPYRIGHT}',
+      '{PRODUCER_LINE}',
+      '{DURATION}',
+      '{TITLE}',
     ],
   },
   {
@@ -65,16 +81,28 @@ const SERVICES: {
       {key: 'qobuz-playlist', label: 'Playlist'},
     ],
     // Qobuz supports a fixed set, resolved by name in buildQobuzPath.
+    // Qobuz names its fields in lowercase, so its templates do too.
     tokens: [
       '{alb_artist}',
       '{alb_title}',
       '{title}',
+      '{clean_title}',
+      '{artist}',
+      '{album}',
+      '{album_artist}',
+      '{composer}',
       '{track_number}',
       '{no_track_number}',
       '{disc_number}',
+      '{total_tracks}',
       '{genre}',
+      '{label}',
+      '{isrc}',
+      '{copyright}',
+      '{version}',
       '{release_date}',
       '{list_title}',
+      '{playlist}',
       '{maximum_bit_depth}',
       '{maximum_sampling_rate}',
     ],
@@ -172,7 +200,8 @@ export function PathTemplates() {
           ))}
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
-          The two services expose different metadata, so their placeholders differ and the templates are kept separate.
+          Deezer uses its own SCREAMING_SNAKE field names and Qobuz uses lowercase ones — that is why the two lists
+          differ and the templates are kept separate. Any field the service returns can be used, not only those above.
           Forward slashes create folders; the file extension is added automatically.
         </p>
       </div>

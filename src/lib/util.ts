@@ -59,42 +59,34 @@ export const saveLayout = ({track, album, path, minimumIntegerDigits, trackNumbe
     }
 
     /*
-     * Readable aliases for Deezer's raw field names.
+     * Deezer templates stay in the service's own SCREAMING_SNAKE vocabulary.
      *
-     * Deezer's payload uses SCREAMING_SNAKE (`ALB_TITLE`, `ART_NAME`), which a
-     * template had to spell exactly or the placeholder resolved to nothing and
-     * left an empty folder name. The originals still work.
+     * Any field on the track or album payload is already usable as a tag —
+     * {SNG_TITLE}, {ART_NAME}, {ISRC}, {COPYRIGHT} and the rest resolve
+     * directly. A lowercase alias layer was briefly added here and removed: it
+     * gave one service two names for the same thing, while Qobuz's templates
+     * are lowercase because that is what *its* API calls those fields. One
+     * vocabulary per service is the thing that makes the placeholders
+     * predictable.
+     *
+     * Only genuinely derived values need mapping — a year is not a field,
+     * Deezer stores a full date.
      */
-    const DEEZER_ALIASES: Record<string, string> = {
-      title: 'SNG_TITLE',
-      artist: 'ART_NAME',
-      album: 'ALB_TITLE',
-      album_artist: 'ART_NAME',
-      alb_title: 'ALB_TITLE',
-      alb_artist: 'ART_NAME',
-      track_number: 'TRACK_NUMBER',
-      disc_number: 'DISK_NUMBER',
-      year: 'PHYSICAL_RELEASE_DATE',
-      release_date: 'PHYSICAL_RELEASE_DATE',
-      isrc: 'ISRC',
-      label: 'LABEL_NAME',
-      total_tracks: 'NUMBER_TRACK',
-      list_title: 'TITLE',
-      playlist: 'TITLE',
-    };
+    const RELEASE_DATE_FIELDS = ['PHYSICAL_RELEASE_DATE', 'ORIGINAL_RELEASE_DATE', 'DIGITAL_RELEASE_DATE'];
 
     for (const rawKey of file) {
-      const key = DEEZER_ALIASES[rawKey] ?? rawKey;
-      let value_album: string | undefined = dotProp.get(albumInfo, key);
+      const key = rawKey;
+      const value_album: string | undefined = dotProp.get(albumInfo, key);
       let value_track: string | undefined = value_album || dotProp.get(track, key);
 
-      // {year} wants the year, not the whole date.
-      if ((rawKey === 'year' || key === 'PHYSICAL_RELEASE_DATE') && value_track) {
-        const parsed = new Date(String(value_track));
-        if (!Number.isNaN(parsed.getTime()) && rawKey === 'year') {
-          value_track = String(parsed.getFullYear());
-          value_album = value_track;
-        }
+      /* {YEAR}: derived, because Deezer only stores full dates and putting
+         "2001-03-07" in a folder name is not what anyone means by year. */
+      if (rawKey === 'YEAR') {
+        const source = RELEASE_DATE_FIELDS.map(
+          (field) => dotProp.get(albumInfo, field) ?? dotProp.get(track, field),
+        ).find((value) => typeof value === 'string' && value.length > 0) as string | undefined;
+        const parsed = source ? new Date(source) : null;
+        value_track = parsed && !Number.isNaN(parsed.getTime()) ? String(parsed.getFullYear()) : undefined;
       }
       if (key === 'TRACK_NUMBER' || key === 'TRACK_POSITION' || key === 'NO_TRACK_NUMBER') {
         path = path.replace(
