@@ -175,6 +175,14 @@ export const registerCatalogSocketHandlers = ({
           parsedData.linkinfo?.name ||
           parsedData.linkinfo?.TITLE ||
           parsedData.linkinfo?.ALB_TITLE ||
+          // A Deezer track holds its name here, which is why every track URL
+          // was listed as "Unknown Content".
+          parsedData.linkinfo?.SNG_TITLE ||
+          // A single track carries no linkinfo at all, so its name is only on
+          // the track itself — which is why one pasted track URL was listed as
+          // "Unknown Content" in the download manager.
+          parsedData.tracks?.[0]?.SNG_TITLE ||
+          parsedData.tracks?.[0]?.title ||
           'Unknown Content',
       };
 

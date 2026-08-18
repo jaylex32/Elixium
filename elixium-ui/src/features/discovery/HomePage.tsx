@@ -25,6 +25,7 @@ import {isExplicit} from '@/shared/lib/explicit';
 import {useAppStore, type Page} from '@/store/app-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {SelectionToggle} from '@/shared/components/SelectionToggle';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {AlbumModal} from '@/shared/components/AlbumModal';
 import {Button} from '@/shared/components/ui/Button';
@@ -359,6 +360,12 @@ export function HomePage() {
   return (
     <div className="animate-fade-in space-y-8 px-4 pb-8 pt-5 sm:space-y-10 sm:px-6 sm:pt-6">
       {featured && <Hero item={featured} service={service} onOpen={() => setSelected({...featured, service})} />}
+
+      {/* Home is where a cold start lands, so the way into selection mode has
+          to exist here too — every row below is selectable once it is on. */}
+      <div className="flex items-center justify-end">
+        <SelectionToggle />
+      </div>
 
       <div className="scroll-row flex gap-2 pb-3 pt-2">
         {QUICK_LINKS.map(({page, label, icon: Icon}) => (

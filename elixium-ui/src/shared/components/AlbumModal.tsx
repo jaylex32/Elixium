@@ -5,6 +5,7 @@ import {useItemTracks, type ItemType} from '@/shared/lib/api';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {Button} from '@/shared/components/ui/Button';
+import {keepOpenForSelection} from '@/shared/lib/keep-open-for-selection';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
 import {getSocket} from '@/shared/lib/socket';
 import {toast} from 'sonner';
@@ -80,7 +81,6 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
   const selectionActive = useSelectionStore((s) => s.active);
   const selectionItems = useSelectionStore((s) => s.items);
   const toggleSelect = useSelectionStore((s) => s.toggle);
-  const beginSelect = useSelectionStore((s) => s.beginWith);
   const selectMany = useSelectionStore((s) => s.selectMany);
   const setSelectionActive = useSelectionStore((s) => s.setActive);
 
@@ -155,6 +155,7 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
         {/* Bottom sheet on phones, centred dialog from sm up. A centred box at
             360px leaves the header controls fighting the title for width. */}
         <DialogPrimitive.Content
+          {...keepOpenForSelection}
           className="fixed inset-x-0 bottom-0 z-modal flex max-h-[88dvh] flex-col rounded-t-xl border border-border bg-card-bg shadow-xl animate-slide-up pb-safe
                      sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85dvh] sm:w-full sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:animate-fade-in sm:pb-0"
         >
@@ -210,9 +211,9 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                   variant={selectionActive ? 'default' : 'ghost'}
                   className={selectionActive ? undefined : 'text-text-muted'}
                   title={selectionActive ? 'Leave selection mode' : 'Select individual tracks'}
-                  onClick={() =>
-                    selectionActive ? setSelectionActive(false) : beginSelect(asSelectable(tracks[0]))
-                  }
+                  // Same as the artist window: turning selection on should not
+                  // choose the first track for you.
+                  onClick={() => setSelectionActive(!selectionActive)}
                 >
                   <CheckSquare size={14} />
                   {selectionActive ? 'Done' : 'Select'}

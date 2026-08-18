@@ -4,6 +4,7 @@ import {getSocket} from '@/shared/lib/socket';
 import {ON} from '@/shared/lib/events';
 import {useAppStore} from '@/store/app-store';
 import {useDownloadStore} from '@/store/download-store';
+import type {DownloadProgressPayload} from '@shared/socket-events';
 import {useSettingsStore} from '@/store/settings-store';
 
 export function useSocket() {
@@ -19,20 +20,16 @@ export function useSocket() {
     s.on('disconnect', () => setConnected(false));
     if (s.connected) setConnected(true);
 
-    s.on(
-      ON.DOWNLOAD_PROGRESS,
-      (data: {
-        itemId?: string;
-        percentage?: number;
-        currentTrack?: string;
-        current?: number;
-        total?: number;
-        itemStatus?: string;
-        itemProgress?: number;
-      }) => {
-        onProgress(data);
-      },
-    );
+    /*
+     * Typed from the shared contract, not restated here.
+     *
+     * The inline copy that used to sit in this argument omitted every field the
+     * server later added, so the per-item folder was discarded at the socket
+     * boundary before the store could record it.
+     */
+    s.on(ON.DOWNLOAD_PROGRESS, (data: DownloadProgressPayload) => {
+      onProgress(data);
+    });
 
     s.on(ON.DIRECT_DOWNLOAD_PROGRESS, (data) => {
       onConversionProgress(data);
@@ -40,8 +37,14 @@ export function useSocket() {
 
     s.on(ON.DOWNLOAD_COMPLETE, (data) => {
       const count = data.count ?? data.files?.length ?? 1;
-      // Saved paths travel with the completion so the row can offer to open them.
-      onBatchComplete(count, data.files);
+      /*
+       * The itemId matters: a direct download sends one of these per item.
+       *
+       * Dropping it made every completion queue-wide, so the first download to
+       * finish settled every other row that was still running and stamped its
+       * own folder on them — two downloads at once ended up sharing one path.
+       */
+      onBatchComplete(count, data.files, data.itemId);
       toast.success(`Download complete — ${count} track${count > 1 ? 's' : ''}`);
       // Retire finished rows shortly after, so the list settles back to what
       // is actually still running instead of accumulating completed entries.

@@ -10,6 +10,9 @@ import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
 import {AlbumModal} from '@/shared/components/AlbumModal';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Button} from '@/shared/components/ui/Button';
+import {SelectionToggle} from '@/shared/components/SelectionToggle';
+import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 import {EmptyState, ListSkeleton} from '@/shared/components/States';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
 import type {Service} from '@/types';
@@ -53,6 +56,21 @@ export function FavoritesPage() {
     );
     if (queue[startIndex]) setTrack(queue[startIndex], queue);
   };
+
+  const selectionActive = useSelectionStore((s) => s.active);
+  const selectionItems = useSelectionStore((s) => s.items);
+  const toggleSelect = useSelectionStore((s) => s.toggle);
+
+  /** Whatever the current filter is showing. */
+  const selectables = (): SelectableItem[] =>
+    visible.map((entry) => ({
+      id: entry.id,
+      type: entry.type,
+      service: entry.service,
+      title: entry.title,
+      artist: entry.artist,
+      cover: entry.cover,
+    }));
 
   const countFor = (id: Filter) => (id === 'all' ? favorites.length : favorites.filter((f) => f.type === id).length);
 
@@ -102,6 +120,8 @@ export function FavoritesPage() {
           })}
         </div>
 
+        {visible.length > 0 && <SelectionToggle items={selectables} />}
+
         <Button
           variant="ghost"
           size="sm"
@@ -130,6 +150,24 @@ export function FavoritesPage() {
               key={`${entry.service}-${entry.id}`}
               className="rows-track group flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-surface-bg sm:px-3"
             >
+              {selectionActive && (
+                <SelectCheckbox
+                  selected={Boolean(selectionItems[`${entry.service}:track:${entry.id}`])}
+                  alwaysVisible
+                  label={`Select ${entry.title}`}
+                  onToggle={() =>
+                    toggleSelect({
+                      id: entry.id,
+                      type: 'track',
+                      service: entry.service,
+                      title: entry.title,
+                      artist: entry.artist,
+                      cover: entry.cover,
+                    })
+                  }
+                />
+              )}
+
               <button onClick={() => playTracks(index)} className="relative h-11 w-11 shrink-0" aria-label={`Play ${entry.title}`}>
                 {entry.cover ? (
                   <img src={entry.cover} alt="" loading="lazy" className="h-11 w-11 rounded-sm object-cover" />

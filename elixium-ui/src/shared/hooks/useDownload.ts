@@ -17,6 +17,10 @@ export interface DownloadTarget {
   url?: string;
 }
 
+/** Distinguishes downloads started within the same millisecond. */
+let urlDownloadSeq = 0;
+const nextUrlDownloadId = () => (urlDownloadSeq += 1);
+
 export function useDownload() {
   const {trackDownload} = useDownloadStore();
   const {settings} = useSettingsStore();
@@ -69,7 +73,15 @@ export function useDownload() {
 
   const downloadUrl = useCallback(
     (url: string, meta: {title: string; artist?: string; cover?: string; service: Service}) => {
-      const itemId = `url-${Date.now()}`;
+      /*
+       * A counter, not just the clock.
+       *
+       * "Download all ready" dispatches every URL in one synchronous loop, so
+       * Date.now() returned the same value for all of them and every row shared
+       * an id — the downloads ran but collapsed into a single history entry
+       * that showed only the last one's details.
+       */
+      const itemId = `url-${Date.now()}-${nextUrlDownloadId()}`;
       const socket = getSocket();
 
       trackDownload(itemId, meta);

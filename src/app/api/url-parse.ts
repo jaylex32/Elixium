@@ -106,8 +106,18 @@ export const parseMediaUrl = async (
     contentType: parsed.linktype,
     trackCount: parsed.tracks.length,
     title:
-      firstString(parsed.linkinfo?.title, parsed.linkinfo?.name, parsed.linkinfo?.TITLE, parsed.linkinfo?.ALB_TITLE) ??
-      'Unknown Content',
+      // SNG_TITLE last: a Deezer track carries its name only there, which is
+      // why every track URL was listed as "Unknown Content".
+      firstString(
+        parsed.linkinfo?.title,
+        parsed.linkinfo?.name,
+        parsed.linkinfo?.TITLE,
+        parsed.linkinfo?.ALB_TITLE,
+        parsed.linkinfo?.SNG_TITLE,
+        // A single track carries no linkinfo, so its name is only on the track.
+        parsed.tracks?.[0]?.SNG_TITLE,
+        parsed.tracks?.[0]?.title,
+      ) ?? 'Unknown Content',
   };
 
   parsed.metadata = metadata;

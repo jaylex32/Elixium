@@ -14,6 +14,10 @@ import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
 import {AlbumModal} from '@/shared/components/AlbumModal';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Button} from '@/shared/components/ui/Button';
+import {SelectionToggle} from '@/shared/components/SelectionToggle';
+import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {useSelectionStore} from '@/store/selection-store';
+import type {SelectableItem, SelectableType} from '@/store/selection-store';
 import {Select} from '@/shared/components/ui/Select';
 import {GridSkeleton, ListSkeleton, EmptyState, ErrorState} from '@/shared/components/States';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
@@ -79,6 +83,24 @@ export function ChartsPage() {
       service === 'deezer' ? `https://www.deezer.com/playlist/${id}` : `https://play.qobuz.com/playlist/${id}`;
     getSocket().emit('addWatchedPlaylist', {url});
     toast.success(`Watching ${title}`, {description: 'New tracks will appear in your watchlist.'});
+  };
+
+  const selectionActive = useSelectionStore((s) => s.active);
+  const selectionItems = useSelectionStore((s) => s.items);
+  const toggleSelect = useSelectionStore((s) => s.toggle);
+
+  /** The visible chart, in the shape the selection store holds. */
+  const selectables = (): SelectableItem[] => {
+    const type: SelectableType =
+      effectiveKind === 'tracks' ? 'track' : effectiveKind === 'artists' ? 'artist' : effectiveKind === 'albums' ? 'album' : 'playlist';
+    return items.map((r) => ({
+      id: r.id,
+      type,
+      service,
+      title: r.title,
+      artist: r.artist,
+      cover: extractCover(r.rawData, service),
+    }));
   };
 
   const playAll = (startIndex: number) => {
@@ -162,11 +184,12 @@ export function ChartsPage() {
 
           {!isLoading && !isError && items.length > 0 && effectiveKind === 'tracks' && (
             <>
-              <div className="mb-3">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={() => playAll(0)}>
                   <Play size={13} />
                   Play chart
                 </Button>
+                <SelectionToggle items={selectables} />
               </div>
               <div className="space-y-0.5">
                 {items.map((r, i) => {
@@ -180,10 +203,25 @@ export function ChartsPage() {
                         isActive ? 'bg-accent/10' : 'hover:bg-surface-bg',
                       )}
                     >
-                      {/* Chart position is the point of a chart. */}
-                      <span className="w-7 shrink-0 text-right text-sm font-semibold tabular-nums text-text-muted">
-                        {i + 1}
-                      </span>
+                      {/* Chart position is the point of a chart — until you are
+                          picking tracks, when the slot becomes the checkbox
+                          rather than adding a column and shifting every row. */}
+                      {selectionActive ? (
+                        <span className="flex w-7 shrink-0 justify-center">
+                          <SelectCheckbox
+                            selected={Boolean(selectionItems[`${service}:track:${r.id}`])}
+                            alwaysVisible
+                            label={`Select ${r.title}`}
+                            onToggle={() =>
+                              toggleSelect({id: r.id, type: 'track', service, title: r.title, artist: r.artist, cover})
+                            }
+                          />
+                        </span>
+                      ) : (
+                        <span className="w-7 shrink-0 text-right text-sm font-semibold tabular-nums text-text-muted">
+                          {i + 1}
+                        </span>
+                      )}
 
                       <button onClick={() => playAll(i)} className="relative h-11 w-11 shrink-0" aria-label={`Play ${r.title}`}>
                         {cover ? (
@@ -224,6 +262,12 @@ export function ChartsPage() {
                 })}
               </div>
             </>
+          )}
+
+          {!isLoading && !isError && items.length > 0 && effectiveKind !== 'tracks' && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <SelectionToggle items={selectables} />
+            </div>
           )}
 
           {!isLoading && !isError && items.length > 0 && effectiveKind === 'artists' && (

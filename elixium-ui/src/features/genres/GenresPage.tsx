@@ -8,6 +8,7 @@ import { isExplicit } from '@/shared/lib/explicit'
 import { useAppStore } from '@/store/app-store'
 import { useDownload } from '@/shared/hooks/useDownload'
 import { AlbumCard, type AlbumCardData } from '@/shared/components/AlbumCard'
+import { SelectionToggle } from '@/shared/components/SelectionToggle'
 import { AlbumModal } from '@/shared/components/AlbumModal'
 import { CardSkeleton } from '@/shared/components/ui/Skeleton'
 import type { Service } from '@/types'
@@ -64,6 +65,22 @@ function GenreResults({
         <span className="text-xl">{genre.icon}</span>
         <h3 className="font-semibold text-text-primary">{genre.label} · Top Albums</h3>
         <span className="text-xs text-text-muted ml-1 capitalize">{service}</span>
+        {data.length > 0 && (
+          <div className="ml-auto">
+            <SelectionToggle
+              items={() =>
+                data.map((r) => ({
+                  id: r.id,
+                  type: 'album' as const,
+                  service,
+                  title: r.title,
+                  artist: r.artist,
+                  cover: extractCover(r.rawData, service),
+                }))
+              }
+            />
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -161,7 +178,7 @@ export function GenresPage() {
 
       {selectedGenre && (
         <GenreResults key={`${selectedGenre.id}-${service}`} genre={selectedGenre} service={service} />
-      )}
+      )}
     </div>
   )
 }

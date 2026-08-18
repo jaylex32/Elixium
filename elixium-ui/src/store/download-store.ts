@@ -14,6 +14,8 @@ export interface ActiveDownload {
   total: number;
   startedAt: number;
   error?: string;
+  /** Where this item's files landed, sent with its own terminal event. */
+  folder?: string;
 }
 
 export interface HistoryEntry {
@@ -77,16 +79,15 @@ interface DownloadState {
 
   // Called when directUrlDownload is emitted — creates a placeholder
   trackDownload: (itemId: string, meta: {title: string; artist?: string; cover?: string}) => void;
-  // Called on downloadProgress events from backend
-  onProgress: (data: {
-    itemId?: string;
-    percentage?: number;
-    currentTrack?: string;
-    current?: number;
-    total?: number;
-    itemStatus?: string;
-    itemProgress?: number;
-  }) => void;
+  /**
+   * Called on downloadProgress events from the backend.
+   *
+   * Takes the shared payload rather than restating it inline. The copy that
+   * used to live here silently dropped every field the server added — which is
+   * how the per-item folder arrived and was thrown away before this ever saw
+   * it, leaving finished rows with no path.
+   */
+  onProgress: (data: DownloadProgressPayload) => void;
   // Called on directUrlConversionProgress (pre-download phase)
   /**
    * Takes the shared payload rather than restating it. The old inline type
@@ -95,7 +96,7 @@ interface DownloadState {
    */
   onConversionProgress: (data: DownloadProgressPayload) => void;
   onComplete: (itemId: string, count: number) => void;
-  onBatchComplete: (count: number, files?: string[]) => void;
+  onBatchComplete: (count: number, files?: string[], itemId?: string) => void;
   onError: (itemId: string, message: string) => void;
   clear: (itemId: string) => void;
   clearDone: () => void;
@@ -175,6 +176,7 @@ export const useDownloadStore = create<DownloadState>()(
           current: data.current ?? existing?.current ?? 0,
           total: data.total ?? existing?.total ?? 1,
           startedAt: existing?.startedAt ?? Date.now(),
+          folder: data.folder ?? existing?.folder,
         },
       };
 
@@ -186,6 +188,18 @@ export const useDownloadStore = create<DownloadState>()(
        * individually finished correctly but left no trace in history.
        */
       const justSettled = (status === 'done' || status === 'error') && existing?.status !== status;
+
+      /*
+       * A folder arriving after the row was already filed still corrects it.
+       *
+       * An item can be settled early by another item's completion, and its own
+       * terminal event — the one that actually knows where its files went —
+       * lands afterwards. Without this the wrong path stayed on the row.
+       */
+      const correctFolder = !justSettled && data.folder
+        ? s.history.map((h) => (h.id === id ? {...h, folder: data.folder} : h))
+        : s.history;
+
       const history = justSettled
         ? [
             {
@@ -195,13 +209,22 @@ export const useDownloadStore = create<DownloadState>()(
               cover: updated[id].cover,
               // A failed item saved nothing; claiming its track total would put
               // "13 tracks" beside a job that produced no files.
-              count: status === 'done' ? updated[id].total || 1 : 0,
+              count: status === 'done' ? data.savedCount ?? (updated[id].total || 1) : 0,
               completedAt: Date.now(),
               status,
+              /*
+               * Recorded here rather than left to the batch event.
+               *
+               * A row settled by its own terminal event is filed immediately,
+               * and the queue-wide event that follows never repairs it — which
+               * is why finished downloads sat in the list with no path beside
+               * them at all.
+               */
+              folder: updated[id].folder,
             },
             ...s.history.filter((h) => h.id !== id),
           ].slice(0, 100)
-        : s.history;
+        : correctFolder;
 
       return {
         active: updated,
@@ -219,7 +242,7 @@ export const useDownloadStore = create<DownloadState>()(
    * which created a phantom entry and left every real download running. Any
    * item still in flight when the batch reports done is finished.
    */
-  onBatchComplete: (count, files) =>
+  onBatchComplete: (count, files, itemId) =>
     set((s) => {
       const updated = {...s.active};
       const finished: string[] = [];
@@ -235,6 +258,9 @@ export const useDownloadStore = create<DownloadState>()(
       const settled: HistoryEntry['status'] = succeeded ? 'done' : 'error';
 
       for (const [id, entry] of Object.entries(updated)) {
+        // Named completions settle only their own row. Without this, whichever
+        // download finished first retired everything else still in flight.
+        if (itemId && id !== itemId) continue;
         if (entry.status !== 'done' && entry.status !== 'error') {
           updated[id] = {
             ...entry,
@@ -246,6 +272,16 @@ export const useDownloadStore = create<DownloadState>()(
         }
       }
 
+      /*
+       * `files` is queue-wide: every file from every item in the batch.
+       *
+       * Taking files[0] for each row is what put one artist's folder beside
+       * another artist's album. The item's own folder — sent with its terminal
+       * event — is authoritative; the batch list is only a safe guess when a
+       * single item finished here, because then all of it belongs to that one.
+       */
+      const batchFolder = finished.length === 1 ? folderOf(files?.[0]) : undefined;
+
       const newHistory: HistoryEntry[] = finished.map((id) => ({
         id,
         title: updated[id].title,
@@ -254,7 +290,7 @@ export const useDownloadStore = create<DownloadState>()(
         count,
         completedAt: Date.now(),
         status: settled,
-        folder: folderOf(files?.[0]),
+        folder: updated[id].folder ?? batchFolder,
       }));
 
       /*

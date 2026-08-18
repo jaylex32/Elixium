@@ -721,6 +721,27 @@ export const createDownloadQueueRuntime = ({
           console.error(`Error downloading ${item.title}: ${error.message}`);
         }
 
+        /*
+         * Terminal event for this item, carrying its own folder.
+         *
+         * Only single tracks used to report completion per item, so an album
+         * or a whole discography stayed "downloading" until the queue-wide
+         * event landed — and that event lists every file from every item, so
+         * the client stamped the first one's folder onto all of them. Reading
+         * the item's own bucket is the only way to say where its files went.
+         */
+        const ownFiles = itemFiles.get(String(item.id))?.savedFiles ?? [];
+        if (socket) {
+          socket.emit('downloadProgress', {
+            itemId: item.id,
+            itemStatus: ownFiles.length > 0 ? 'completed' : 'error',
+            itemProgress: ownFiles.length > 0 ? 100 : undefined,
+            folder: ownFiles.length > 0 ? dirname(ownFiles[0]) : undefined,
+            savedCount: ownFiles.length,
+            ...(ownFiles.length === 0 ? {message: 'No tracks were saved'} : {}),
+          });
+        }
+
         activeDownloads.delete(item.id);
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
       }

@@ -215,6 +215,11 @@ export const createWebDownloads = ({
       itemProgress: 100,
       current: savedFiles.length,
       total: parsedData.tracks.length,
+      // Sent with the terminal event, not left to the batch: this row is filed
+      // into history the moment this arrives, and the queue-wide event that
+      // follows cannot say which of its files belonged to which item.
+      folder: savedFiles.length > 0 ? dirname(savedFiles[0]) : undefined,
+      savedCount: savedFiles.length,
     });
 
     socket.emit('downloadComplete', {
@@ -296,6 +301,11 @@ export const createWebDownloads = ({
       itemProgress: 100,
       current: savedFiles.length,
       total: parsedData.tracks.length,
+      // Sent with the terminal event, not left to the batch: this row is filed
+      // into history the moment this arrives, and the queue-wide event that
+      // follows cannot say which of its files belonged to which item.
+      folder: savedFiles.length > 0 ? dirname(savedFiles[0]) : undefined,
+      savedCount: savedFiles.length,
     });
 
     socket.emit('downloadComplete', {

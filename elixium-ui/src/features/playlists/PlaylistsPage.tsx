@@ -11,6 +11,7 @@ import {AlbumModal} from '@/shared/components/AlbumModal';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {Input} from '@/shared/components/ui/Input';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
+import {SelectionToggle} from '@/shared/components/SelectionToggle';
 import {getSocket} from '@/shared/lib/socket';
 import {cn} from '@/shared/lib/utils';
 import type {Service} from '@/types';
@@ -191,6 +192,22 @@ export function PlaylistsPage() {
           ) : data.length === 0 ? (
             <EmptyState title="No playlists matched" hint="Try a shorter or more general search term." />
           ) : (
+            <>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <SelectionToggle
+                items={() =>
+                  data.map((r) => ({
+                    id: r.id,
+                    type: 'playlist' as const,
+                    service: searchService as Service,
+                    title: r.title,
+                    artist: r.artist,
+                    cover: extractCover(r.rawData, searchService as Service),
+                    url: r.url,
+                  }))
+                }
+              />
+            </div>
             <div className={GRID}>
               {data.map((r) => {
                 const card: AlbumCardData = {
@@ -256,6 +273,7 @@ export function PlaylistsPage() {
                 );
               })}
             </div>
+            </>
           )}
 
           {!isLoading && !isError && data.length > 0 && (

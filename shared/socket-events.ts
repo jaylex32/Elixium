@@ -34,7 +34,15 @@ type Unspecified = any;
 // ── Payloads that carry identity or state ────────────────────────────────────
 
 /** Status of a single queue row. */
-export type DownloadItemStatus = 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
+/*
+ * The values the emit sites actually send.
+ *
+ * This listed 'failed', which nothing emits, and omitted 'error', which the
+ * queue runtime sends on a caught failure — so the client's check against it
+ * was comparing two types with no overlap and the compiler could not say so
+ * while the payload was being restated inline in two other files.
+ */
+export type DownloadItemStatus = 'queued' | 'downloading' | 'completed' | 'error' | 'cancelled';
 
 /**
  * Progress for one queue item.
@@ -55,6 +63,17 @@ export interface DownloadProgressPayload {
   itemProgress?: number;
   phase?: string;
   message?: string;
+  /**
+   * Folder this item's files landed in, sent with its terminal event.
+   *
+   * The queue-wide `downloadComplete` carries every file from every item, so a
+   * client had no way to tell which folder belonged to which row and stamped
+   * the first one onto all of them — an album by one artist showed another
+   * artist's path. This is per item and authoritative.
+   */
+  folder?: string;
+  /** Files this item actually saved, for the row's track count. */
+  savedCount?: number;
 }
 
 /**
