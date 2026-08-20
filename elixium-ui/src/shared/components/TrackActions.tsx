@@ -1,12 +1,22 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import {MoreVertical, ListPlus, ListEnd, Download, Play} from 'lucide-react';
+import {MoreVertical, ListPlus, ListEnd, Download, Play, Link2, Disc3, User} from 'lucide-react';
 import {toast} from 'sonner';
-import {cn} from '@/shared/lib/utils';
+import {cn, copyText} from '@/shared/lib/utils';
 import {usePlayerStore} from '@/store/player-store';
+import {useNavigationStore} from '@/store/navigation-store';
+import {buildServiceUrl} from '@/shared/lib/events';
+import type {Relations} from '@/shared/lib/relations';
 import type {Track} from '@/types';
 
 interface TrackActionsProps {
   track: Track;
+  /**
+   * Where this track sits in the catalogue.
+   *
+   * Supplied by rows that have the raw payload; without it the menu simply
+   * omits the two jump entries rather than offering links that go nowhere.
+   */
+  relations?: Relations;
   onDownload?: () => void;
   onPlay?: () => void;
   className?: string;
@@ -24,10 +34,27 @@ const itemClass =
  * replace the queue by playing something, never build one up. A menu keeps
  * these available without adding a third and fourth icon to every row.
  */
-export function TrackActions({track, onDownload, onPlay, className}: TrackActionsProps) {
+export function TrackActions({track, relations, onDownload, onPlay, className}: TrackActionsProps) {
   const playNext = usePlayerStore((s) => s.playNext);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const queueLength = usePlayerStore((s) => s.queue.length);
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
+  const openArtist = useNavigationStore((s) => s.openArtist);
+
+  const copyLink = async () => {
+    try {
+      const url = buildServiceUrl(track.id, 'track', track.service);
+      const ok = await copyText(url);
+      if (ok) toast.success('Link copied', {description: url, duration: 2200});
+      else toast.error('Could not copy the link');
+    } catch (error) {
+      // buildServiceUrl refuses ids that belong to another service rather than
+      // producing a URL that resolves to nothing.
+      toast.error('No link for this item', {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  };
 
   return (
     <DropdownMenu.Root>
@@ -85,14 +112,57 @@ export function TrackActions({track, onDownload, onPlay, className}: TrackAction
             Add to queue
           </DropdownMenu.Item>
 
-          {onDownload && (
+          {(relations?.albumId || relations?.artistId) && (
             <>
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item className={itemClass} onSelect={onDownload}>
-                <Download size={14} />
-                Download
-              </DropdownMenu.Item>
+              {relations?.albumId && (
+                <DropdownMenu.Item
+                  className={itemClass}
+                  onSelect={() =>
+                    openAlbum({
+                      id: relations.albumId as string,
+                      title: relations.albumTitle ?? track.album ?? 'Album',
+                      artist: relations.artistName ?? track.artist,
+                      cover: relations.albumCover ?? track.cover,
+                      type: 'album',
+                      service: track.service,
+                    })
+                  }
+                >
+                  <Disc3 size={14} />
+                  Go to album
+                </DropdownMenu.Item>
+              )}
+              {relations?.artistId && (
+                <DropdownMenu.Item
+                  className={itemClass}
+                  onSelect={() =>
+                    openArtist({
+                      id: relations.artistId as string,
+                      name: relations.artistName ?? track.artist,
+                      picture: relations.artistPicture,
+                      service: track.service,
+                    })
+                  }
+                >
+                  <User size={14} />
+                  Go to artist
+                </DropdownMenu.Item>
+              )}
             </>
+          )}
+
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Item className={itemClass} onSelect={copyLink}>
+            <Link2 size={14} />
+            Copy link
+          </DropdownMenu.Item>
+
+          {onDownload && (
+            <DropdownMenu.Item className={itemClass} onSelect={onDownload}>
+              <Download size={14} />
+              Download
+            </DropdownMenu.Item>
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

@@ -1,10 +1,9 @@
-import {useState} from 'react';
 import {User, Download} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
-import {ArtistModal} from './ArtistModal';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore} from '@/store/selection-store';
+import {useNavigationStore} from '@/store/navigation-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import type {Artist} from '@/types';
 
@@ -14,8 +13,8 @@ interface ArtistCardProps {
 }
 
 export function ArtistCard({artist, className}: ArtistCardProps) {
-  const [modalOpen, setModalOpen] = useState(false);
   const {download} = useDownload();
+  const openArtist = useNavigationStore((s) => s.openArtist);
 
   const selectable = {
     id: artist.id,
@@ -42,7 +41,7 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
   return (
     <div className="group relative">
       <button
-        onClick={() => (selectionActive ? toggle(selectable) : setModalOpen(true))}
+        onClick={() => (selectionActive ? toggle(selectable) : openArtist(artist))}
         className={cn(
           'group flex flex-col items-center gap-3 rounded-2xl p-4 border border-border bg-card-bg',
           'hover:border-accent/40 hover:bg-surface-bg transition-all duration-200 text-left w-full',
@@ -95,7 +94,6 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
         </button>
       </div>
 
-      <ArtistModal artist={artist} open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
 }

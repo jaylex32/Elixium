@@ -334,6 +334,56 @@ export function useCountryChart(playlistId: string, enabled = true) {
   });
 }
 
+export interface ArtistInfo {
+  id: string;
+  name: string;
+  picture: string;
+}
+
+/**
+ * An artist's picture, for views that arrived without one.
+ *
+ * A track or album row carries the artist's id and name but no artwork, so an
+ * artist opened from one showed an empty circle while the same artist opened
+ * from a search showed their photograph.
+ */
+export function useArtistInfo(artistId: string, service: Service, enabled = true) {
+  return useQuery<ArtistInfo>({
+    queryKey: ['artist-info', service, artistId],
+    queryFn: async () => (await http.get('/artist-info', {params: {service, artistId}})).data as ArtistInfo,
+    enabled: enabled && Boolean(artistId),
+    staleTime: 1000 * 60 * 60,
+  });
+}
+
+export type GenreKind = 'albums' | 'tracks' | 'artists' | 'playlists';
+
+const GENRE_PAGE_SIZE = 50;
+
+/**
+ * A genre's own content, which is not the same thing as its chart.
+ *
+ * Deezer's per-genre artist endpoints return the global top artists whatever
+ * genre is asked for — Reggae answered with Taylor Swift — and its per-genre
+ * album chart holds about four records. The server assembles this from the
+ * sources that do respect the genre instead.
+ */
+export function useGenreContent(service: Service, genreId: string, kind: GenreKind, enabled = true) {
+  return useInfiniteQuery<RawSearchResult[]>({
+    queryKey: ['genre-content', service, genreId, kind],
+    initialPageParam: 0,
+    queryFn: async ({pageParam}) => {
+      const res = await http.get('/genre-content', {
+        params: {service, genreId, kind, limit: GENRE_PAGE_SIZE, offset: pageParam as number},
+      });
+      return (Array.isArray(res.data) ? res.data : []) as RawSearchResult[];
+    },
+    getNextPageParam: (last, all) => (last.length < GENRE_PAGE_SIZE ? undefined : all.length * GENRE_PAGE_SIZE),
+    enabled: enabled && Boolean(genreId),
+    staleTime: 1000 * 60 * 15,
+  });
+}
+
 export function useCharts(service: Service, genreId: string, kind: ChartKind) {
   return useInfiniteQuery<RawSearchResult[]>({
     queryKey: ['charts', service, genreId, kind],

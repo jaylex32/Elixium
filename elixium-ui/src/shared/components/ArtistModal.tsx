@@ -1,14 +1,17 @@
 import {useState} from 'react';
-import {X, User, Music2, Play, Pause, Download, Eye, Disc3, ListMusic, CheckSquare} from 'lucide-react';
+import {X, User, Music2, Play, Pause, Download, Eye, Disc3, ListMusic, CheckSquare, ArrowLeft} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {toast} from 'sonner';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
-import {useArtistContent, type ArtistContentKind} from '@/shared/lib/api';
+import {useArtistContent, useArtistInfo, type ArtistContentKind} from '@/shared/lib/api';
 import {extractCover} from '@/shared/lib/cover';
 import {isExplicit} from '@/shared/lib/explicit';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
+import {AlbumLink} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
 import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
+import {useNavigationStore} from '@/store/navigation-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {getSocket} from '@/shared/lib/socket';
@@ -17,13 +20,14 @@ import {keepOpenForSelection} from '@/shared/lib/keep-open-for-selection';
 import {ListSkeleton, GridSkeleton, ErrorState, EmptyState} from '@/shared/components/States';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
-import {AlbumModal} from '@/shared/components/AlbumModal';
 import type {Artist, Service, RawSearchResult} from '@/types';
 
 interface ArtistModalProps {
   artist: Artist;
   open: boolean;
   onClose: () => void;
+  /** Shows a back arrow instead of implying this is the first thing opened. */
+  canGoBack?: boolean;
 }
 
 const TABS: {id: ArtistContentKind; label: string; icon: React.ElementType}[] = [
@@ -81,9 +85,11 @@ function toCard(result: RawSearchResult, service: Service, fallbackArtist: strin
  * open into the album modal, so every item resolves to its real track list
  * rather than being a dead card.
  */
-export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
+export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps) {
   const [tab, setTab] = useState<ArtistContentKind>('albums');
-  const [selected, setSelected] = useState<(AlbumCardData & {service: Service}) | null>(null);
+  // Albums push onto the shared stack rather than nesting a second dialog, so
+  // Back returns to this artist instead of closing everything at once.
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   const {download} = useDownload();
   const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
@@ -100,6 +106,11 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
   const selectionItems = useSelectionStore((s) => s.items);
   const toggleSelect = useSelectionStore((s) => s.toggle);
   const setSelectionActive = useSelectionStore((s) => s.setActive);
+
+  /* Only asked for when the caller had no picture — opening an artist from a
+     search already carries one, and this would be a wasted request. */
+  const {data: info} = useArtistInfo(artist.id, artist.service, open && !artist.picture);
+  const picture = artist.picture || info?.picture || '';
 
   const {data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage} = useArtistContent(
     tab,
@@ -189,9 +200,14 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden />
 
             <div className="flex shrink-0 items-center gap-3 border-b border-border p-4 sm:gap-4 sm:p-5">
+              {canGoBack && (
+                <Button variant="ghost" size="icon-sm" aria-label="Back" title="Back" onClick={onClose}>
+                  <ArrowLeft size={17} />
+                </Button>
+              )}
               <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-surface-bg sm:h-16 sm:w-16">
-                {artist.picture ? (
-                  <img src={artist.picture} alt="" loading="lazy" className="h-full w-full object-cover" />
+                {picture ? (
+                  <img src={picture} alt="" loading="lazy" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
                     <User size={22} className="text-text-muted" />
@@ -276,7 +292,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                       type: 'artist',
                       title: artist.name,
                       artist: artist.name,
-                      cover: artist.picture,
+                      cover: picture,
                       service: artist.service,
                     });
                     toast.success(`Queued ${artist.name}'s discography`);
@@ -318,7 +334,7 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                       <AlbumCard
                         key={`${item.id}-${item.title}`}
                         album={card}
-                        onClick={() => setSelected({...card, service: artist.service})}
+                        onClick={() => openAlbum({...card, service: artist.service})}
                         selectable={{
                           id: item.id,
                           type: tab === 'albums' ? 'album' : 'playlist',
@@ -410,7 +426,14 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
                               {isExplicit(items[index]?.rawData) && <ExplicitBadge />}
                             </span>
                             {track.album && (
-                              <span className="block truncate text-xs text-text-muted">{track.album}</span>
+                              <span className="block truncate text-xs text-text-muted">
+                                {/* The album a top track came from, as a way in. */}
+                                <AlbumLink
+                                  title={track.album}
+                                  relations={relationsOf(items[index]?.rawData, artist.service)}
+                                  service={artist.service}
+                                />
+                              </span>
                             )}
                           </span>
 
@@ -456,10 +479,6 @@ export function ArtistModal({artist, open, onClose}: ArtistModalProps) {
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
-
-      {/* Nested so closing an album returns to the artist rather than to the
-          page behind it. */}
-      {selected && <AlbumModal album={selected} open onClose={() => setSelected(null)} />}
     </>
   );
 }

@@ -589,7 +589,15 @@ export const createQobuzWatchlistService = ({
     };
   };
 
-  const getState = () => enrichState(store.getState());
+  /*
+   * Reads the live tree rather than a clone.
+   *
+   * enrichState already builds a new object, and the result is serialised
+   * straight onto a socket, so cloning the entire watchlist first bought
+   * nothing — it was simply the cost of opening the page, paid again on every
+   * broadcast.
+   */
+  const getState = () => enrichState(store.read());
 
   /**
    * Discography of every watched artist, split into what is held and what is not.
@@ -626,7 +634,7 @@ export const createQobuzWatchlistService = ({
     const libraryTokens = await collectFilesystemTokens(getQobuzPath(), profile.cutoff === 'hires');
 
     const selected = () => {
-      const state = store.getState();
+      const state = store.read();
       return artistId
         ? state.watchedArtists.filter((entry) => String(entry.id) === String(artistId))
         : state.watchedArtists;
@@ -634,7 +642,10 @@ export const createQobuzWatchlistService = ({
 
     if (options.fetchIfMissing) {
       for (const artist of selected()) {
-        const existing = store.getState().discographies?.[String(artist.id)];
+        // Read, not clone: this runs once per watched artist, and cloning the
+        // whole watchlist inside that loop made the cost quadratic in the size
+        // of the thing being displayed.
+        const existing = store.read().discographies?.[String(artist.id)];
         if (existing && existing.releases.length > 0) continue;
         try {
           await ensureQobuzSearchReady();
@@ -645,7 +656,7 @@ export const createQobuzWatchlistService = ({
       }
     }
 
-    const state = store.getState();
+    const state = store.read();
     const processedByKey = new Map(state.processedAlbums.map((entry) => [entry.normalizedKey, entry]));
 
     const summaries = selected().map((artist) => {
@@ -724,7 +735,7 @@ export const createQobuzWatchlistService = ({
   };
 
   const getFavoriteGenres = () => ({
-    genres: store.getState().favoriteGenres,
+    genres: [...store.read().favoriteGenres],
     availableGenres,
   });
 

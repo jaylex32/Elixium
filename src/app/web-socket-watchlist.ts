@@ -12,9 +12,30 @@ export const registerWatchlistSocketHandlers = ({socket, io, watchlist}: WebSock
     io.emit('watchlistState', state || watchlist.getState());
   };
 
-  socket.on('getWatchlistState', async () => {
-    await watchlist.loadAvailableGenres();
+  /*
+   * Answer immediately, then refresh the genre list behind it.
+   *
+   * This used to await loadAvailableGenres() before emitting anything, so
+   * opening the watchlist waited on ensureQobuzSearchReady() plus a Qobuz
+   * round trip before a single artist appeared — and if Qobuz was slow,
+   * unreachable or unconfigured, the page simply stayed empty for as long as
+   * that took. Genres only populate one filter; everything else on the page is
+   * already in hand.
+   */
+  socket.on('getWatchlistState', () => {
     socket.emit('watchlistState', watchlist.getState());
+
+    void watchlist
+      .loadAvailableGenres()
+      .then((genres) => {
+        // Only speak again if the list actually changed, so the page does not
+        // re-render for nothing on every visit.
+        const current = watchlist.getState()?.availableGenres ?? [];
+        if (genres.length !== current.length) socket.emit('watchlistState', watchlist.getState());
+      })
+      .catch(() => {
+        // The fallback list is already in place; nothing to report.
+      });
   });
 
   socket.on('addWatchedArtist', async (artist) => {

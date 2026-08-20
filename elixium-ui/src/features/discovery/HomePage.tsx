@@ -27,7 +27,8 @@ import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
 import {SelectionToggle} from '@/shared/components/SelectionToggle';
 import {ArtistCard} from '@/shared/components/ArtistCard';
-import {AlbumModal} from '@/shared/components/AlbumModal';
+import {useNavigationStore} from '@/store/navigation-store';
+import {Recommendations} from './Recommendations';
 import {Button} from '@/shared/components/ui/Button';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {ErrorState} from '@/shared/components/States';
@@ -318,7 +319,7 @@ function DiscoverySection({
 export function HomePage() {
   const service = useAppStore((s) => s.service);
   const setPage = useAppStore((s) => s.setPage);
-  const [selected, setSelected] = useState<(AlbumCardData & {service: Service}) | null>(null);
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   // The hero borrows the first new release, so the row below skips it rather
   // than showing the same album twice.
@@ -359,7 +360,7 @@ export function HomePage() {
 
   return (
     <div className="animate-fade-in space-y-8 px-4 pb-8 pt-5 sm:space-y-10 sm:px-6 sm:pt-6">
-      {featured && <Hero item={featured} service={service} onOpen={() => setSelected({...featured, service})} />}
+      {featured && <Hero item={featured} service={service} onOpen={() => openAlbum({...featured, service})} />}
 
       {/* Home is where a cold start lands, so the way into selection mode has
           to exist here too — every row below is selectable once it is on. */}
@@ -383,17 +384,20 @@ export function HomePage() {
         ))}
       </div>
 
+      {/* Sits above the fixed shelves: what you looked for beats what is
+          merely popular. Renders nothing until there is a search to go on. */}
+      <Recommendations service={service} />
+
       {sections.map((section) => (
         <DiscoverySection
           key={`${section.type}-${service}`}
           {...section}
           service={service}
           excludeId={featured?.id}
-          onSelect={(album) => setSelected({...album, service})}
+          onSelect={(album) => openAlbum({...album, service})}
         />
       ))}
 
-      {selected && <AlbumModal album={selected} open onClose={() => setSelected(null)} />}
     </div>
   );
 }

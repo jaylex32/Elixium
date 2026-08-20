@@ -62,38 +62,62 @@ const dedupeReleases = (items: SearchResult[]): SearchResult[] => {
  * useful fact there anyway: it separates singles and EPs from albums.
  */
 /*
- * Track counts for a Deezer discography, cached per artist.
+ * Track counts for a Deezer discography, from the public API only.
  *
- * Deezer's public /artist/{id}/albums carries no track count — the field
- * simply is not in the payload — while its own discography endpoint reports
- * NUMBER_TRACK for every release in a single request.
+ * Deezer's /artist/{id}/albums carries no track count, and its private
+ * discography endpoint does — but that endpoint runs on the same authenticated
+ * session as downloads and playback, and its error path can swap that session
+ * for an anonymous one. Trading a working download for a number on a card is
+ * not a trade worth making, so the count comes from the public /album/{id}
+ * instead: a different host, no session, nothing to corrupt.
  *
- * This is enrichment and nothing more: the public listing stays the source of
- * ids, order, covers and paging, so if this call fails the cards lose a count
- * and nothing else changes. Cached because paging asks for the same artist
- * again with a new offset.
+ * One request per album, capped, pooled and cached. If any of it fails or runs
+ * long the cards simply show no count.
  */
-const DISCOGRAPHY_TTL = 5 * 60 * 1000;
-const discographyCounts = new Map<string, {at: number; counts: Map<string, number>}>();
+const COUNT_TTL = 30 * 60 * 1000;
+const COUNT_CONCURRENCY = 6;
+/** Never let a cosmetic lookup hold the listing up. */
+const COUNT_BUDGET_MS = 2500;
 
-const deezerTrackCounts = async (deezer: any, artistId: string): Promise<Map<string, number>> => {
-  const cached = discographyCounts.get(artistId);
-  if (cached && Date.now() - cached.at < DISCOGRAPHY_TTL) return cached.counts;
+const albumTrackCounts = new Map<string, {at: number; count: number}>();
 
+const publicTrackCounts = async (
+  makeHttpRequest: (url: string) => Promise<any>,
+  albumIds: string[],
+): Promise<Map<string, number>> => {
   const counts = new Map<string, number>();
-  try {
-    const response = await deezer?.getDiscography?.(artistId, 500);
-    for (const album of response?.data ?? []) {
-      const count = Number(album?.NUMBER_TRACK || 0);
-      if (album?.ALB_ID && count > 0) counts.set(String(album.ALB_ID), count);
-    }
-  } catch {
-    // A missing count is a cosmetic loss; the listing itself is unaffected.
-  }
+  const pending: string[] = [];
 
-  // Bounded so a long session browsing many artists cannot grow without limit.
-  if (discographyCounts.size > 50) discographyCounts.clear();
-  discographyCounts.set(artistId, {at: Date.now(), counts});
+  for (const id of albumIds) {
+    const cached = albumTrackCounts.get(id);
+    if (cached && Date.now() - cached.at < COUNT_TTL) counts.set(id, cached.count);
+    else pending.push(id);
+  }
+  if (pending.length === 0) return counts;
+
+  const deadline = Date.now() + COUNT_BUDGET_MS;
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < pending.length && Date.now() < deadline) {
+      const id = pending[cursor++];
+      try {
+        const album = await makeHttpRequest(`https://api.deezer.com/album/${encodeURIComponent(id)}`);
+        const count = Number(album?.nb_tracks || 0);
+        if (count > 0) {
+          counts.set(id, count);
+          albumTrackCounts.set(id, {at: Date.now(), count});
+        }
+      } catch {
+        // One album without a count costs that album a caption, nothing more.
+      }
+    }
+  };
+
+  await Promise.all(Array.from({length: Math.min(COUNT_CONCURRENCY, pending.length)}, worker));
+
+  // Bounded so a long browsing session cannot grow this without limit.
+  if (albumTrackCounts.size > 2000) albumTrackCounts.clear();
   return counts;
 };
 
@@ -137,9 +161,14 @@ export const createArtistContent = ({
       const url = `https://api.deezer.com/artist/${encodeURIComponent(artistId)}/albums?limit=${Number(
         limit,
       )}&index=${Number(offset)}`;
-      const [response, counts] = await Promise.all([makeHttpRequest(url), deezerTrackCounts(deezer, String(artistId))]);
+      const response = await makeHttpRequest(url);
+      const releases = (response && response.data) || [];
+      const counts = await publicTrackCounts(
+        makeHttpRequest,
+        releases.map((album: any) => String(album.id)),
+      );
       return dedupeReleases(
-        ((response && response.data) || []).map((album: any) => ({
+        releases.map((album: any) => ({
           id: String(album.id),
           title: album.title,
           artist: album.artist?.name || knownArtist || 'Unknown Artist',

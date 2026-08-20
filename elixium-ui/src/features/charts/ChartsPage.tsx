@@ -11,7 +11,7 @@ import {toast} from 'sonner';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
-import {AlbumModal} from '@/shared/components/AlbumModal';
+import {useNavigationStore} from '@/store/navigation-store';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Button} from '@/shared/components/ui/Button';
 import {SelectionToggle} from '@/shared/components/SelectionToggle';
@@ -22,8 +22,9 @@ import {Select} from '@/shared/components/ui/Select';
 import {GridSkeleton, ListSkeleton, EmptyState, ErrorState} from '@/shared/components/States';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {TrackActions} from '@/shared/components/TrackActions';
+import {ArtistLink} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
-import type {Service} from '@/types';
 
 const KINDS: {id: ChartKind; label: string}[] = [
   {id: 'tracks', label: 'Tracks'},
@@ -56,7 +57,8 @@ export function ChartsPage() {
   /* Country charts are a separate axis: Deezer publishes them as official
      "Top <Country>" playlists rather than through the /chart endpoint. */
   const [countryId, setCountryId] = useState('');
-  const [selected, setSelected] = useState<(AlbumCardData & {service: Service}) | null>(null);
+  // Opening goes through the shared stack, so Back can return here.
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   const {download} = useDownload();
   const setTrack = usePlayerStore((s) => s.setTrack);
@@ -238,7 +240,9 @@ export function ChartsPage() {
                           <span className="truncate">{r.title}</span>
                           {isExplicit(r.rawData) && <ExplicitBadge />}
                         </p>
-                        <p className="truncate text-xs text-text-muted">{r.artist}</p>
+                        <p className="truncate text-xs text-text-muted">
+                          <ArtistLink name={r.artist} relations={relationsOf(r.rawData, service)} service={service} />
+                        </p>
                       </div>
 
                       {toSeconds(r.duration) > 0 && (
@@ -253,6 +257,7 @@ export function ChartsPage() {
 
                       <TrackActions
                         track={{id: r.id, title: r.title, artist: r.artist, album: r.album, cover, duration: toSeconds(r.duration), service}}
+                        relations={relationsOf(r.rawData, service)}
                         onPlay={() => playAll(i)}
                         onDownload={() => download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service})}
                         className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
@@ -297,7 +302,7 @@ export function ChartsPage() {
                   <AlbumCard
                     key={r.id}
                     album={card}
-                    onClick={() => setSelected({...card, service})}
+                    onClick={() => openAlbum({...card, service})}
                     onWatch={effectiveKind === 'playlists' ? () => watchPlaylist(r.id, r.title) : undefined}
                     selectable={{
                       id: r.id,
@@ -334,7 +339,6 @@ export function ChartsPage() {
         </>
       )}
 
-      {selected && <AlbumModal album={selected} open onClose={() => setSelected(null)} />}
     </div>
   );
 }

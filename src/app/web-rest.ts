@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip';
 import type {SearchResult} from './interactive-types';
 import type {ArtistContent, ArtistContentKind} from './artist-content';
 import type {Charts, ChartKind} from './charts';
+import type {GenreContent, GenreKind} from './genre-content';
 import type {FavoritesStore, FavoriteType} from './favorites-store';
 import type {PlaylistSearch, PlaylistSearchService} from './playlist-search';
 import {getLogEntries, clearLogEntries} from './log-buffer';
@@ -16,6 +17,7 @@ interface WebRestDependencies {
   qobuz: any;
   artistContent: ArtistContent;
   charts: Charts;
+  genreContent: GenreContent;
   favorites: FavoritesStore;
   playlistSearch: PlaylistSearch;
   performDeezerSearch: (query: string, type: string, limit?: number, offset?: number) => Promise<SearchResult[]>;
@@ -30,6 +32,7 @@ interface WebRestDependencies {
   ) => Promise<{tracks: any[]; metadata: any}>;
   initDeezerForDownload: () => Promise<void>;
   initQobuzForSearch: () => Promise<void>;
+  makeHttpRequest: (url: string) => Promise<any>;
   initQobuzForDownload: () => Promise<void>;
   startDownloadProcess: (
     downloadQueue: any[],
@@ -47,6 +50,7 @@ export const registerWebRestRoutes = ({
   qobuz,
   artistContent,
   charts,
+  genreContent,
   favorites,
   playlistSearch,
   performDeezerSearch,
@@ -55,6 +59,7 @@ export const registerWebRestRoutes = ({
   getItemTracksRest,
   initDeezerForDownload,
   initQobuzForSearch,
+  makeHttpRequest,
   initQobuzForDownload,
   startDownloadProcess,
 }: WebRestDependencies) => {
@@ -81,6 +86,40 @@ export const registerWebRestRoutes = ({
    * Paged, because an artist with a long back catalogue does not fit one
    * response and the artist view loads more as it is scrolled.
    */
+  /*
+   * An artist's name and picture, by id.
+   *
+   * An artist reached from a track or album row carries only an id and a name:
+   * the payload a track arrives in has no artist artwork, so the view opened
+   * with an empty circle where the photograph belongs. One lookup fills it.
+   */
+  app.get('/api/artist-info', async (req, res) => {
+    try {
+      const service = String(req.query.service || 'deezer').toLowerCase();
+      const artistId = String(req.query.artistId || '');
+      if (!artistId) return res.status(400).json({error: 'Missing artistId'});
+
+      if (service === 'qobuz') {
+        await initQobuzForSearch();
+        const artist = await (qobuz as any).qobuzRequest?.('artist/get', {artist_id: artistId, limit: 1, offset: 0});
+        return res.json({
+          id: artistId,
+          name: artist?.name ?? '',
+          picture: artist?.image?.large ?? artist?.image?.medium ?? artist?.picture ?? '',
+        });
+      }
+
+      const artist = await makeHttpRequest(`https://api.deezer.com/artist/${encodeURIComponent(artistId)}`);
+      return res.json({
+        id: artistId,
+        name: artist?.name ?? '',
+        picture: artist?.picture_xl || artist?.picture_big || artist?.picture_medium || artist?.picture || '',
+      });
+    } catch (error: any) {
+      return res.status(500).json({error: error.message});
+    }
+  });
+
   app.get('/api/artist-content', async (req, res) => {
     try {
       const service = String(req.query.service || '').toLowerCase();
@@ -112,6 +151,30 @@ export const registerWebRestRoutes = ({
   });
 
   // ── Charts ────────────────────────────────────────────────────────────────
+  /*
+   * A genre's own content, which the chart endpoints cannot provide.
+   *
+   * Kept separate from /api/charts because the two answer different questions:
+   * a chart is "what is popular", a genre is "what is this music". Deezer's
+   * per-genre artist endpoints return the global chart regardless of genre,
+   * so asking for Reggae used to return Taylor Swift.
+   */
+  app.get('/api/genre-content', async (req, res) => {
+    try {
+      const service = String(req.query.service || 'deezer').toLowerCase();
+      const genreId = String(req.query.genreId || '');
+      const kind = String(req.query.kind || 'albums').toLowerCase() as GenreKind;
+      const limit = Number(req.query.limit || 50);
+      const offset = Number(req.query.offset || 0);
+
+      if (!genreId) return res.status(400).json({error: 'Missing genreId'});
+
+      return res.json(await genreContent.getGenreContent(service, genreId, kind, limit, offset));
+    } catch (error: any) {
+      return res.status(500).json({error: error.message});
+    }
+  });
+
   app.get('/api/charts/genres', async (req, res) => {
     try {
       const service = String(req.query.service || 'deezer').toLowerCase();

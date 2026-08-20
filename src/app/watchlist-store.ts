@@ -273,8 +273,26 @@ export class WatchlistStore {
     writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
   }
 
+  /**
+   * A private copy, for callers that go on to mutate what they are given.
+   *
+   * Deep-cloning the whole file — watched artists, their stored discographies,
+   * processed albums and 300 monitor-history entries — is not free, and this
+   * used to be the only way to read anything. Readers that merely look should
+   * use read() instead; that is where the cost was, not here.
+   */
   getState(): WatchlistData {
     return JSON.parse(JSON.stringify(this.data));
+  }
+
+  /**
+   * The live tree, for readers that only look at it.
+   *
+   * Never pass this to anything that mutates, and never emit it after holding
+   * it across an await — take getState() for either.
+   */
+  read(): Readonly<WatchlistData> {
+    return this.data;
   }
 
   update(mutator: (draft: WatchlistData) => void): WatchlistData {

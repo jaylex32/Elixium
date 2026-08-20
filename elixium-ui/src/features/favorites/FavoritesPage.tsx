@@ -6,8 +6,8 @@ import {useFavorites, useClearFavorites, type FavoriteRecord} from '@/shared/lib
 import {cn, toSeconds} from '@/shared/lib/utils';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
-import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
-import {AlbumModal} from '@/shared/components/AlbumModal';
+import {AlbumCard} from '@/shared/components/AlbumCard';
+import {useNavigationStore} from '@/store/navigation-store';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Button} from '@/shared/components/ui/Button';
 import {SelectionToggle} from '@/shared/components/SelectionToggle';
@@ -15,7 +15,6 @@ import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 import {EmptyState, ListSkeleton} from '@/shared/components/States';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
-import type {Service} from '@/types';
 
 type Filter = 'all' | FavoriteRecord['type'];
 
@@ -32,7 +31,7 @@ const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:g
 /** Everything the user starred, on any service. */
 export function FavoritesPage() {
   const [filter, setFilter] = useState<Filter>('all');
-  const [selected, setSelected] = useState<(AlbumCardData & {service: Service}) | null>(null);
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   const queryClient = useQueryClient();
   const {data: favorites = [], isLoading} = useFavorites();
@@ -241,7 +240,7 @@ export function FavoritesPage() {
                     cover: entry.cover,
                   }}
                   onClick={() =>
-                    setSelected({
+                    openAlbum({
                       id: entry.id,
                       title: entry.title,
                       artist: entry.artist ?? '',
@@ -266,7 +265,6 @@ export function FavoritesPage() {
         </div>
       )}
 
-      {selected && <AlbumModal album={selected} open onClose={() => setSelected(null)} />}
     </div>
   );
 }

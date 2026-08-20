@@ -69,3 +69,38 @@ export function debounce<T extends (...args: any[]) => unknown>(fn: T, ms: numbe
     timer = setTimeout(() => fn(...args), ms);
   };
 }
+
+/**
+ * Copy text to the clipboard, with a fallback for contexts that refuse the API.
+ *
+ * `navigator.clipboard` needs a secure context. Loopback counts as one, so the
+ * desktop app and a local browser are fine, but the same interface opened from
+ * a phone over plain http is not — and there the promise rejects rather than
+ * doing nothing visible, which would leave "Copy link" silently dead.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path rather than reporting failure early.
+  }
+
+  try {
+    const field = document.createElement('textarea');
+    field.value = text;
+    // Off-screen rather than hidden: a display:none field cannot be selected.
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    field.style.pointerEvents = 'none';
+    document.body.appendChild(field);
+    field.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(field);
+    return ok;
+  } catch {
+    return false;
+  }
+}

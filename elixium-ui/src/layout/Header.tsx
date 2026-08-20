@@ -1,9 +1,10 @@
-import {Search, Wifi, WifiOff, Menu, ListMusic, Disc3} from 'lucide-react';
+import {Search, Wifi, WifiOff, Menu, ListMusic, Disc3, ArrowLeft} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {useAppStore} from '@/store/app-store';
 import {PAGE_TITLES} from './nav-items';
 import {useDownloadStore} from '@/store/download-store';
 import {usePlayerStore} from '@/store/player-store';
+import {useNavigationStore} from '@/store/navigation-store';
 
 
 interface HeaderProps {
@@ -16,6 +17,23 @@ export function Header({onOpenPalette, onOpenNav, onOpenQueue}: HeaderProps) {
   const currentPage = useAppStore((s) => s.currentPage);
   const connected = useAppStore((s) => s.connected);
   const setPage = useAppStore((s) => s.setPage);
+
+  /*
+   * One Back control for both kinds of step.
+   *
+   * A detail view is "deeper" than a page, so it unwinds first: from an album
+   * reached inside an artist, Back returns to the artist rather than jumping
+   * out to the page behind both.
+   */
+  const detailDepth = useNavigationStore((s) => s.stack.length);
+  const detailBack = useNavigationStore((s) => s.back);
+  const historyDepth = useAppStore((s) => s.pageHistory.length);
+  const goBackPage = useAppStore((s) => s.goBackPage);
+  const canGoBack = detailDepth > 0 || historyDepth > 0;
+  const goBack = () => {
+    if (detailDepth > 0) detailBack();
+    else goBackPage();
+  };
   const queueLength = usePlayerStore((s) => s.queue.length);
   const hasTrack = usePlayerStore((s) => s.currentTrack !== null);
   const toggleFullscreen = usePlayerStore((s) => s.toggleFullscreen);
@@ -37,6 +55,16 @@ export function Header({onOpenPalette, onOpenNav, onOpenQueue}: HeaderProps) {
           >
             <Menu size={20} />
           </button>
+          {canGoBack && (
+            <button
+              onClick={goBack}
+              aria-label="Back"
+              title="Back"
+              className="touch-target flex shrink-0 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface-bg hover:text-text-primary"
+            >
+              <ArrowLeft size={19} />
+            </button>
+          )}
           <h1 className="truncate text-base font-semibold text-text-primary sm:text-lg">{PAGE_TITLES[currentPage]}</h1>
         </div>
 

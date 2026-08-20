@@ -28,6 +28,7 @@ import {createWebDownloads} from './app/web-downloads';
 import {registerWebRestRoutes} from './app/web-rest';
 import {createArtistContent} from './app/artist-content';
 import {createCharts} from './app/charts';
+import {createGenreContent} from './app/genre-content';
 import {createFavoritesStore} from './app/favorites-store';
 import {createPlaylistSearch} from './app/playlist-search';
 import {installLogCapture, attachLogBroadcast} from './app/log-buffer';
@@ -399,6 +400,8 @@ const setupWebServer = () => {
     qobuz,
     artistContent,
     charts,
+    genreContent,
+    makeHttpRequest,
     favorites,
     playlistSearch,
     performDeezerSearch,
@@ -677,6 +680,13 @@ const artistContent = createArtistContent({
 
 /** Ranked charts per genre; separate from the editorial Discover lists. */
 const charts = createCharts({
+  qobuz,
+  makeHttpRequest,
+  ensureQobuzSearchReady: () => initQobuzForSearch(),
+});
+
+/** A genre's own albums, tracks, artists and playlists — not its chart. */
+const genreContent = createGenreContent({
   qobuz,
   makeHttpRequest,
   ensureQobuzSearchReady: () => initQobuzForSearch(),

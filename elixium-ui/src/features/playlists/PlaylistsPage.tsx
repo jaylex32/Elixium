@@ -7,7 +7,7 @@ import {useAppStore} from '@/store/app-store';
 import {useWatchlistStore} from '@/store/watchlist-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
-import {AlbumModal} from '@/shared/components/AlbumModal';
+import {useNavigationStore} from '@/store/navigation-store';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {Input} from '@/shared/components/ui/Input';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
@@ -16,7 +16,6 @@ import {getSocket} from '@/shared/lib/socket';
 import {cn} from '@/shared/lib/utils';
 import type {Service} from '@/types';
 
-type SelectedPlaylist = AlbumCardData & {service: Service};
 
 /** Shared responsive grid so cards line up identically in both sections. */
 const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
@@ -37,7 +36,7 @@ export function PlaylistsPage() {
    * and the playlist watcher.
    */
   const [searchService, setSearchService] = useState<PlaylistSearchService>(service);
-  const [selected, setSelected] = useState<SelectedPlaylist | null>(null);
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   // Keeps typing responsive: the input updates every keystroke while the
   // query that drives fetching lags behind under load.
@@ -55,7 +54,7 @@ export function PlaylistsPage() {
 
   const hasQuery = deferredQuery.trim().length >= 2;
 
-  const openPlaylist = (playlist: AlbumCardData) => setSelected({...playlist, service, type: 'playlist'});
+  const openPlaylist = (playlist: AlbumCardData) => openAlbum({...playlist, service, type: 'playlist'});
 
   return (
     <div className="animate-fade-in space-y-6 p-4 sm:space-y-8 sm:p-6">
@@ -295,7 +294,6 @@ export function PlaylistsPage() {
         />
       )}
 
-      {selected && <AlbumModal album={selected} open onClose={() => setSelected(null)} />}
     </div>
   );
 }

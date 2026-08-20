@@ -16,13 +16,15 @@ import {useDownload} from '@/shared/hooks/useDownload';
 import {useSearchHistoryStore} from '@/store/search-history-store';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
-import {AlbumModal} from '@/shared/components/AlbumModal';
+import {useNavigationStore} from '@/store/navigation-store';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Input} from '@/shared/components/ui/Input';
 import {Button} from '@/shared/components/ui/Button';
 import {Spinner} from '@/shared/components/ui/Spinner';
 import {GridSkeleton, ListSkeleton, EmptyState} from '@/shared/components/States';
 import {TrackActions} from '@/shared/components/TrackActions';
+import {ArtistLink, AlbumLink} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
 import type {RawSearchResult, Service} from '@/types';
 
 type SearchType = 'track' | 'album' | 'artist' | 'playlist';
@@ -97,6 +99,7 @@ function ResultRow({
   const isActive = currentTrack?.id === result.id;
 
   const cover = extractCover(result.rawData, service);
+  const relations = relationsOf(result.rawData, service);
   const seconds = toSeconds(result.duration);
 
   return (
@@ -147,13 +150,19 @@ function ResultRow({
           <span className="truncate">{result.title}</span>
           {isExplicit(result.rawData) && <ExplicitBadge />}
         </p>
-        <p className="truncate text-xs text-text-muted">{result.artist}</p>
+        {/* The artist under a track is a way into their catalogue, not a
+            caption — same for the album column beside it. */}
+        <p className="truncate text-xs text-text-muted">
+          <ArtistLink name={result.artist} relations={relations} service={service} />
+        </p>
       </div>
 
       {/* Album gets its own column on wide viewports — it was previously dead
           space between the title and the duration. */}
       {result.album && (
-        <p className="hidden min-w-0 flex-1 truncate text-xs text-text-muted lg:block">{result.album}</p>
+        <p className="hidden min-w-0 flex-1 truncate text-xs text-text-muted lg:block">
+          <AlbumLink title={result.album} relations={relations} service={service} />
+        </p>
       )}
 
       {seconds > 0 && (
@@ -170,6 +179,7 @@ function ResultRow({
           duration: seconds,
           service,
         }}
+        relations={relations}
         onPlay={onPlay}
         onDownload={onDownload}
         className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
@@ -182,7 +192,7 @@ export function SearchPage() {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<SearchType>('track');
   const [sort, setSort] = useState<SortMode>('relevance');
-  const [selectedAlbum, setSelectedAlbum] = useState<(AlbumCardData & {service: Service}) | null>(null);
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   const service = useAppStore((s) => s.service);
   const selectionActive = useSelectionStore((s) => s.active);
@@ -503,7 +513,7 @@ export function SearchPage() {
                       <AlbumCard
                         key={r.id}
                         album={album}
-                        onClick={() => setSelectedAlbum({...album, service})}
+                        onClick={() => openAlbum({...album, service})}
                         selectable={{id: r.id, type: 'album', service, title: r.title, artist: r.artist, cover: album.cover}}
                         onDownload={() =>
                           download({id: r.id, type: 'album', title: r.title, artist: r.artist, cover: album.cover, service})
@@ -557,7 +567,7 @@ export function SearchPage() {
                       <AlbumCard
                         key={r.id}
                         album={card}
-                        onClick={() => setSelectedAlbum({...card, service})}
+                        onClick={() => openAlbum({...card, service})}
                         selectable={{id: r.id, type: 'playlist', service, title: r.title, artist: r.artist, cover: card.cover}}
                         onDownload={() =>
                           download({id: r.id, type: 'playlist', title: r.title, artist: r.artist, cover: card.cover, service})
@@ -580,7 +590,6 @@ export function SearchPage() {
         </TabsRoot>
       </div>
 
-      {selectedAlbum && <AlbumModal album={selectedAlbum} open onClose={() => setSelectedAlbum(null)} />}
     </div>
   );
 }

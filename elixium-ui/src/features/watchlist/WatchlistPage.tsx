@@ -1,4 +1,4 @@
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {Eye, RefreshCw, Download, Plus, Clock, Trash2, CheckSquare, Square, ListMusic, AlertTriangle, Zap} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
@@ -16,6 +16,7 @@ import {ScheduleEditor} from './ScheduleEditor';
 import {FavoriteGenres} from './FavoriteGenres';
 import {WatchPlaylistForm} from './WatchPlaylistForm';
 import {ReleaseTypeFilter} from './ReleaseTypeFilter';
+import {ListSkeleton} from '@/shared/components/States';
 
 interface WatchlistState {
   watchedArtists?: Array<{
@@ -101,11 +102,36 @@ export function WatchlistPage() {
   // invisible here — the playlist simply never yielded new tracks.
   const failingPlaylists = watchedPlaylists.filter((p) => p.status === 'error');
 
+  /*
+   * Whether the server has answered yet.
+   *
+   * This page rendered straight from a store that starts empty, with no
+   * loading state and no empty state, so until the first `watchlistState`
+   * arrived it was indistinguishable from a broken page — and if the reply
+   * never came, because the socket reconnected or the server was busy
+   * scanning, it stayed blank with nothing to retry. That is the "nothing
+   * appears and it takes forever" people were reporting.
+   */
+  const [answered, setAnswered] = useState(false);
+  const [slow, setSlow] = useState(false);
+
   useEffect(() => {
     const socket = getSocket();
-    socket.emit('getWatchlistState');
+    const ask = () => socket.emit('getWatchlistState');
+    ask();
+
+    // A reconnect gets its own request: the previous socket's reply is gone,
+    // and without this the page would sit empty until something else asked.
+    socket.on('connect', ask);
+
+    // Nothing at all after ten seconds is worth saying out loud rather than
+    // leaving the reader to guess.
+    const slowTimer = window.setTimeout(() => setSlow(true), 10000);
 
     const onState = (state: WatchlistState) => {
+      setAnswered(true);
+      setSlow(false);
+      window.clearTimeout(slowTimer);
       if (state.watchedArtists) {
         setArtists(
           state.watchedArtists.map((a) => ({
@@ -188,6 +214,8 @@ export function WatchlistPage() {
     });
 
     return () => {
+      window.clearTimeout(slowTimer);
+      socket.off('connect', ask);
       socket.off('watchlistState', onState);
       socket.off('watchlistScanStarted');
       socket.off('watchlistScanComplete');
@@ -232,6 +260,40 @@ export function WatchlistPage() {
   };
 
   const selectedCount = wanted.filter((i) => i.selected).length + playlistWanted.filter((t) => t.selected).length;
+
+  /*
+   * Say something before the first reply.
+   *
+   * A skeleton rather than a spinner, so the page keeps its shape and does not
+   * jump when the real rows arrive.
+   */
+  if (!answered) {
+    return (
+      <div className="mx-auto max-w-6xl animate-fade-in space-y-5 p-4 sm:p-6">
+        <div className="flex items-center gap-3">
+          <Eye size={20} className="text-accent" />
+          <div className="min-w-0">
+            <h2 className="font-semibold text-text-primary">Qobuz Watchlist</h2>
+            <p className="text-xs text-text-muted">
+              {slow ? 'Still waiting on the server…' : 'Loading your watched artists and playlists…'}
+            </p>
+          </div>
+          {slow && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="ml-auto"
+              onClick={() => getSocket().emit('getWatchlistState')}
+            >
+              <RefreshCw size={14} />
+              Retry
+            </Button>
+          )}
+        </div>
+        <ListSkeleton count={6} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl animate-fade-in space-y-5 p-4 sm:p-6">

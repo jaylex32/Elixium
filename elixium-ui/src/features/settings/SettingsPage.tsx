@@ -6,7 +6,7 @@ import {Input} from '@/shared/components/ui/Input';
 import {Switch} from '@/shared/components/ui/Switch';
 import {Select} from '@/shared/components/ui/Select';
 import {Badge} from '@/shared/components/ui/Badge';
-import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS} from '@/store/settings-store';
+import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS, type Settings} from '@/store/settings-store';
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
@@ -104,6 +104,22 @@ function SecretInput({
 
 const defaultLayout = useSettingsStoreRaw.getState().settings.layout;
 
+/**
+ * The engine's spelling of a Deezer quality, in the interface's vocabulary.
+ *
+ * The config stores what the CLI accepts — `128`, `320`, `FLAC` — while the
+ * interface works in Deezer's own format names. Anything unrecognised keeps the
+ * safest option rather than silently promoting someone to a tier their account
+ * cannot play.
+ */
+const normaliseDeezerQuality = (value: string): Settings['deezerQuality'] => {
+  const raw = String(value).trim().toUpperCase();
+  if (raw === 'FLAC' || raw === 'MP3_320' || raw === 'MP3_128') return raw as Settings['deezerQuality'];
+  if (raw === '320') return 'MP3_320';
+  if (raw === '128') return 'MP3_128';
+  return 'MP3_128';
+};
+
 export function SettingsPage() {
   const {settings, update, isDirty, markClean} = useSettingsStore();
   const {theme, setTheme} = useAppStore();
@@ -159,6 +175,17 @@ export function SettingsPage() {
           saveLrcFile: data.saveLrcFile ?? false,
           ...(data.saveLayout ? {layout: {...defaultLayout, ...data.saveLayout}} : {}),
           ...(data.coverSize ? {coverSize: String(data.coverSize)} : {}),
+          /*
+           * Quality has to be read back, not just written.
+           *
+           * These two were the only saved fields the page never loaded, so it
+           * always showed its own default and wrote that default back on the
+           * next save — opening Settings for something unrelated and pressing
+           * Save silently changed the download and playback quality to
+           * whatever the interface happened to start at.
+           */
+          ...(data.quality?.deezer ? {deezerQuality: normaliseDeezerQuality(data.quality.deezer)} : {}),
+          ...(data.quality?.qobuz ? {qobuzQuality: String(data.quality.qobuz) as Settings['qobuzQuality']} : {}),
         });
         setLoaded(true);
         markClean();

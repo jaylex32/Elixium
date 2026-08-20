@@ -1,4 +1,4 @@
-import {Download, Music2, X, Play, Pause, Eye, CheckSquare} from 'lucide-react';
+import {Download, Music2, X, Play, Pause, Eye, CheckSquare, ArrowLeft} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {formatDuration, toSeconds} from '@/shared/lib/utils';
 import {useItemTracks, type ItemType} from '@/shared/lib/api';
@@ -14,6 +14,8 @@ import {TrackActions} from '@/shared/components/TrackActions';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {isExplicit} from '@/shared/lib/explicit';
+import {relationsOf} from '@/shared/lib/relations';
+import {ArtistLink} from '@/shared/components/RelationLinks';
 import {useSelectionStore} from '@/store/selection-store';
 import type {Service} from '@/types';
 import {extractCover} from '@/shared/lib/cover';
@@ -23,6 +25,8 @@ interface AlbumModalProps {
   album: AlbumCardData & {service: Service};
   open: boolean;
   onClose: () => void;
+  /** Shows a back arrow instead of implying this is the first thing opened. */
+  canGoBack?: boolean;
 }
 
 /**
@@ -39,7 +43,7 @@ const toItemType = (type: string | undefined): ItemType => {
   return 'album';
 };
 
-export function AlbumModal({album, open, onClose}: AlbumModalProps) {
+export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
   const itemType = toItemType(album.type);
   const {data, isLoading, isError} = useItemTracks(itemType, album.id, album.service, open);
   const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
@@ -164,6 +168,11 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
 
           {/* Header */}
           <div className="flex shrink-0 items-start gap-3 border-b border-border p-4 sm:gap-4 sm:p-5">
+            {canGoBack && (
+              <Button variant="ghost" size="icon-sm" aria-label="Back" title="Back" onClick={onClose} className="mt-0.5">
+                <ArrowLeft size={17} />
+              </Button>
+            )}
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-sm bg-surface-bg sm:h-20 sm:w-20">
               {album.cover ? (
                 <img src={album.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -180,7 +189,14 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
               <h2 className="line-clamp-2 text-base font-bold leading-tight text-text-primary sm:text-lg">
                 {album.title}
               </h2>
-              <p className="mt-0.5 truncate text-sm text-text-secondary">{album.artist}</p>
+              <p className="mt-0.5 truncate text-sm text-text-secondary">
+                {/* The first track carries the artist id for this release. */}
+                <ArtistLink
+                  name={album.artist}
+                  relations={relationsOf(tracks[0]?.rawData as Record<string, unknown>, album.service)}
+                  service={album.service}
+                />
+              </p>
               {album.year && <p className="mt-1 text-xs text-text-muted">{album.year}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-2 pt-0.5">
@@ -313,7 +329,13 @@ export function AlbumModal({album, open, onClose}: AlbumModalProps) {
                           {isExplicit(t.rawData as Record<string, unknown>) && <ExplicitBadge />}
                         </p>
                         {t.artist && t.artist !== album.artist && (
-                          <p className="text-xs text-text-muted truncate">{t.artist}</p>
+                          <p className="text-xs text-text-muted truncate">
+                            <ArtistLink
+                              name={t.artist}
+                              relations={relationsOf(t.rawData as Record<string, unknown>, album.service)}
+                              service={album.service}
+                            />
+                          </p>
                         )}
                       </div>
 

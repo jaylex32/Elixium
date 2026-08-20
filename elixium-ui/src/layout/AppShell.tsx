@@ -18,6 +18,7 @@ import {PageFallback} from '@/shared/components/PageFallback';
 import {ErrorBoundary} from '@/shared/components/ErrorBoundary';
 import {PAGE_TITLES} from './nav-items';
 import {SelectionBar} from '@/shared/components/SelectionBar';
+import {DetailHost} from '@/shared/components/DetailHost';
 
 /*
  * Home is imported eagerly — it is the landing page, and lazy-loading it would
@@ -153,6 +154,8 @@ export function AppShell() {
         }}
       />
       <SelectionBar />
+      {/* Albums and artists open here, over whichever page is showing. */}
+      <DetailHost />
     </div>
   );
 }
