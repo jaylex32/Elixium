@@ -377,7 +377,10 @@ export function SearchPage() {
                   {results.length} {type}
                   {results.length === 1 ? '' : 's'} for “{query.trim()}”
                 </p>
-                <div className="flex items-center gap-2">
+                {/* Wraps, because these three do not fit one phone line: the
+                    sort strip alone is wider than half a 390px screen, and
+                    without this it simply ran off the right edge. */}
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {type === 'track' && (
                     <Button size="sm" variant="secondary" onClick={() => playAll(0)}>
                       <Play size={13} />
@@ -420,16 +423,19 @@ export function SearchPage() {
                       Select all
                     </Button>
                   )}
+                  {/* The strip scrolls rather than clips on the narrowest
+                      phones, where even a line of its own is not quite enough
+                      for four options. */}
                   {showSort && (
-                    <div className="flex items-center gap-1 rounded-sm border border-border bg-secondary-bg p-0.5">
-                      <ArrowUpDown size={12} className="ml-1.5 text-text-muted" />
+                    <div className="scroll-row flex max-w-full items-center gap-1 rounded-sm border border-border bg-secondary-bg p-0.5">
+                      <ArrowUpDown size={12} className="ml-1.5 shrink-0 text-text-muted" />
                       {availableSorts.map((s) => (
                         <button
                           key={s.value}
                           onClick={() => setSort(s.value)}
                           aria-pressed={sort === s.value}
                           className={cn(
-                            'rounded-xs px-2 py-1 text-xs font-medium transition-colors',
+                            'shrink-0 rounded-xs px-2 py-1 text-xs font-medium transition-colors',
                             sort === s.value
                               ? 'bg-card-bg text-text-primary shadow-sm'
                               : 'text-text-muted hover:text-text-secondary',

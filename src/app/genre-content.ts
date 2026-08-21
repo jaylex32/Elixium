@@ -228,27 +228,129 @@ export const createGenreContent = ({makeHttpRequest, qobuz, ensureQobuzSearchRea
     return dedupe(artists.filter((artist: any) => artist?.id).map(artistResult));
   };
 
-  const buildQobuz = async (genreId: string, kind: GenreKind): Promise<SearchResult[]> => {
-    // Qobuz publishes featured albums per genre and nothing else, so the other
-    // three kinds are honestly empty rather than filled with something else.
-    if (kind !== 'albums') return [];
+  /*
+   * Qobuz genres, from Qobuz's own genre ids.
+   *
+   * This asked for one featured list and called it the genre, using an id that
+   * was not a genre at all — the interface was handing it "best-sellers",
+   * because the list it offered was Qobuz's five featured *types* dressed up as
+   * genres. Qobuz does publish real genres, and filters both its featured
+   * albums and its featured playlists by them.
+   *
+   * Albums come from several featured lists at once because each holds fifty:
+   * best sellers alone is a thin shelf, and the four together are still the
+   * same genre, ordered by how likely each is to be wanted.
+   */
+  const QOBUZ_ALBUM_FEEDS = ['best-sellers', 'new-releases', 'editor-picks', 'press-awards'];
+  const QOBUZ_PLAYLISTS_FOR_TRACKS = 4;
 
+  const qobuzRequest = (endpoint: string, params: Record<string, unknown>) =>
+    (qobuz as any).qobuzRequest?.(endpoint, params).catch(() => null);
+
+  const qobuzGenreAlbums = async (genreId: string): Promise<any[]> => {
+    const responses = await Promise.all(
+      QOBUZ_ALBUM_FEEDS.map((type) =>
+        qobuzRequest('album/getFeatured', {type, genre_id: genreId, limit: 50, offset: 0}),
+      ),
+    );
+    return responses.flatMap((response) => (response?.albums?.items as any[]) || []);
+  };
+
+  const qobuzGenrePlaylists = async (genreId: string): Promise<any[]> => {
+    const response = await qobuzRequest('playlist/getFeatured', {
+      type: 'editor-picks',
+      genre_ids: genreId,
+      limit: 50,
+      offset: 0,
+    });
+    return (response?.playlists?.items as any[]) || [];
+  };
+
+  const buildQobuz = async (genreId: string, kind: GenreKind): Promise<SearchResult[]> => {
     await ensureQobuzSearchReady();
-    const response = await qobuz
-      .qobuzRequest?.('album/getFeatured', {type: 'best-sellers', genre_id: genreId, limit: 100, offset: 0})
-      .catch(() => null);
+
+    if (kind === 'albums') {
+      return dedupe(
+        (await qobuzGenreAlbums(genreId)).map((album: any) => ({
+          id: String(album.id),
+          title: String(album.title || ''),
+          artist: album.artist?.name || 'Unknown Artist',
+          album: String(album.title || ''),
+          type: 'album',
+          duration: album.tracks_count ? `${album.tracks_count} tracks` : '',
+          year: toYear(album.release_date_original),
+          maximum_bit_depth: album.maximum_bit_depth,
+          maximum_sampling_rate: album.maximum_sampling_rate,
+          hires: album.hires,
+          rawData: album,
+        })),
+      );
+    }
+
+    if (kind === 'artists') {
+      // The artists making the genre's featured records, in that order.
+      return dedupe(
+        (await qobuzGenreAlbums(genreId))
+          .map((album: any) => album?.artist)
+          .filter((artist: any) => artist?.id)
+          .map((artist: any) => ({
+            id: String(artist.id),
+            title: String(artist.name || ''),
+            artist: String(artist.name || ''),
+            album: '',
+            type: 'artist',
+            duration: '',
+            rawData: artist,
+          })),
+      );
+    }
+
+    const playlists = await qobuzGenrePlaylists(genreId);
+
+    if (kind === 'playlists') {
+      return dedupe(
+        playlists.map((playlist: any) => ({
+          id: String(playlist.id),
+          title: String(playlist.name || ''),
+          artist: playlist.owner?.name || 'Qobuz',
+          album: '',
+          type: 'playlist',
+          duration: playlist.tracks_count ? `${playlist.tracks_count} tracks` : '',
+          rawData: playlist,
+        })),
+      );
+    }
+
+    /*
+     * Tracks, from the genre's own editorial playlists.
+     *
+     * Qobuz has no track chart of any kind, per genre or otherwise, and its
+     * editors' playlists for a genre are made of that genre's music — a
+     * classical playlist returns classical recordings.
+     */
+    const batches = await Promise.all(
+      playlists
+        .slice(0, QOBUZ_PLAYLISTS_FOR_TRACKS)
+        .map((playlist: any) =>
+          qobuzRequest('playlist/get', {playlist_id: playlist.id, extra: 'tracks', limit: 100, offset: 0}),
+        ),
+    );
 
     return dedupe(
-      ((response?.albums?.items as any[]) || []).map((album: any) => ({
-        id: String(album.id),
-        title: String(album.title || ''),
-        artist: album.artist?.name || 'Unknown Artist',
-        album: String(album.title || ''),
-        type: 'album',
-        duration: '',
-        year: toYear(album.release_date_original),
-        rawData: album,
-      })),
+      batches
+        .flatMap((batch) => (batch?.tracks?.items as any[]) || [])
+        .map((track: any) => ({
+          id: String(track.id),
+          title: String(track.title || '') + (track.version ? ` (${track.version})` : ''),
+          artist: track.performer?.name || track.album?.artist?.name || 'Unknown Artist',
+          album: track.album?.title || '',
+          type: 'track',
+          duration: formatSecondsReadable(Number(track.duration || 0)),
+          maximum_bit_depth: track.maximum_bit_depth,
+          maximum_sampling_rate: track.maximum_sampling_rate,
+          hires: track.hires,
+          rawData: track,
+        })),
     );
   };
 
@@ -283,7 +385,31 @@ export const createGenreContent = ({makeHttpRequest, qobuz, ensureQobuzSearchRea
     return items.slice(offset, offset + limit);
   };
 
-  return {getGenreContent, coverOf};
+  /**
+   * The genres a service actually publishes.
+   *
+   * Separate from the Charts page's list on purpose: Qobuz charts by featured
+   * type — best sellers, press awards — which are not genres, and offering
+   * those as genres is what left this page asking for "the best-sellers genre".
+   * Deezer's list is the one it already served, unchanged.
+   */
+  const getGenres = async (service: string): Promise<{id: string; name: string; picture?: string}[]> => {
+    if (service === 'qobuz') {
+      await ensureQobuzSearchReady();
+      const response = await (qobuz as any).qobuzRequest?.('genre/list', {limit: 200, offset: 0}).catch(() => null);
+      const items = (response?.genres?.items as any[]) || (response?.items as any[]) || [];
+      return items
+        .filter((genre: any) => genre?.id != null && genre?.name)
+        .map((genre: any) => ({id: String(genre.id), name: String(genre.name)}));
+    }
+
+    const response = await makeHttpRequest(`${API}/genre`).catch(() => null);
+    return ((response?.data as any[]) || [])
+      .filter((genre: any) => String(genre.id) !== '0')
+      .map((genre: any) => ({id: String(genre.id), name: String(genre.name), picture: genre.picture_medium}));
+  };
+
+  return {getGenreContent, getGenres, coverOf};
 };
 
 export type GenreContent = ReturnType<typeof createGenreContent>;

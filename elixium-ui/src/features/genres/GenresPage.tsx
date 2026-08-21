@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {Music2, Disc3, ListMusic, Mic2, ArrowLeft} from 'lucide-react';
 import {cn, toSeconds, formatDuration} from '@/shared/lib/utils';
-import {useGenreContent, useChartGenres, type GenreKind} from '@/shared/lib/api';
+import {useGenreContent, useGenres, type GenreKind} from '@/shared/lib/api';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {extractCover} from '@/shared/lib/cover';
 import {isExplicit} from '@/shared/lib/explicit';
@@ -127,7 +127,10 @@ function GenreContent({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <TabsRoot value={tab} onValueChange={(v) => setTab(v as GenreKind)}>
+        {/* min-w-0 so the strip inside can scroll instead of pushing this
+            wrapper past the screen: four labelled tabs are two pixels wider
+            than a 374px phone, and a flex child will not shrink without it. */}
+        <TabsRoot value={tab} onValueChange={(v) => setTab(v as GenreKind)} className="min-w-0 max-w-full">
           <TabsList>
             {TABS.map((t) => {
               const Icon = t.icon;
@@ -292,7 +295,7 @@ function GenreContent({
 export function GenresPage() {
   const service = useAppStore((s) => s.service);
   const [selected, setSelected] = useState<string | null>(null);
-  const {data: genres = [], isLoading} = useChartGenres(service);
+  const {data: genres = [], isLoading} = useGenres(service);
 
   // "All genres" is the whole catalogue, which is what Charts already shows.
   const list = genres.filter((g) => g.id !== '0');

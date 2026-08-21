@@ -21,6 +21,7 @@ import {
 import {useDiscovery} from '@/shared/lib/api';
 import {cn} from '@/shared/lib/utils';
 import {relationsOf} from '@/shared/lib/relations';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {extractCover} from '@/shared/lib/cover';
 import {isExplicit} from '@/shared/lib/explicit';
 import {useAppStore, type Page} from '@/store/app-store';
@@ -199,6 +200,7 @@ function DiscoverySection({
 }) {
   const {data = [], isLoading, isError, refetch} = useDiscovery(service, type);
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const openAlbum = useNavigationStore((s) => s.openAlbum);
   const [expanded, setExpanded] = useState(false);
 
@@ -259,6 +261,22 @@ function DiscoverySection({
         album={album}
         className={expanded ? undefined : 'w-[46vw] shrink-0 sm:w-44'}
         onClick={() => (isTrackRow ? onSelectTrack(index) : onSelect(album))}
+        /* Play sits beside download on the hover overlay; the card itself still
+           opens, so both ways in are available rather than one replacing the
+           other. */
+        onPlay={() =>
+          playItem({
+            id: album.id,
+            type: isTrackRow ? 'track' : album.type === 'playlist' ? 'playlist' : 'album',
+            service,
+            title: album.title,
+            artist: album.artist,
+            cover: album.cover,
+            rawData: raw[index]?.rawData,
+          })
+        }
+        relations={relationsOf(raw[index]?.rawData, service)}
+        service={service}
         selectable={{
           id: album.id,
           type: (isTrackRow ? 'track' : album.type === 'playlist' ? 'playlist' : 'album') as

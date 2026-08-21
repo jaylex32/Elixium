@@ -356,6 +356,21 @@ export function useArtistInfo(artistId: string, service: Service, enabled = true
   });
 }
 
+/**
+ * The genres a service publishes, for the Genres page.
+ *
+ * Not useChartGenres: for Qobuz that returns featured types — best sellers,
+ * press awards — which are how Qobuz charts, not genres, and asking the
+ * catalogue for "the best-sellers genre" is why that page was empty.
+ */
+export function useGenres(service: Service) {
+  return useQuery<ChartGenre[]>({
+    queryKey: ['genres', service],
+    queryFn: async () => (await http.get('/genres', {params: {service}})).data as ChartGenre[],
+    staleTime: 1000 * 60 * 60,
+  });
+}
+
 export type GenreKind = 'albums' | 'tracks' | 'artists' | 'playlists';
 
 const GENRE_PAGE_SIZE = 50;

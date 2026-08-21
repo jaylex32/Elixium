@@ -159,6 +159,23 @@ export const registerWebRestRoutes = ({
    * per-genre artist endpoints return the global chart regardless of genre,
    * so asking for Reggae used to return Taylor Swift.
    */
+  /*
+   * The genre list for the Genres page.
+   *
+   * Distinct from /api/charts/genres, which for Qobuz lists featured types —
+   * best sellers, press awards — because that is the axis Qobuz charts on.
+   * They are not genres, and offering them here asked the catalogue for "the
+   * best-sellers genre". Deezer's list is unchanged either way.
+   */
+  app.get('/api/genres', async (req, res) => {
+    try {
+      const service = String(req.query.service || 'deezer').toLowerCase();
+      return res.json(await genreContent.getGenres(service));
+    } catch (error: any) {
+      return res.status(500).json({error: error.message});
+    }
+  });
+
   app.get('/api/genre-content', async (req, res) => {
     try {
       const service = String(req.query.service || 'deezer').toLowerCase();

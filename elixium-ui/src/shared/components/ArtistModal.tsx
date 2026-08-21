@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import {X, User, Music2, Play, Pause, Download, Eye, Disc3, ListMusic, CheckSquare, ArrowLeft} from 'lucide-react';
+import {useMemo, useState} from 'react';
+import {X, User, Music2, Play, Pause, Download, Eye, Disc3, ListMusic, CheckSquare, ArrowLeft, ArrowUpDown} from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {toast} from 'sonner';
 import {cn, formatDuration, toSeconds} from '@/shared/lib/utils';
@@ -37,6 +37,37 @@ const TABS: {id: ArtistContentKind; label: string; icon: React.ElementType}[] = 
 ];
 
 const GRID = 'grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 sm:p-5';
+
+/**
+ * How an artist's releases are ordered.
+ *
+ * A discography arrives in whatever order the service felt like, which for a
+ * long career means the thing someone came for — the new record — can be
+ * anywhere in a list of eighty. Newest first is what people mean by browsing an
+ * artist, so it leads.
+ */
+type ReleaseSort = 'newest' | 'oldest' | 'title';
+
+const RELEASE_SORTS: {value: ReleaseSort; label: string}[] = [
+  {value: 'newest', label: 'Newest'},
+  {value: 'oldest', label: 'Oldest'},
+  {value: 'title', label: 'A–Z'},
+];
+
+/**
+ * Sortable release time.
+ *
+ * The full date when the service sends one; a year-only release still has to
+ * order against dated ones rather than sinking to the bottom, so it becomes
+ * that year's boundary.
+ */
+const releasedAt = (result: RawSearchResult): number => {
+  if (result.releaseDate) {
+    const parsed = Date.parse(result.releaseDate);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return result.year ? Date.UTC(result.year, 0, 1) : 0;
+};
 
 /*
  * `fallbackArtist` is the artist whose window this is.
@@ -120,7 +151,25 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
     open,
   );
 
-  const items = data?.pages.flat() ?? [];
+  const [sort, setSort] = useState<ReleaseSort>('newest');
+
+  const loaded = useMemo(() => data?.pages.flat() ?? [], [data]);
+
+  /*
+   * Only releases are sorted. Top tracks arrive in the service's own order of
+   * popularity, which is the point of that tab — re-ordering it by date would
+   * throw away the only ranking it has.
+   */
+  const items = useMemo(() => {
+    if (tab === 'tracks') return loaded;
+    const copy = [...loaded];
+    copy.sort((a, b) => {
+      if (sort === 'title') return a.title.localeCompare(b.title);
+      const diff = releasedAt(b) - releasedAt(a);
+      return sort === 'oldest' ? -diff : diff;
+    });
+    return copy;
+  }, [loaded, sort, tab]);
 
   /* Only the track tab feeds the player, and it queues the whole tab so
      playing the fourth track still gives you the rest after it. */
@@ -252,7 +301,30 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
                 })}
               </div>
 
-              <div className="ml-auto flex flex-wrap gap-2">
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {/* Releases only: the Tracks tab is ordered by popularity, and
+                    re-sorting it by date would discard that. */}
+                {tab !== 'tracks' && items.length > 1 && (
+                  <div className="scroll-row flex max-w-full items-center gap-1 rounded-sm border border-border bg-secondary-bg p-0.5">
+                    <ArrowUpDown size={12} className="ml-1.5 shrink-0 text-text-muted" />
+                    {RELEASE_SORTS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setSort(option.value)}
+                        aria-pressed={sort === option.value}
+                        className={cn(
+                          'shrink-0 rounded-xs px-2 py-1 text-xs font-medium transition-colors',
+                          sort === option.value
+                            ? 'bg-card-bg text-text-primary shadow-sm'
+                            : 'text-text-muted hover:text-text-secondary',
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Every tab is selectable, tracks included — picking three
                     songs off an artist was impossible before. */}
                 {items.length > 0 && (

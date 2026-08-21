@@ -1,10 +1,11 @@
-import {User, Download} from 'lucide-react';
+import {User, Download, Play} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore} from '@/store/selection-store';
 import {useNavigationStore} from '@/store/navigation-store';
 import {useDownload} from '@/shared/hooks/useDownload';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import type {Artist} from '@/types';
 
 interface ArtistCardProps {
@@ -14,6 +15,7 @@ interface ArtistCardProps {
 
 export function ArtistCard({artist, className}: ArtistCardProps) {
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const openArtist = useNavigationStore((s) => s.openArtist);
 
   const selectable = {
@@ -81,6 +83,10 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
           />
         </div>
 
+        {/* Download stays at the top; play sits at the foot of the card.
+            An artist card is a portrait with a name under it, and the corner
+            over someone's face is the worst place for the control people reach
+            for most. */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -91,6 +97,25 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
           className="pointer-events-auto absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-md transition-colors hover:bg-accent lg:opacity-0 lg:group-hover:opacity-100"
         >
           <Download size={14} />
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            playItem({
+              id: artist.id,
+              type: 'artist',
+              service: artist.service,
+              title: artist.name,
+              artist: artist.name,
+              cover: artist.picture,
+            });
+          }}
+          aria-label={`Play ${artist.name}`}
+          title="Play top tracks"
+          className="pointer-events-auto absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all hover:scale-105 lg:opacity-0 lg:group-hover:opacity-100"
+        >
+          <Play size={15} className="ml-0.5" />
         </button>
       </div>
 

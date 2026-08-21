@@ -190,6 +190,112 @@ export const createCharts = ({qobuz, makeHttpRequest, ensureQobuzSearchReady}: C
     }));
   };
 
+  /** A Qobuz album in the shape every list on the client already renders. */
+  const qobuzAlbumResult = (album: any): SearchResult => ({
+    id: String(album.id),
+    title: album.title,
+    artist: album.artist?.name || 'Unknown Artist',
+    album: album.title,
+    type: 'album',
+    duration: album.tracks_count ? `${album.tracks_count} tracks` : '',
+    year: album.release_date_original ? Number(String(album.release_date_original).slice(0, 4)) : null,
+    maximum_bit_depth: album.maximum_bit_depth,
+    maximum_sampling_rate: album.maximum_sampling_rate,
+    hires: album.hires,
+    rawData: album,
+  });
+
+  /** A Qobuz track, likewise. */
+  const qobuzTrackResult = (track: any): SearchResult => ({
+    id: String(track.id),
+    title: String(track.title || '') + (track.version ? ` (${track.version})` : ''),
+    artist: track.performer?.name || track.album?.artist?.name || 'Unknown Artist',
+    album: track.album?.title || '',
+    type: 'track',
+    duration: formatSecondsReadable(Number(track.duration || 0)),
+    maximum_bit_depth: track.maximum_bit_depth,
+    maximum_sampling_rate: track.maximum_sampling_rate,
+    hires: track.hires,
+    rawData: track,
+  });
+
+  /**
+   * A Qobuz chart of any kind, not only albums.
+   *
+   * Qobuz publishes featured albums and featured playlists, and nothing that
+   * corresponds to a track or artist chart — so this used to answer "albums
+   * only" and hand back an empty grid for the other three tabs. The artists
+   * making the featured albums, and the tracks inside the featured playlists,
+   * are the same catalogue seen from a different angle, and they are what the
+   * other tabs are asking for.
+   */
+  const qobuzChart = async (type: string, kind: ChartKind, limit: number, offset: number): Promise<SearchResult[]> => {
+    const request = (endpoint: string, params: Record<string, unknown>) =>
+      (qobuz as any).qobuzRequest?.(endpoint, params).catch(() => null);
+
+    if (kind === 'albums' || kind === 'artists') {
+      const response = await request('album/getFeatured', {type, offset, limit: kind === 'artists' ? 100 : limit});
+      const albums = (response?.albums?.items as any[]) || [];
+
+      if (kind === 'albums') return albums.map(qobuzAlbumResult);
+
+      // One entry per artist, in the order their records are charting.
+      const seen = new Set<string>();
+      const artists: SearchResult[] = [];
+      for (const album of albums) {
+        const artist = album?.artist;
+        if (!artist?.id || seen.has(String(artist.id))) continue;
+        seen.add(String(artist.id));
+        artists.push({
+          id: String(artist.id),
+          title: String(artist.name || ''),
+          artist: String(artist.name || ''),
+          album: '',
+          type: 'artist',
+          duration: '',
+          rawData: artist,
+        });
+      }
+      return artists.slice(offset, offset + limit);
+    }
+
+    // Playlists, and the tracks inside them.
+    const featured = await request('playlist/getFeatured', {type: 'editor-picks', offset: 0, limit: 50});
+    const playlists = (featured?.playlists?.items as any[]) || [];
+
+    if (kind === 'playlists') {
+      return playlists.slice(offset, offset + limit).map((playlist: any) => ({
+        id: String(playlist.id),
+        title: String(playlist.name || ''),
+        artist: playlist.owner?.name || 'Qobuz',
+        album: '',
+        type: 'playlist',
+        duration: playlist.tracks_count ? `${playlist.tracks_count} tracks` : '',
+        rawData: playlist,
+      }));
+    }
+
+    // Enough playlists to fill a page, and no more: each is its own request.
+    const sources = playlists.slice(0, 4);
+    const batches = await Promise.all(
+      sources.map((playlist: any) =>
+        request('playlist/get', {playlist_id: playlist.id, extra: 'tracks', limit: 100, offset: 0}),
+      ),
+    );
+
+    const tracks: SearchResult[] = [];
+    const seenTracks = new Set<string>();
+    for (const batch of batches) {
+      for (const track of (batch?.tracks?.items as any[]) || []) {
+        const id = String(track?.id ?? '');
+        if (!id || seenTracks.has(id)) continue;
+        seenTracks.add(id);
+        tracks.push(qobuzTrackResult(track));
+      }
+    }
+    return tracks.slice(offset, offset + limit);
+  };
+
   const getCharts = async (
     service: string,
     genreId: string,
@@ -206,31 +312,9 @@ export const createCharts = ({qobuz, makeHttpRequest, ensureQobuzSearchReady}: C
     }
 
     if (service === 'qobuz') {
-      // Qobuz's featured lists are albums only; asking for another kind here
-      // would return an empty grid with no explanation, so say so instead.
-      if (kind !== 'albums') return [];
-
       await ensureQobuzSearchReady();
       const type = QOBUZ_FEATURED_TYPE[genreId] || 'best-sellers';
-      const response = await (qobuz as any).qobuzRequest?.('album/getFeatured', {
-        type,
-        offset: Number(offset),
-        limit: Number(limit),
-      });
-
-      return ((response?.albums?.items as any[]) || []).map((album: any) => ({
-        id: String(album.id),
-        title: album.title,
-        artist: album.artist?.name || 'Unknown Artist',
-        album: album.title,
-        type: 'album',
-        duration: album.tracks_count ? `${album.tracks_count} tracks` : '',
-        year: album.release_date_original ? Number(String(album.release_date_original).slice(0, 4)) : null,
-        maximum_bit_depth: album.maximum_bit_depth,
-        maximum_sampling_rate: album.maximum_sampling_rate,
-        hires: album.hires,
-        rawData: album,
-      }));
+      return qobuzChart(type, kind, Number(limit), Number(offset));
     }
 
     return [];

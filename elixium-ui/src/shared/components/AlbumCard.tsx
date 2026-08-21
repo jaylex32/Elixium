@@ -4,6 +4,9 @@ import {Button} from '@/shared/components/ui/Button';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
+import {ArtistLink, AlbumLink} from '@/shared/components/RelationLinks';
+import type {Relations} from '@/shared/lib/relations';
+import type {Service} from '@/types';
 
 export interface AlbumCardData {
   id: string;
@@ -27,9 +30,27 @@ interface AlbumCardProps {
   className?: string;
   /** Makes the card selectable for bulk download; omit to opt out. */
   selectable?: SelectableItem;
+  /**
+   * Where this card's artist and album live, so their names become links.
+   *
+   * Optional: a card whose payload carries no ids renders the same plain text
+   * it always did, rather than offering a link that goes nowhere.
+   */
+  relations?: Relations;
+  service?: Service;
 }
 
-export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, className, selectable}: AlbumCardProps) {
+export function AlbumCard({
+  album,
+  onDownload,
+  onWatch,
+  onPlay,
+  onClick,
+  className,
+  selectable,
+  relations,
+  service,
+}: AlbumCardProps) {
   const selectionActive = useSelectionStore((s) => s.active);
   const isSelected = useSelectionStore((s) => (selectable ? Boolean(s.items[`${selectable.service}:${selectable.type}:${selectable.id}`]) : false));
   const toggle = useSelectionStore((s) => s.toggle);
@@ -92,6 +113,8 @@ export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, classNam
             <Button
               size="icon"
               variant="default"
+              aria-label={`Play ${album.title}`}
+              title="Play"
               onClick={(e) => {
                 e.stopPropagation();
                 onPlay();
@@ -105,6 +128,8 @@ export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, classNam
             <Button
               size="icon"
               variant="secondary"
+              aria-label={`Download ${album.title}`}
+              title="Download"
               onClick={(e) => {
                 e.stopPropagation();
                 onDownload();
@@ -138,7 +163,22 @@ export function AlbumCard({album, onDownload, onWatch, onPlay, onClick, classNam
           <span className="truncate">{album.title}</span>
           {album.explicit && <ExplicitBadge />}
         </p>
-        <p className="text-xs text-text-muted truncate mt-0.5">{album.artist}</p>
+        {/* The artist is a way into their catalogue when the payload names
+            them, and unchanged text when it does not. */}
+        <p className="text-xs text-text-muted truncate mt-0.5">
+          {relations && service ? (
+            <ArtistLink name={album.artist} relations={relations} service={service} />
+          ) : (
+            album.artist
+          )}
+        </p>
+        {/* Only when the card is a track: an album card naming its own album
+            twice would be noise. */}
+        {service && relations?.albumId && album.type === 'track' && relations.albumTitle && (
+          <p className="mt-0.5 truncate text-xs text-text-muted">
+            <AlbumLink title={relations.albumTitle} relations={relations} service={service} />
+          </p>
+        )}
         {(album.year || album.tracks) && (
           <p className="text-xs text-text-muted mt-1">
             {[album.year, album.tracks && `${album.tracks} tracks`].filter(Boolean).join(' · ')}
