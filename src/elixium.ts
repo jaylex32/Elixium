@@ -23,7 +23,6 @@ import {createExplorer} from './app/explorer';
 import {createSessionQueue} from './app/session-queue';
 import {createServiceRuntime} from './app/service-runtime';
 import {ProviderRegistry} from './app/provider-readiness';
-import {loginToDeezer, loginToQobuz} from './app/account-login';
 import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
@@ -413,7 +412,6 @@ const setupWebServer = () => {
     initDeezerForDownload,
     initQobuzForSearch,
     initQobuzForDownload,
-    signInToService,
     startDownloadProcess,
   });
 
@@ -873,36 +871,30 @@ const providers = new ProviderRegistry({
   },
 });
 
-const {
-  initDeezerForSearch,
-  initDeezerForDownload,
-  refreshDeezerSession,
-  initQobuzForSearch,
-  initQobuzForDownload,
-  ensureQobuzAppId,
-} = createServiceRuntime({
-  options,
-  conf,
-  deezer,
-  qobuz,
-  appCommand: APP_COMMAND,
-  getIsDeezerInitialized: () => isDeezerInitialized,
-  setIsDeezerInitialized: (value) => {
-    isDeezerInitialized = value;
-  },
-  getIsQobuzInitialized: () => isQobuzInitialized,
-  setIsQobuzInitialized: (value) => {
-    isQobuzInitialized = value;
-  },
-  getIsDeezerDownloadReady: () => isDeezerDownloadReady,
-  setIsDeezerDownloadReady: (value) => {
-    isDeezerDownloadReady = value;
-  },
-  getIsQobuzDownloadReady: () => isQobuzDownloadReady,
-  setIsQobuzDownloadReady: (value) => {
-    isQobuzDownloadReady = value;
-  },
-});
+const {initDeezerForSearch, initDeezerForDownload, refreshDeezerSession, initQobuzForSearch, initQobuzForDownload} =
+  createServiceRuntime({
+    options,
+    conf,
+    deezer,
+    qobuz,
+    appCommand: APP_COMMAND,
+    getIsDeezerInitialized: () => isDeezerInitialized,
+    setIsDeezerInitialized: (value) => {
+      isDeezerInitialized = value;
+    },
+    getIsQobuzInitialized: () => isQobuzInitialized,
+    setIsQobuzInitialized: (value) => {
+      isQobuzInitialized = value;
+    },
+    getIsDeezerDownloadReady: () => isDeezerDownloadReady,
+    setIsDeezerDownloadReady: (value) => {
+      isDeezerDownloadReady = value;
+    },
+    getIsQobuzDownloadReady: () => isQobuzDownloadReady,
+    setIsQobuzDownloadReady: (value) => {
+      isQobuzDownloadReady = value;
+    },
+  });
 
 /*
  * Optional dependencies.
@@ -939,45 +931,6 @@ providers.register({
   timeoutMs: 30_000,
   init: () => initDeezerForDownload(),
 });
-
-/**
- * Trade an email and password for the credential a service actually needs.
- *
- * Both services are otherwise configured by pasting a value out of browser
- * developer tools, which is the single most common reason downloads do not
- * work for someone who has a perfectly good account.
- *
- * The password is used for the exchange and dropped; only what the service
- * returns is written to the config. Whatever was signed in to is then
- * re-initialised in place, so it works immediately rather than after a
- * restart.
- */
-const signInToService = async (service: string, email: string, password: string) => {
-  if (service === 'deezer') {
-    const {arl} = await loginToDeezer(email, password);
-    conf.set('cookies.arl', arl);
-    await refreshDeezerSession().catch(() => undefined);
-    await providers.retry('deezer-download');
-    return {service, stored: ['ARL']};
-  }
-
-  /*
-   * The app id has to be settled before the login, not after: Qobuz issues the
-   * token against the id used to obtain it and refuses it under any other.
-   */
-  const appId = await ensureQobuzAppId();
-  const {token} = await loginToQobuz(email, password, appId);
-  conf.set('qobuz.token', token);
-  conf.set('qobuz.app_id', appId);
-
-  // Clear the sticky ready flags so the retry below genuinely re-initialises.
-  isQobuzInitialized = false;
-  isQobuzDownloadReady = false;
-  await providers.retry('qobuz-search');
-  await providers.retry('qobuz-download');
-
-  return {service, stored: ['Token', 'App ID']};
-};
 
 const initApp = async () => {
   if (options.web) {
