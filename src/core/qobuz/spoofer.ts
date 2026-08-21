@@ -1,4 +1,15 @@
-import axios from 'axios';
+import axios, {AxiosInstance} from 'axios';
+
+/**
+ * How long either bundle request may take before it is abandoned.
+ *
+ * Both requests used the bare `axios` default export, which carries no
+ * timeout at all, and the second one downloads Qobuz's web player bundle —
+ * around 9 MB. A stalled connection therefore never returned, and because
+ * engine startup awaited this, the desktop app could not open. The bound is
+ * per-request; the caller applies its own bound over the whole attempt.
+ */
+export const QOBUZ_BUNDLE_TIMEOUT_MS = 15_000;
 
 export class QobuzSpoofer {
   seed_timezone_regex = /[a-z]\.initialSeed\("([\w=]+)",window\.utimezone\.([a-z]+)\)/g;
@@ -8,14 +19,28 @@ export class QobuzSpoofer {
   bundle = '';
   app_id: number | null = null;
 
+  /** Injectable so the startup tests never depend on Qobuz being reachable. */
+  private readonly http: AxiosInstance;
+
+  constructor(http?: AxiosInstance) {
+    this.http =
+      http ??
+      axios.create({
+        timeout: QOBUZ_BUNDLE_TIMEOUT_MS,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 Firefox/83.0',
+        },
+      });
+  }
+
   async init() {
     if (this.bundle.length > 0) return;
-    const {data} = await axios.get<string>('https://play.qobuz.com/login');
+    const {data} = await this.http.get<string>('https://play.qobuz.com/login');
     const bundle_url = data.match(/<script src="(\/resources\/\d+\.\d+\.\d+-[a-z]\d{3}\/bundle\.js)"><\/script>/);
     if (!bundle_url) {
       throw new Error('Failed to fetch Qobuz API data');
     }
-    const bundle_data = await axios.get<string>('https://play.qobuz.com' + bundle_url[1]);
+    const bundle_data = await this.http.get<string>('https://play.qobuz.com' + bundle_url[1]);
     this.bundle = bundle_data.data;
   }
 

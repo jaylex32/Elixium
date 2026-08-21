@@ -23,6 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const {engineLogTail} = require('./engine-log');
+const {waitForCoreReady, terminateChild} = require('./readiness');
 
 /**
  * Where the server's config, downloads and state live.
@@ -37,6 +38,10 @@ let serverPort = 0;
 let mainWindow = null;
 /** True once /health has answered, so a later exit is a crash and not a boot failure. */
 let engineReady = false;
+
+/** The most recent health payload, so a failure can name the stage it reached. */
+let lastHealth = null;
+
 /** How the engine died while starting, when it did. */
 let engineExit = null;
 /** Set during quit so the exit handler does not treat it as a crash. */
@@ -120,60 +125,51 @@ const resolveServerEntry = () => {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
 };
 
-/** Poll /health until the server answers, so the window never shows a dead page. */
-/*
- * Two minutes, not one.
+/**
+ * Poll /health until the engine reports core readiness.
  *
- * The first launch on macOS is the slow one: Gatekeeper scans a freshly
- * downloaded app before its child process is allowed to run, and that alone
- * can take longer than a minute — reported to the reader as the engine being
- * at fault.
+ * "Core ready" means the HTTP listener is bound and serving — deliberately not
+ * "every provider has initialised". Optional providers warm up behind the open
+ * port and report their own state through this same endpoint, so one that is
+ * slow, unreachable or misconfigured degrades that provider instead of
+ * preventing the app from opening. That distinction is what stopped this being
+ * a recurring startup failure.
+ *
+ * Two minutes is a last-resort boundary against an engine that is genuinely
+ * wedged, not the mechanism that handles a blocked provider. The first launch
+ * on macOS is the slow one — Gatekeeper scans a freshly downloaded app before
+ * its child process may run — so the boundary stays generous. Do not raise it
+ * to "fix" a startup hang: that was tried in 1.3.4 and the failure came back.
  */
+/** One /health request, resolved to {statusCode, body} or null if it did not answer. */
+const probeHealth = (port) =>
+  new Promise((resolve) => {
+    const request = http.get({host: '127.0.0.1', port, path: '/api/v1/health', timeout: 2000}, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      // A health payload is small; the cap only guards against a wedged
+      // process streaming into memory forever.
+      response.on('data', (chunk) => {
+        if (body.length < 64 * 1024) body += chunk;
+      });
+      response.on('error', () => resolve(null));
+      response.on('end', () => resolve({statusCode: response.statusCode, body}));
+    });
+    request.on('error', () => resolve(null));
+    request.on('timeout', () => {
+      request.destroy();
+      resolve(null);
+    });
+  });
+
 const waitForServer = (port, timeoutMs = 120_000) =>
-  new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
-
-    const attempt = () => {
-      const request = http.get({host: '127.0.0.1', port, path: '/api/v1/health', timeout: 2000}, (response) => {
-        response.resume();
-        if (response.statusCode === 200) return resolve();
-        retry();
-      });
-      request.on('error', retry);
-      request.on('timeout', () => {
-        request.destroy();
-        retry();
-      });
-    };
-
-    const retry = () => {
-      /*
-       * An engine that has already died is never going to answer.
-       *
-       * Waiting out the full two minutes for a process that exited in the
-       * first second told the reader the wrong thing — that it was slow,
-       * rather than that it had failed and why.
-       */
-      if (engineExit) {
-        const reason = engineExit.tail
-          ? `The engine stopped with exit code ${engineExit.code}.\n\nIts last words were:\n${engineExit.tail}`
-          : `The engine stopped with exit code ${engineExit.code} without writing a log.`;
-        return reject(new Error(reason));
-      }
-      if (Date.now() > deadline) {
-        const tail = engineLogTail(dataDir);
-        return reject(
-          new Error(
-            tail
-              ? `The Elixium engine did not start in time.\n\nIts last words were:\n${tail}`
-              : 'The Elixium engine did not start in time, and wrote no log at all.',
-          ),
-        );
-      }
-      setTimeout(attempt, 300);
-    };
-
-    attempt();
+  waitForCoreReady({
+    timeoutMs,
+    probe: () => probeHealth(port),
+    getExit: () => engineExit,
+    getTail: () => engineLogTail(dataDir),
+  }).then(({lastHealth: health}) => {
+    lastHealth = health;
   });
 
 const startServer = async () => {
@@ -519,12 +515,7 @@ const stopServer = () => {
   if (!serverProcess) return;
   const child = serverProcess;
   serverProcess = null;
-  try {
-    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/f', '/t']);
-    else child.kill('SIGTERM');
-  } catch {
-    // Nothing useful to do if it is already gone.
-  }
+  terminateChild(child, {platform: process.platform, spawn});
 };
 
 app.on('before-quit', stopServer);

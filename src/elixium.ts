@@ -22,6 +22,7 @@ import {createCliDownloads} from './app/cli-downloads';
 import {createExplorer} from './app/explorer';
 import {createSessionQueue} from './app/session-queue';
 import {createServiceRuntime} from './app/service-runtime';
+import {ProviderRegistry} from './app/provider-readiness';
 import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
@@ -423,6 +424,8 @@ const setupWebServer = () => {
     conf,
     appVersion: pkg.version,
     appBrand: APP_BRAND,
+    readiness: () => providers.snapshot(),
+    retryProvider: (name: string) => providers.retry(name),
     deezer,
     qobuz,
     performDeezerSearch,
@@ -442,7 +445,7 @@ const setupWebServer = () => {
     getIsDownloading: () => isDownloading,
     parseToQobuz,
     parseDeezerUrl: parseInfo,
-    ensureQobuzSearchReady: () => initQobuzForSearch(),
+    ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
     settingsHooks: {
       setIsDeezerDownloadReady: (value) => {
         isDeezerDownloadReady = value;
@@ -468,7 +471,7 @@ const setupWebServer = () => {
       artistContent,
       performDeezerSearch,
       performQobuzSearch,
-      ensureQobuzSearchReady: () => initQobuzForSearch(),
+      ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
       parseToQobuz,
       parseDeezerUrl: parseInfo,
     });
@@ -501,17 +504,17 @@ const setupWebServer = () => {
       parseDeezerUrl: parseInfo,
       parseQobuzUrl,
       parseToQobuz,
-      ensureQobuzSearchReady: () => initQobuzForSearch(),
-      ensureDeezerDownloadReady: () => initDeezerForDownload(),
+      ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
+      ensureDeezerDownloadReady: () => providers.ensure('deezer-download'),
     });
 
     registerDirectDownloadSocketHandler({
       socket,
       parseToQobuz,
       parseDeezerUrl: parseInfo,
-      ensureQobuzSearchReady: () => initQobuzForSearch(),
-      ensureQobuzDownloadReady: () => initQobuzForDownload(),
-      ensureDeezerDownloadReady: () => initDeezerForDownload(),
+      ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
+      ensureQobuzDownloadReady: () => providers.ensure('qobuz-download'),
+      ensureDeezerDownloadReady: () => providers.ensure('deezer-download'),
       shouldUseVariousArtists,
       downloadQobuzTracks,
       downloadDeezerTracks,
@@ -571,6 +574,12 @@ const setupWebServer = () => {
   const host = typeof options.host === 'string' && options.host.trim() ? options.host.trim() : undefined;
 
   const onListening = () => {
+    /*
+     * Core readiness. Deliberately the moment the socket is bound and before
+     * any optional provider has been attempted: this is what `/api/v1/health`
+     * answers on, and what the desktop launcher is waiting for.
+     */
+    providers.markCoreReady();
     console.log(signale.success(`Web interface available at http://localhost:${port}`));
     if (host) {
       console.log(signale.info(`Bound to ${host} only — not reachable from other devices`));
@@ -587,7 +596,7 @@ const setupWebServer = () => {
 const {performDeezerSearch, performQobuzSearch} = createCatalogSearch({
   deezer,
   qobuz,
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
 });
 
 const searchCatalog = (
@@ -665,8 +674,8 @@ const {getDiscoveryContentRest, getItemTracksRest, makeHttpRequest} = createWebD
   qobuz,
   parseDeezerUrl: parseInfo,
   parseQobuzUrl,
-  ensureDeezerDownloadReady: () => initDeezerForDownload(),
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureDeezerDownloadReady: () => providers.ensure('deezer-download'),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
   toStandardTrack,
   getQobuzConfig,
 });
@@ -676,28 +685,28 @@ const artistContent = createArtistContent({
   deezer,
   qobuz,
   makeHttpRequest,
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
 });
 
 /** Ranked charts per genre; separate from the editorial Discover lists. */
 const charts = createCharts({
   qobuz,
   makeHttpRequest,
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
 });
 
 /** A genre's own albums, tracks, artists and playlists — not its chart. */
 const genreContent = createGenreContent({
   qobuz,
   makeHttpRequest,
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
 });
 
 /** Playlist search across Deezer, Qobuz and Spotify. */
 const playlistSearch = createPlaylistSearch({
   deezer,
   qobuz,
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
   setSpotifyAnonymousToken: () => spotify.setSpotifyAnonymousToken(),
   getSpotifyApi: () => spotify.spotifyApi,
   getSpotifyCredentials: () => {
@@ -730,8 +739,8 @@ const {startDownloadProcess} = createDownloadQueueRuntime({
   parseQobuzUrl,
   deezerDownloadTrack: downloadTrack,
   qobuzDownloadTrack: qdlt,
-  initDeezerForDownload: () => initDeezerForDownload(),
-  initQobuzForDownload: () => initQobuzForDownload(),
+  initDeezerForDownload: () => providers.ensure('deezer-download'),
+  initQobuzForDownload: () => providers.ensure('qobuz-download'),
   shouldUseVariousArtists,
   commonPath,
   sanitizeFilename,
@@ -756,7 +765,7 @@ const {startDownloadProcess} = createDownloadQueueRuntime({
 const qobuzWatchlist = createQobuzWatchlistService({
   conf,
   qobuz,
-  ensureQobuzSearchReady: () => initQobuzForSearch(),
+  ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
   // Lets the watchlist follow Deezer artists, not just Qobuz ones. Reuses the
   // same paged fetch the artist view uses rather than a second implementation.
   fetchDeezerArtistAlbums: async (artistId: string) => {
@@ -808,7 +817,7 @@ const qobuzWatchlist = createQobuzWatchlistService({
 
       for (const [service, items] of byService) {
         if (service === 'deezer') {
-          await initDeezerForDownload();
+          await providers.ensure('deezer-download');
           const quality = normalizeQuality(((conf as any).get?.('quality.deezer') || 'flac') as string, 'deezer');
           await startDownloadProcess(
             items,
@@ -821,7 +830,7 @@ const qobuzWatchlist = createQobuzWatchlistService({
             broadcastSocket as any,
           );
         } else {
-          await initQobuzForDownload();
+          await providers.ensure('qobuz-download');
           const quality = normalizeQuality(((conf as any).get?.('quality.qobuz') || '44khz') as string, 'qobuz');
           await startDownloadProcess(
             items,
@@ -842,6 +851,23 @@ const qobuzWatchlist = createQobuzWatchlistService({
     io.emit('watchlistState', state);
     io.emit('monitorSchedules', qobuzWatchlist.getMonitorSchedules());
     io.emit('monitorHistory', {items: qobuzWatchlist.getMonitorHistory()});
+  },
+});
+
+/**
+ * Startup dependencies and their readiness.
+ *
+ * Everything optional goes through here so that no provider — however slow,
+ * unreachable or misconfigured — can hold up the HTTP listener the desktop
+ * launcher waits on.
+ */
+const providers = new ProviderRegistry({
+  onEvent: ({provider, state, failure}) => {
+    if (state === 'ready') {
+      console.log(signale.success(`${provider} ready`));
+    } else if (state === 'unavailable' || state === 'failed') {
+      console.log(signale.warn(`${provider} unavailable (${failure?.kind ?? 'unknown'}): ${failure?.message ?? ''}`));
+    }
   },
 });
 
@@ -870,22 +896,70 @@ const {initDeezerForSearch, initDeezerForDownload, refreshDeezerSession, initQob
     },
   });
 
+/*
+ * Optional dependencies.
+ *
+ * Qobuz browsing scrapes an app id and secrets from Qobuz's web bundle, which
+ * means two network round trips — one of them several megabytes — before it
+ * can answer anything. That is a perfectly reasonable thing for a provider to
+ * need and a completely unreasonable thing to put in front of the application
+ * opening, which is exactly where it used to sit.
+ *
+ * The bound below is per attempt. It is generous, because a slow connection
+ * downloading the bundle is a working case, not a broken one; what matters is
+ * that it ends.
+ */
+const QOBUZ_INIT_TIMEOUT_MS = 45_000;
+
+providers.register({
+  name: 'qobuz-search',
+  optional: true,
+  timeoutMs: QOBUZ_INIT_TIMEOUT_MS,
+  init: () => initQobuzForSearch(),
+});
+
+providers.register({
+  name: 'qobuz-download',
+  optional: true,
+  timeoutMs: QOBUZ_INIT_TIMEOUT_MS,
+  init: () => initQobuzForDownload(),
+});
+
+providers.register({
+  name: 'deezer-download',
+  optional: true,
+  timeoutMs: 30_000,
+  init: () => initDeezerForDownload(),
+});
+
 const initApp = async () => {
   if (options.web) {
     console.log(signale.info('Initializing services for web interface...'));
 
+    /*
+     * Deezer browsing is a flag, not a network call — nothing to wait on.
+     */
     await initDeezerForSearch();
 
-    try {
-      await initQobuzForSearch();
-    } catch (error: any) {
-      console.log(signale.warn('Qobuz search initialization failed: ' + error.message));
-      console.log(signale.note('Qobuz search may not work, but Deezer will'));
-    }
-
-    console.log(signale.info('Web interface ready - authentication only required for downloads'));
-
+    /*
+     * Bind the listener before touching any provider.
+     *
+     * This ordering is the fix for a startup failure that came back across
+     * several releases. `/api/v1/health` is how the desktop launcher decides
+     * the engine is alive, and it cannot answer until this call has run. When
+     * an optional provider was initialised first, a slow or unreachable one
+     * meant nothing ever listened, and the only thing the user saw was the
+     * launcher's own timeout — which was then raised, twice, without ever
+     * addressing why the wait was unbounded.
+     *
+     * Optional providers warm up behind the open port. Every route that needs
+     * one already asks for it on demand, so nothing is lost by not waiting:
+     * the first Qobuz request initialises Qobuz, bounded, and says so if it
+     * cannot.
+     */
     setupWebServer();
+    console.log(signale.info('Web interface ready - authentication only required for downloads'));
+    providers.warmUpOptional();
     return;
   }
 

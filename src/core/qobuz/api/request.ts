@@ -64,14 +64,44 @@ export const initQobuzApi = async (token: string, app_id: number, secrets: strin
   } else {
     delete qobuzInstance.defaults.headers.common['X-User-Auth-Token'];
   }
+  /*
+   * An app id that is absent is a broken scrape, not a bad credential. Saying
+   * so beats `null.toString()`, which is what used to happen here and read as
+   * an internal crash rather than "Qobuz support needs updating".
+   */
+  if (app_id === null || app_id === undefined || Number.isNaN(Number(app_id))) {
+    throw new Error('Qobuz app id is missing — it could not be read from Qobuz and none is configured');
+  }
+
   qobuzInstance.defaults.headers.common['X-App-Id'] = app_id.toString();
+
+  let lastFailure: unknown = null;
   for (const s of secrets) {
-    if (await test_secret(s)) {
+    const result = await test_secret(s);
+    if (result.ok) {
       secret = s;
       break;
     }
+    lastFailure = result.error;
   }
+
   if (!secret) {
+    /*
+     * Distinguish "the secrets are wrong" from "nothing could reach Qobuz".
+     * They lead the reader to completely different places, and only one of
+     * them is worth re-entering credentials over.
+     */
+    const transport = transportCodeOf(lastFailure);
+    if (transport) {
+      const error = new Error(`Could not reach Qobuz to verify its app secret (${transport})`) as Error & {
+        code?: string;
+      };
+      error.code = transport;
+      throw error;
+    }
+    if (secrets.length === 0) {
+      throw new Error('No Qobuz app secrets are configured, and none could be read from Qobuz');
+    }
     throw new Error("Couldn't find any valid app secrets");
   }
 };
@@ -90,6 +120,15 @@ export const qobuzRequest = async (method: string, params: object) => {
       return data;
     }
   } catch (error: unknown) {
+    /*
+     * No HTTP response at all means the request never reached Qobuz — DNS
+     * failure, refused connection, dead proxy, no network. That is not a Qobuz
+     * API error, and flattening it into one ("Qobuz request failed") told the
+     * reader their credentials were bad when the machine was simply offline.
+     * Rethrowing preserves the transport code for whoever classifies it.
+     */
+    if (!(error as any)?.response) throw error;
+
     const errorMessage = (error as any).response?.data || {};
     // Only map to InvalidSecret for the specific invalid-secret case
     if (
@@ -162,14 +201,39 @@ const md5 = (data: string, type: crypto.Encoding = 'ascii') => {
   return md5sum.digest('hex');
 };
 
-const test_secret = async (secret: string) => {
+/**
+ * Does this secret sign a request Qobuz accepts?
+ *
+ * Returns the failure rather than just `false`. Swallowing it meant a machine
+ * with no network reported "Couldn't find any valid app secrets" — sending the
+ * reader to check credentials that were fine, when the real answer was that
+ * nothing could reach Qobuz at all.
+ */
+const test_secret = async (secret: string): Promise<{ok: true} | {ok: false; error: unknown}> => {
   try {
     await getTrackDownloadUrl(122528702, 5, secret);
-    return true;
-  } catch (_e) {
+    return {ok: true};
+  } catch (error) {
     if (process.env.DEBUG_QOBUZ) {
-      console.error('Secret test failed:', (_e as Error).message || _e);
+      console.error('Secret test failed:', (error as Error).message || error);
     }
-    return false;
+    return {ok: false, error};
   }
+};
+
+/** Network-level codes that mean the request never reached Qobuz. */
+const TRANSPORT_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'ETIMEDOUT',
+  'ECONNABORTED',
+]);
+
+const transportCodeOf = (error: unknown): string | null => {
+  const code = (error as {code?: string} | undefined)?.code;
+  return typeof code === 'string' && TRANSPORT_CODES.has(code.toUpperCase()) ? code.toUpperCase() : null;
 };

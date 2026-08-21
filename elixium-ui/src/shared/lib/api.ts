@@ -22,7 +22,14 @@ http.interceptors.response.use(
       notifyAuthRequired();
       return Promise.reject(new Error('auth_required'));
     }
-    return Promise.reject(new Error(e.response?.data?.error ?? e.message ?? 'Request failed'));
+    /*
+     * Legacy /api routes send `{error: "text"}`; /api/v1 sends the envelope
+     * `{error: {code, message, details}}`. Reading only the first shape turned
+     * a versioned error into "[object Object]" — no use to anyone reading it.
+     */
+    const payload = e.response?.data?.error;
+    const message = typeof payload === 'string' ? payload : (payload?.message ?? e.message ?? 'Request failed');
+    return Promise.reject(new Error(message));
   },
 );
 

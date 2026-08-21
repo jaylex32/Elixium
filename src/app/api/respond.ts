@@ -190,6 +190,28 @@ export const sendError = (res: Response, error: unknown): Response => {
     });
   }
 
+  /*
+   * A provider that is initialising, unreachable or misconfigured is a 503,
+   * not a 404 — the thing asked for exists, the dependency behind it is down.
+   * A client can retry a 503; a 404 tells it to stop asking, which is wrong
+   * for a Qobuz outage that will end.
+   */
+  const providerFailure = error as {providerName?: string; providerFailure?: {kind?: string; message?: string}};
+  if (typeof providerFailure?.providerName === 'string') {
+    return res.status(503).json({
+      ok: false,
+      error: {
+        code: 'service_unavailable',
+        message,
+        details: {
+          provider: providerFailure.providerName,
+          ...(providerFailure.providerFailure?.kind ? {kind: providerFailure.providerFailure.kind} : {}),
+          retryable: true,
+        },
+      },
+    });
+  }
+
   if (NOT_FOUND_PATTERNS.test(message)) {
     return res.status(404).json({ok: false, error: {code: 'not_found', message}});
   }

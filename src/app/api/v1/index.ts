@@ -5,6 +5,7 @@ import {readRedactedSettings} from '../settings';
 import {registerCatalogRoutes, type CatalogRouteDependencies} from './catalog';
 import {registerMediaRoutes, type MediaRouteDependencies} from './media';
 import {registerLibraryRoutes, type LibraryRouteDependencies} from './library';
+import type {EngineLifecycle, ProviderStatus} from '../../provider-readiness';
 
 export const API_V1_BASE = '/api/v1';
 
@@ -13,6 +14,16 @@ export type ApiV1Dependencies = Omit<CatalogRouteDependencies, 'basePath'> &
   Omit<LibraryRouteDependencies, 'basePath'> & {
     appVersion: string;
     appBrand: string;
+    /**
+     * Engine lifecycle and per-provider readiness.
+     *
+     * The desktop launcher polls `/health` to decide the engine is alive, so
+     * this is the deterministic readiness signal rather than console text.
+     * Optional and absent so the API can be mounted without a registry.
+     */
+    readiness?: () => {lifecycle: EngineLifecycle; providers: ProviderStatus[]};
+    /** Re-attempt one optional provider without restarting the engine. */
+    retryProvider?: (name: string) => Promise<ProviderStatus>;
   };
 
 /**
@@ -47,11 +58,24 @@ export const registerApiV1 = (deps: ApiV1Dependencies): void => {
         // A malformed config must not make the probe fail.
       }
 
+      /*
+       * Readiness is reported separately from `status`.
+       *
+       * `status` stays 'ok' whenever the process can answer at all — that is
+       * what makes this usable as a reachability probe. `lifecycle` is the
+       * part that distinguishes a core-ready engine from a fully-ready one,
+       * so a launcher can open the window as soon as the core is up without
+       * waiting on a provider that may never arrive.
+       */
+      const readiness = deps.readiness?.();
+
       return sendData(res, {
         status: 'ok',
         app: appBrand,
         version: appVersion,
         api: {version: 1, base: basePath},
+        lifecycle: readiness?.lifecycle ?? 'core_ready',
+        providers: readiness?.providers ?? [],
         services: {
           deezer: {configured: configured.deezer, qualities: DEEZER_QUALITIES.map((q) => q.id)},
           qobuz: {configured: configured.qobuz, qualities: QOBUZ_QUALITIES.map((q) => q.id)},
@@ -72,6 +96,30 @@ export const registerApiV1 = (deps: ApiV1Dependencies): void => {
     }),
   );
 
+  /**
+   * POST /api/v1/providers/:name/retry
+   *
+   * A provider that failed at boot — offline machine, expired credentials,
+   * an upstream having a bad day — must be recoverable without restarting the
+   * engine. Otherwise "optional" is only a word, and the user's only recourse
+   * is the thing this whole design exists to avoid.
+   */
+  app.post(
+    `${basePath}/providers/:name/retry`,
+    route(async (req, res) => {
+      if (!deps.retryProvider)
+        throw new ApiError('service_unavailable', 'Provider retry is not available on this server');
+
+      const name = String(req.params.name || '');
+      try {
+        const status = await deps.retryProvider(name);
+        return sendData(res, status);
+      } catch (error: any) {
+        throw new ApiError('not_found', error?.message || `Unknown provider: ${name}`);
+      }
+    }),
+  );
+
   /** GET /api/v1 — machine-readable route index, useful while building a client. */
   app.get(
     basePath,
@@ -81,6 +129,7 @@ export const registerApiV1 = (deps: ApiV1Dependencies): void => {
         version: 1,
         endpoints: {
           health: `GET ${basePath}/health`,
+          retryProvider: `POST ${basePath}/providers/:name/retry`,
           search: `GET ${basePath}/search?service=&q=&type=&limit=&offset=`,
           discovery: `GET ${basePath}/discovery?service=&type=&limit=`,
           albumTracks: `GET ${basePath}/albums/:id/tracks?service=`,
