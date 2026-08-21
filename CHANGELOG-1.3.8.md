@@ -60,10 +60,44 @@ The error dialog now names the stage the engine reached rather than only
 saying it ran out of time, and a required component failing is reported with
 the component and the reason.
 
-## Known issue
+## Qobuz on a fresh install
 
-Qobuz still does not work on a **fresh install**: Qobuz changed the layout of
-their web bundle, so the app id Elixium reads at first run comes back empty.
-That is unchanged in this release — but it no longer prevents Elixium from
-opening, and it now says exactly that instead of failing with an internal
-error. Existing installs are unaffected, and Deezer is unaffected either way.
+Qobuz was completely dead on any new installation. Elixium reads Qobuz's app
+id out of their web player when it first runs, and Qobuz had restructured that
+file — the old `app_id` entry does not exist in it any more. Reading it
+produced nothing, that nothing was saved to the configuration and then used,
+and the result was an internal error rather than anything a person could act
+on.
+
+Elixium now reads the current layout, where the credentials sit in a map keyed
+by environment, and deliberately takes the **production** entry — the first
+match in that file belongs to a staging environment that real accounts cannot
+authenticate against. The previous layout is still understood, and there is a
+last-resort pattern behind both.
+
+A working app id already stored is never replaced. Qobuz ties each account
+token to the app id it was created with, so re-detecting and overwriting the id
+would sign existing users out with no explanation.
+
+Qobuz also publishes its signing secret openly now, so that one is tried first
+and the reconstructed ones are kept as a fallback. Reading secrets from a file
+that contained none used to throw outright; it no longer does.
+
+## The two services are independent
+
+Verified rather than assumed, on a profile with no credentials of any kind:
+Deezer search, genres, charts, new releases and playlists all work while Qobuz
+is unavailable. With Qobuz credentials present, both services work.
+
+Qobuz now requires an account for **browsing** as well as downloading — every
+Qobuz endpoint refuses an anonymous request, which is their change, not ours.
+Elixium says so directly instead of failing anonymously, and it distinguishes
+the cases that used to look identical:
+
+- **Needs an account** — no Qobuz Token has been entered.
+- **Rejected** — the token has expired, or does not match the App ID.
+- **Offline** — nothing could reach Qobuz.
+- **Timeout** — Qobuz answered too slowly.
+
+Previously all four reported "Couldn't find any valid app secrets", which sent
+people to re-enter details that were fine.

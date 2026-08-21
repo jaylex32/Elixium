@@ -91,6 +91,22 @@ export const initQobuzApi = async (token: string, app_id: number, secrets: strin
      * They lead the reader to completely different places, and only one of
      * them is worth re-entering credentials over.
      */
+    /*
+     * A 401/403 means the request was signed and sent, and Qobuz rejected the
+     * *user*, not the secret. Reporting that as "no valid app secrets" sends
+     * the reader to the wrong field entirely — the usual cause is a token that
+     * has expired, or one issued under a different app id, since Qobuz binds
+     * each token to the app id it was created with.
+     */
+    const rejected = (lastFailure as {response?: {status?: number}} | undefined)?.response?.status;
+    if (rejected === 401 || rejected === 403) {
+      const error = new Error(
+        'Qobuz rejected your credentials: the Qobuz Token may have expired, or may not match the Qobuz App ID in Settings',
+      ) as Error & {response?: {status?: number}};
+      error.response = {status: rejected};
+      throw error;
+    }
+
     const transport = transportCodeOf(lastFailure);
     if (transport) {
       const error = new Error(`Could not reach Qobuz to verify its app secret (${transport})`) as Error & {
@@ -129,7 +145,8 @@ export const qobuzRequest = async (method: string, params: object) => {
      */
     if (!(error as any)?.response) throw error;
 
-    const errorMessage = (error as any).response?.data || {};
+    const response = (error as any).response;
+    const errorMessage = response?.data || {};
     // Only map to InvalidSecret for the specific invalid-secret case
     if (
       method === 'track/getFileUrl' &&
@@ -139,7 +156,18 @@ export const qobuzRequest = async (method: string, params: object) => {
     ) {
       throw new InvalidSecret(errorMessage.message);
     }
-    throw new QobuzError(errorMessage.code ?? 0, errorMessage.message ?? 'Qobuz request failed');
+
+    /*
+     * Carry the HTTP status through. Without it a 401 — Qobuz rejecting the
+     * *user* — was indistinguishable from a signing failure, and both ended up
+     * reported as "no valid app secrets".
+     */
+    const qobuzError = new QobuzError(
+      errorMessage.code ?? 0,
+      errorMessage.message ?? 'Qobuz request failed',
+    ) as QobuzError & {response?: {status?: number}};
+    qobuzError.response = {status: response?.status};
+    throw qobuzError;
   }
 };
 

@@ -153,6 +153,7 @@ export const classifyFailure = (error: unknown): ProviderFailureKind => {
   if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
   if (message.includes('getaddrinfo') || message.includes('dns') || message.includes('network')) return 'offline';
   if (message.includes('unauthor') || message.includes('auth') || message.includes('credential')) return 'auth';
+  if (message.includes('account') || message.includes('sign in') || message.includes('rejected')) return 'auth';
   if (message.includes('token') || message.includes('secret') || message.includes('app id')) return 'config';
   if (message.includes('required') || message.includes('not set') || message.includes('missing')) return 'config';
 
