@@ -325,6 +325,9 @@ jobs:
         # between being built and being wrapped in the .dmg. This does not clear
         # Gatekeeper; it makes the app runnable once the user allows it.
         run: |
+          # This step calls electron-builder directly, so it does not get
+          # predist — and the packaging check has to run somewhere.
+          node check-packaged-files.js
           node make-icons.js
           npx electron-builder --mac dir --${{ matrix.arch }}
           app=$(find out -maxdepth 2 -name '*.app' | head -1)
