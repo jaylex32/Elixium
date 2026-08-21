@@ -431,6 +431,7 @@ const setupWebServer = () => {
     getItemTracksRest,
     getAvailableGenres: () => qobuzWatchlist.getAvailableGenres(),
     initDeezerForDownload,
+    refreshDeezerSession,
     initQobuzForSearch,
     initQobuzForDownload,
     startDownloadProcess,
@@ -844,29 +845,30 @@ const qobuzWatchlist = createQobuzWatchlistService({
   },
 });
 
-const {initDeezerForSearch, initDeezerForDownload, initQobuzForSearch, initQobuzForDownload} = createServiceRuntime({
-  options,
-  conf,
-  deezer,
-  qobuz,
-  appCommand: APP_COMMAND,
-  getIsDeezerInitialized: () => isDeezerInitialized,
-  setIsDeezerInitialized: (value) => {
-    isDeezerInitialized = value;
-  },
-  getIsQobuzInitialized: () => isQobuzInitialized,
-  setIsQobuzInitialized: (value) => {
-    isQobuzInitialized = value;
-  },
-  getIsDeezerDownloadReady: () => isDeezerDownloadReady,
-  setIsDeezerDownloadReady: (value) => {
-    isDeezerDownloadReady = value;
-  },
-  getIsQobuzDownloadReady: () => isQobuzDownloadReady,
-  setIsQobuzDownloadReady: (value) => {
-    isQobuzDownloadReady = value;
-  },
-});
+const {initDeezerForSearch, initDeezerForDownload, refreshDeezerSession, initQobuzForSearch, initQobuzForDownload} =
+  createServiceRuntime({
+    options,
+    conf,
+    deezer,
+    qobuz,
+    appCommand: APP_COMMAND,
+    getIsDeezerInitialized: () => isDeezerInitialized,
+    setIsDeezerInitialized: (value) => {
+      isDeezerInitialized = value;
+    },
+    getIsQobuzInitialized: () => isQobuzInitialized,
+    setIsQobuzInitialized: (value) => {
+      isQobuzInitialized = value;
+    },
+    getIsDeezerDownloadReady: () => isDeezerDownloadReady,
+    setIsDeezerDownloadReady: (value) => {
+      isDeezerDownloadReady = value;
+    },
+    getIsQobuzDownloadReady: () => isQobuzDownloadReady,
+    setIsQobuzDownloadReady: (value) => {
+      isQobuzDownloadReady = value;
+    },
+  });
 
 const initApp = async () => {
   if (options.web) {

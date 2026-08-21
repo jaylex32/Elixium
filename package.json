@@ -1,6 +1,6 @@
 {
   "name": "elixium",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "description": "Elixium is a Deezer and Qobuz downloader based on d-fi, offering interactive CLI, headless automation, and a full web interface.",
   "author": "Sayem Chowdhury, Jay Ross",
   "license": "MIT",

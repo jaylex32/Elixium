@@ -5,6 +5,7 @@ import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore} from '@/store/selection-store';
 import {useNavigationStore} from '@/store/navigation-store';
 import {useDownload} from '@/shared/hooks/useDownload';
+import {Button} from '@/shared/components/ui/Button';
 import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import type {Artist} from '@/types';
 
@@ -74,7 +75,7 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
 
 
       <div className="pointer-events-none absolute inset-0">
-        <div className="pointer-events-auto absolute left-2 top-2">
+        <div className="pointer-events-auto absolute left-2 top-2 z-20">
           <SelectCheckbox
             selected={isSelected}
             alwaysVisible={selectionActive}
@@ -83,40 +84,55 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
           />
         </div>
 
-        {/* Download stays at the top; play sits at the foot of the card.
-            An artist card is a portrait with a name under it, and the corner
-            over someone's face is the worst place for the control people reach
-            for most. */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            downloadDiscography();
-          }}
-          aria-label={`Download ${artist.name}'s discography`}
-          title="Download full discography"
-          className="pointer-events-auto absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-md transition-colors hover:bg-accent lg:opacity-0 lg:group-hover:opacity-100"
-        >
-          <Download size={14} />
-        </button>
+        {/*
+          The same overlay every other card uses: both actions together, in the
+          middle, appearing on hover.
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            playItem({
-              id: artist.id,
-              type: 'artist',
-              service: artist.service,
-              title: artist.name,
-              artist: artist.name,
-              cover: artist.picture,
-            });
-          }}
-          aria-label={`Play ${artist.name}`}
-          title="Play top tracks"
-          className="pointer-events-auto absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all hover:scale-105 lg:opacity-0 lg:group-hover:opacity-100"
-        >
-          <Play size={15} className="ml-0.5" />
-        </button>
+          Corners were the wrong answer twice over — one control sat over the
+          person's face and the other ended up split from it, so the pair read
+          as two unrelated things rather than the card's actions.
+
+          The scrim takes no pointer events. Unlike AlbumCard, whose overlay
+          sits inside the clickable card and lets clicks bubble, this one is a
+          sibling of the button — so anything it swallows goes nowhere, and the
+          card stops opening at all. Only the two controls opt back in.
+        */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-2xl bg-black/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-base group-hover:opacity-100">
+          <Button
+            size="icon"
+            variant="default"
+            aria-label={`Play ${artist.name}`}
+            title="Play top tracks"
+            onClick={(e) => {
+              e.stopPropagation();
+              playItem({
+                id: artist.id,
+                type: 'artist',
+                service: artist.service,
+                title: artist.name,
+                artist: artist.name,
+                cover: artist.picture,
+              });
+            }}
+            className="pointer-events-auto h-10 w-10 rounded-full shadow-lg"
+          >
+            <Play size={18} />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="secondary"
+            aria-label={`Download ${artist.name}'s discography`}
+            title="Download full discography"
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadDiscography();
+            }}
+            className="pointer-events-auto h-10 w-10 rounded-full shadow-lg"
+          >
+            <Download size={18} />
+          </Button>
+        </div>
       </div>
 
     </div>

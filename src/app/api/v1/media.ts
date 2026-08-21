@@ -23,6 +23,8 @@ export interface MediaRouteDependencies {
   deezer: any;
   qobuz: any;
   initDeezerForDownload: () => Promise<void>;
+  /** Rebuild the Deezer session even when it is believed to be ready. */
+  refreshDeezerSession: () => Promise<void>;
   initQobuzForSearch: () => Promise<void>;
   initQobuzForDownload: () => Promise<void>;
 }
@@ -131,6 +133,7 @@ export const registerMediaRoutes = ({
   deezer,
   qobuz,
   initDeezerForDownload,
+  refreshDeezerSession,
   initQobuzForSearch,
   initQobuzForDownload,
 }: MediaRouteDependencies): void => {
@@ -154,26 +157,53 @@ export const registerMediaRoutes = ({
       if (cached) return cached;
     }
 
-    await initDeezerForDownload();
-    const trackInfo = await deezer.getTrackInfo(id);
+    /*
+     * One attempt is not enough to conclude a track is unplayable.
+     *
+     * The first play after launch can land while the Deezer session is still
+     * being established, or on a request that simply times out — and because
+     * every failure here ends at the same fallback, that produced a silent
+     * 30-second preview. Worse, the session flag is sticky: once it succeeds
+     * it is never re-established, which is why closing the app and trying
+     * again played the full track and looked like a fluke.
+     *
+     * So: try, and if nothing came back, force a fresh session and try once
+     * more. Only then is the preview the honest answer.
+     */
+    const attempt = async () => {
+      const trackInfo = await deezer.getTrackInfo(id);
 
-    for (const formatCode of codes) {
-      try {
-        const urlInfo = await deezer.getTrackDownloadUrl(trackInfo, formatCode);
-        if (!urlInfo) continue;
+      for (const formatCode of codes) {
+        try {
+          const urlInfo = await deezer.getTrackDownloadUrl(trackInfo, formatCode);
+          if (!urlInfo) continue;
 
-        const raw = await got(urlInfo.trackUrl).buffer();
-        const buffer = urlInfo.isEncrypted ? deezer.decryptDownload(raw, String(trackInfo.SNG_ID)) : raw;
-        const contentType = mimeFor(formatCode === 9 ? 'flac' : 'mp3');
+          const raw = await got(urlInfo.trackUrl).buffer();
+          const buffer = urlInfo.isEncrypted ? deezer.decryptDownload(raw, String(trackInfo.SNG_ID)) : raw;
+          const contentType = mimeFor(formatCode === 9 ? 'flac' : 'mp3');
 
-        trackBufferCache.set(`deezer:${id}:${formatCode}`, buffer, contentType);
-        return {buffer, contentType};
-      } catch {
-        // WrongLicense or a dead CDN URL: try the next tier down.
+          trackBufferCache.set(`deezer:${id}:${formatCode}`, buffer, contentType);
+          return {buffer, contentType};
+        } catch {
+          // WrongLicense or a dead CDN URL: try the next tier down.
+        }
       }
-    }
+      return undefined;
+    };
 
-    return undefined;
+    await initDeezerForDownload();
+    const first = await attempt().catch(() => undefined);
+    if (first) return first;
+
+    // Nothing at any tier. Re-establish the session and give it one more go,
+    // since a stale or half-built session fails exactly like an unlicensed one.
+    try {
+      await refreshDeezerSession();
+    } catch {
+      // A refresh that fails leaves the previous session in place; the retry
+      // below is still worth making.
+    }
+    return (await attempt().catch(() => undefined)) ?? undefined;
   };
 
   /** Resolve a playable Qobuz URL, walking down qualities until one is available. */

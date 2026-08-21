@@ -261,6 +261,8 @@ function GenreContent({
                 key={r.id}
                 album={card}
                 onClick={() => openAlbum({...card, service})}
+                relations={relationsOf(r.rawData, service)}
+                service={service}
                 selectable={{
                   id: r.id,
                   type: tab === 'albums' ? 'album' : 'playlist',

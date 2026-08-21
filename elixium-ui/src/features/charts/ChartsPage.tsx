@@ -76,10 +76,6 @@ export function ChartsPage() {
   const items = useMemo(() => source.data?.pages.flat() ?? [], [source.data]);
   const effectiveKind: ChartKind = countryId ? 'tracks' : kind;
 
-  /* Qobuz has no chart API; its stand-ins are album lists only, so the other
-     tabs would silently return nothing. Saying so beats an empty grid. */
-  const qobuzUnsupported = service === 'qobuz' && !countryId && kind !== 'albums';
-
   const watchPlaylist = (id: string, title: string) => {
     const url =
       service === 'deezer' ? `https://www.deezer.com/playlist/${id}` : `https://play.qobuz.com/playlist/${id}`;
@@ -169,174 +165,165 @@ export function ChartsPage() {
         </div>
       </div>
 
-      {qobuzUnsupported && (
-        <EmptyState
-          title="Qobuz publishes album charts only"
-          hint="Switch to Deezer for track, artist and playlist charts, or pick Albums."
-        />
+      {isLoading && (effectiveKind === 'tracks' ? <ListSkeleton count={12} /> : <GridSkeleton />)}
+      {isError && <ErrorState title="Could not load charts" onRetry={() => refetch()} />}
+      {!isLoading && !isError && items.length === 0 && (
+        <EmptyState title="No chart entries" hint="Try a different genre." />
       )}
 
-      {!qobuzUnsupported && (
+      {!isLoading && !isError && items.length > 0 && effectiveKind === 'tracks' && (
         <>
-          {isLoading && (effectiveKind === 'tracks' ? <ListSkeleton count={12} /> : <GridSkeleton />)}
-          {isError && <ErrorState title="Could not load charts" onRetry={() => refetch()} />}
-          {!isLoading && !isError && items.length === 0 && (
-            <EmptyState title="No chart entries" hint="Try a different genre." />
-          )}
-
-          {!isLoading && !isError && items.length > 0 && effectiveKind === 'tracks' && (
-            <>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="secondary" onClick={() => playAll(0)}>
-                  <Play size={13} />
-                  Play chart
-                </Button>
-                <SelectionToggle items={selectables} />
-              </div>
-              <div className="space-y-0.5">
-                {items.map((r, i) => {
-                  const cover = extractCover(r.rawData, service);
-                  const isActive = currentTrack?.id === r.id;
-                  return (
-                    <div
-                      key={`${r.id}-${i}`}
-                      className={cn(
-                        'rows-track group flex items-center gap-3 rounded-md px-2 py-2 transition-colors sm:px-3',
-                        isActive ? 'bg-accent/10' : 'hover:bg-surface-bg',
-                      )}
-                    >
-                      {/* Chart position is the point of a chart — until you are
-                          picking tracks, when the slot becomes the checkbox
-                          rather than adding a column and shifting every row. */}
-                      {selectionActive ? (
-                        <span className="flex w-7 shrink-0 justify-center">
-                          <SelectCheckbox
-                            selected={Boolean(selectionItems[`${service}:track:${r.id}`])}
-                            alwaysVisible
-                            label={`Select ${r.title}`}
-                            onToggle={() =>
-                              toggleSelect({id: r.id, type: 'track', service, title: r.title, artist: r.artist, cover})
-                            }
-                          />
-                        </span>
-                      ) : (
-                        <span className="w-7 shrink-0 text-right text-sm font-semibold tabular-nums text-text-muted">
-                          {i + 1}
-                        </span>
-                      )}
-
-                      <button onClick={() => playAll(i)} className="relative h-11 w-11 shrink-0" aria-label={`Play ${r.title}`}>
-                        {cover ? (
-                          <img src={cover} alt="" loading="lazy" className="h-11 w-11 rounded-sm object-cover" />
-                        ) : (
-                          <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-surface-bg">
-                            <Music2 size={16} className="text-text-muted" />
-                          </span>
-                        )}
-                      </button>
-
-                      <div className="min-w-0 flex-1">
-                        <p className={cn('flex items-center gap-1.5 text-sm font-medium', isActive ? 'text-accent' : 'text-text-primary')}>
-                          <span className="truncate">{r.title}</span>
-                          {isExplicit(r.rawData) && <ExplicitBadge />}
-                        </p>
-                        <p className="truncate text-xs text-text-muted">
-                          <ArtistLink name={r.artist} relations={relationsOf(r.rawData, service)} service={service} />
-                        </p>
-                      </div>
-
-                      {toSeconds(r.duration) > 0 && (
-                        <span className="shrink-0 text-xs tabular-nums text-text-muted">
-                          {formatDuration(toSeconds(r.duration))}
-                        </span>
-                      )}
-
-                      <FavoriteButton
-                        item={{id: r.id, type: 'track', service, title: r.title, artist: r.artist, cover}}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={() => playAll(0)}>
+              <Play size={13} />
+              Play chart
+            </Button>
+            <SelectionToggle items={selectables} />
+          </div>
+          <div className="space-y-0.5">
+            {items.map((r, i) => {
+              const cover = extractCover(r.rawData, service);
+              const isActive = currentTrack?.id === r.id;
+              return (
+                <div
+                  key={`${r.id}-${i}`}
+                  className={cn(
+                    'rows-track group flex items-center gap-3 rounded-md px-2 py-2 transition-colors sm:px-3',
+                    isActive ? 'bg-accent/10' : 'hover:bg-surface-bg',
+                  )}
+                >
+                  {/* Chart position is the point of a chart — until you are
+                      picking tracks, when the slot becomes the checkbox
+                      rather than adding a column and shifting every row. */}
+                  {selectionActive ? (
+                    <span className="flex w-7 shrink-0 justify-center">
+                      <SelectCheckbox
+                        selected={Boolean(selectionItems[`${service}:track:${r.id}`])}
+                        alwaysVisible
+                        label={`Select ${r.title}`}
+                        onToggle={() =>
+                          toggleSelect({id: r.id, type: 'track', service, title: r.title, artist: r.artist, cover})
+                        }
                       />
+                    </span>
+                  ) : (
+                    <span className="w-7 shrink-0 text-right text-sm font-semibold tabular-nums text-text-muted">
+                      {i + 1}
+                    </span>
+                  )}
 
-                      <TrackActions
-                        track={{id: r.id, title: r.title, artist: r.artist, album: r.album, cover, duration: toSeconds(r.duration), service}}
-                        relations={relationsOf(r.rawData, service)}
-                        onPlay={() => playAll(i)}
-                        onDownload={() => download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service})}
-                        className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+                  <button onClick={() => playAll(i)} className="relative h-11 w-11 shrink-0" aria-label={`Play ${r.title}`}>
+                    {cover ? (
+                      <img src={cover} alt="" loading="lazy" className="h-11 w-11 rounded-sm object-cover" />
+                    ) : (
+                      <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-surface-bg">
+                        <Music2 size={16} className="text-text-muted" />
+                      </span>
+                    )}
+                  </button>
 
-          {!isLoading && !isError && items.length > 0 && effectiveKind !== 'tracks' && (
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <SelectionToggle items={selectables} />
-            </div>
-          )}
+                  <div className="min-w-0 flex-1">
+                    <p className={cn('flex items-center gap-1.5 text-sm font-medium', isActive ? 'text-accent' : 'text-text-primary')}>
+                      <span className="truncate">{r.title}</span>
+                      {isExplicit(r.rawData) && <ExplicitBadge />}
+                    </p>
+                    <p className="truncate text-xs text-text-muted">
+                      <ArtistLink name={r.artist} relations={relationsOf(r.rawData, service)} service={service} />
+                    </p>
+                  </div>
 
-          {!isLoading && !isError && items.length > 0 && effectiveKind === 'artists' && (
-            <div className={GRID}>
-              {items.map((r) => (
-                <ArtistCard
-                  key={r.id}
-                  artist={{id: r.id, name: r.title, picture: extractCover(r.rawData, service), service}}
-                />
-              ))}
-            </div>
-          )}
+                  {toSeconds(r.duration) > 0 && (
+                    <span className="shrink-0 text-xs tabular-nums text-text-muted">
+                      {formatDuration(toSeconds(r.duration))}
+                    </span>
+                  )}
 
-          {!isLoading && !isError && items.length > 0 && (effectiveKind === 'albums' || effectiveKind === 'playlists') && (
-            <div className={GRID}>
-              {items.map((r) => {
-                const card: AlbumCardData = {
+                  <FavoriteButton
+                    item={{id: r.id, type: 'track', service, title: r.title, artist: r.artist, cover}}
+                  />
+
+                  <TrackActions
+                    track={{id: r.id, title: r.title, artist: r.artist, album: r.album, cover, duration: toSeconds(r.duration), service}}
+                    relations={relationsOf(r.rawData, service)}
+                    onPlay={() => playAll(i)}
+                    onDownload={() => download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service})}
+                    className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {!isLoading && !isError && items.length > 0 && effectiveKind !== 'tracks' && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <SelectionToggle items={selectables} />
+        </div>
+      )}
+
+      {!isLoading && !isError && items.length > 0 && effectiveKind === 'artists' && (
+        <div className={GRID}>
+          {items.map((r) => (
+            <ArtistCard
+              key={r.id}
+              artist={{id: r.id, name: r.title, picture: extractCover(r.rawData, service), service}}
+            />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && !isError && items.length > 0 && (effectiveKind === 'albums' || effectiveKind === 'playlists') && (
+        <div className={GRID}>
+          {items.map((r) => {
+            const card: AlbumCardData = {
+              id: r.id,
+              title: r.title,
+              artist: r.artist,
+              cover: extractCover(r.rawData, service),
+              year: r.year ?? undefined,
+              type: effectiveKind === 'albums' ? 'album' : 'playlist',
+              explicit: isExplicit(r.rawData),
+            };
+            return (
+              <AlbumCard
+                key={r.id}
+                album={card}
+                onClick={() => openAlbum({...card, service})}
+                relations={relationsOf(r.rawData, service)}
+                service={service}
+                onWatch={effectiveKind === 'playlists' ? () => watchPlaylist(r.id, r.title) : undefined}
+                selectable={{
                   id: r.id,
+                  type: effectiveKind === 'albums' ? 'album' : 'playlist',
+                  service,
                   title: r.title,
                   artist: r.artist,
-                  cover: extractCover(r.rawData, service),
-                  year: r.year ?? undefined,
-                  type: effectiveKind === 'albums' ? 'album' : 'playlist',
-                  explicit: isExplicit(r.rawData),
-                };
-                return (
-                  <AlbumCard
-                    key={r.id}
-                    album={card}
-                    onClick={() => openAlbum({...card, service})}
-                    onWatch={effectiveKind === 'playlists' ? () => watchPlaylist(r.id, r.title) : undefined}
-                    selectable={{
-                      id: r.id,
-                      type: effectiveKind === 'albums' ? 'album' : 'playlist',
-                      service,
-                      title: r.title,
-                      artist: r.artist,
-                      cover: card.cover,
-                    }}
-                    onDownload={() =>
-                      download({
-                        id: r.id,
-                        type: effectiveKind === 'albums' ? 'album' : 'playlist',
-                        title: r.title,
-                        artist: r.artist,
-                        cover: card.cover,
-                        service,
-                      })
-                    }
-                  />
-                );
-              })}
-            </div>
-          )}
+                  cover: card.cover,
+                }}
+                onDownload={() =>
+                  download({
+                    id: r.id,
+                    type: effectiveKind === 'albums' ? 'album' : 'playlist',
+                    title: r.title,
+                    artist: r.artist,
+                    cover: card.cover,
+                    service,
+                  })
+                }
+              />
+            );
+          })}
+        </div>
+      )}
 
-          {!isLoading && !isError && items.length > 0 && (
-            <InfiniteSentinel
-              hasMore={Boolean(hasNextPage)}
-              loading={isFetchingNextPage}
-              onLoadMore={fetchNextPage}
-              endLabel={`End of the chart — ${items.length} entries`}
-            />
-          )}
-        </>
+      {!isLoading && !isError && items.length > 0 && (
+        <InfiniteSentinel
+          hasMore={Boolean(hasNextPage)}
+          loading={isFetchingNextPage}
+          onLoadMore={fetchNextPage}
+          endLabel={`End of the chart — ${items.length} entries`}
+        />
       )}
 
     </div>

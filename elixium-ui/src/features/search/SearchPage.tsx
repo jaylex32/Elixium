@@ -520,6 +520,8 @@ export function SearchPage() {
                         key={r.id}
                         album={album}
                         onClick={() => openAlbum({...album, service})}
+                        relations={relationsOf(r.rawData, service)}
+                        service={service}
                         selectable={{id: r.id, type: 'album', service, title: r.title, artist: r.artist, cover: album.cover}}
                         onDownload={() =>
                           download({id: r.id, type: 'album', title: r.title, artist: r.artist, cover: album.cover, service})
@@ -574,6 +576,8 @@ export function SearchPage() {
                         key={r.id}
                         album={card}
                         onClick={() => openAlbum({...card, service})}
+                        relations={relationsOf(r.rawData, service)}
+                        service={service}
                         selectable={{id: r.id, type: 'playlist', service, title: r.title, artist: r.artist, cover: card.cover}}
                         onDownload={() =>
                           download({id: r.id, type: 'playlist', title: r.title, artist: r.artist, cover: card.cover, service})
