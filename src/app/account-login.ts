@@ -174,17 +174,35 @@ export const loginToDeezer = async (
   }
 
   /*
-   * The access token is not the ARL. Opening a session with it makes Deezer
-   * issue the session cookie that the private API answers to, and that API is
-   * the only thing that will hand over an ARL.
+   * The access token is not the ARL, and there is no endpoint that trades one
+   * for the other directly. Three steps, in this order:
+   *
+   *  1. Ask the private API for a session. Only `gw-light` mints a `sid`
+   *     cookie; the platform endpoint below does not, which is why calling it
+   *     first produced a token and then "no session" — the mistake this
+   *     replaces.
+   *  2. Present the access token *against that session*, which binds the
+   *     anonymous session to the account.
+   *  3. Ask the now-authenticated session for its ARL.
    */
-  const session = await http.get('https://api.deezer.com/platform/generic/track/3135556', {
-    headers: {Authorization: `Bearer ${accessToken}`},
+  const anonymous = await http.get('https://www.deezer.com/ajax/gw-light.php', {
+    params: {method: 'deezer.getUserData', input: '3', api_version: '1.0', api_token: ''},
   });
 
-  const sid = readCookie(session.headers?.['set-cookie'], 'sid');
+  const sid = readCookie(anonymous.headers?.['set-cookie'], 'sid');
   if (!sid) {
-    throw new LoginError('service', 'Deezer signed in but did not open a session — paste your ARL in Settings instead');
+    throw new LoginError('service', 'Deezer would not start a session — paste your ARL in Settings instead');
+  }
+
+  const bound = await http.get('https://api.deezer.com/platform/generic/track/3135556', {
+    headers: {Authorization: `Bearer ${accessToken}`, Cookie: `sid=${sid}`},
+  });
+
+  if (bound.status >= 400) {
+    throw new LoginError(
+      'service',
+      `Deezer signed in but refused to attach the session (${bound.status}) — paste your ARL in Settings instead`,
+    );
   }
 
   const arlResponse = await http.get('https://www.deezer.com/ajax/gw-light.php', {
@@ -194,7 +212,16 @@ export const loginToDeezer = async (
 
   const arl = arlResponse.data?.results;
   if (typeof arl !== 'string' || !arl) {
-    throw new LoginError('service', 'Deezer signed in but did not return an ARL — paste it in Settings instead');
+    /*
+     * Name what came back. "Did not return an ARL" on its own gives whoever
+     * reads the report nothing to work from, and this step is the one that
+     * cannot be exercised without a real account.
+     */
+    const detail = JSON.stringify(arlResponse.data?.error ?? arlResponse.data ?? {}).slice(0, 120);
+    throw new LoginError(
+      'service',
+      `Deezer signed in but would not hand over an ARL (${detail}) — paste it in Settings instead`,
+    );
   }
 
   return {arl};

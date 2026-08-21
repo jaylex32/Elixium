@@ -21,7 +21,10 @@ const clientOf = (routes: Record<string, unknown>, record?: Array<{url: string; 
   ({
     get: async (url: string, config: any) => {
       record?.push({url, config});
-      const key = Object.keys(routes).find((route) => url.includes(route));
+      // gw-light is called twice with different methods, so the params are
+      // part of the address as far as routing here is concerned.
+      const target = url + ' ' + JSON.stringify(config?.params ?? {});
+      const key = Object.keys(routes).find((route) => target.includes(route));
       if (!key) throw Object.assign(new Error('unexpected url ' + url), {code: 'ENOTFOUND'});
       const value = routes[key];
       if (value instanceof Error) throw value;
@@ -33,8 +36,13 @@ const clientOf = (routes: Record<string, unknown>, record?: Array<{url: string; 
 
 const deezerHappyPath = {
   'user_auth.php': {status: 200, data: {access_token: 'access-123'}},
-  'api.deezer.com': {status: 200, data: {}, headers: {'set-cookie': ['sid=session-abc; Path=/; HttpOnly']}},
-  'gw-light.php': {status: 200, data: {results: 'the-arl-value'}},
+  'deezer.getUserData': {
+    status: 200,
+    data: {results: {}},
+    headers: {'set-cookie': ['sid=session-abc; Path=/; HttpOnly']},
+  },
+  'api.deezer.com': {status: 200, data: {}},
+  'user.getArl': {status: 200, data: {results: 'the-arl-value'}},
 };
 
 test('a Deezer sign-in returns the ARL', async (t) => {
@@ -107,7 +115,8 @@ test('a missing session cookie is reported as a service problem, not a credentia
       'hunter2',
       clientOf({
         'user_auth.php': {status: 200, data: {access_token: 'access-123'}},
-        'api.deezer.com': {status: 200, data: {}, headers: {}},
+        // No session cookie comes back at all.
+        'deezer.getUserData': {status: 200, data: {results: {}}, headers: {}},
       }),
     ),
   )) as LoginError;
@@ -119,7 +128,7 @@ test('a session that yields no ARL is reported as a service problem', async (t) 
     loginToDeezer(
       'someone@example.com',
       'hunter2',
-      clientOf({...deezerHappyPath, 'gw-light.php': {status: 200, data: {results: ''}}}),
+      clientOf({...deezerHappyPath, 'user.getArl': {status: 200, data: {error: {NEED_USER_AUTH_REQUIRED: 'x'}}}}),
     ),
   )) as LoginError;
   t.is(error.stage, 'service');
@@ -155,8 +164,9 @@ test('a success returned as a query string is read, not only JSON', async (t) =>
     'hunter2',
     clientOf({
       'user_auth.php': {status: 200, data: 'access_token=tok-from-query&expires=0'},
-      'api.deezer.com': {status: 200, data: {}, headers: {'set-cookie': ['sid=session-abc; Path=/']}},
-      'gw-light.php': {status: 200, data: {results: 'the-arl-value'}},
+      'deezer.getUserData': {status: 200, data: {results: {}}, headers: {'set-cookie': ['sid=session-abc; Path=/']}},
+      'api.deezer.com': {status: 200, data: {}},
+      'user.getArl': {status: 200, data: {results: 'the-arl-value'}},
     }),
   );
   t.is(result.arl, 'the-arl-value');
