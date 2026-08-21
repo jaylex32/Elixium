@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import {useDiscovery} from '@/shared/lib/api';
 import {cn} from '@/shared/lib/utils';
+import {relationsOf} from '@/shared/lib/relations';
 import {extractCover} from '@/shared/lib/cover';
 import {isExplicit} from '@/shared/lib/explicit';
 import {useAppStore, type Page} from '@/store/app-store';
@@ -198,9 +199,11 @@ function DiscoverySection({
 }) {
   const {data = [], isLoading, isError, refetch} = useDiscovery(service, type);
   const {download} = useDownload();
+  const openAlbum = useNavigationStore((s) => s.openAlbum);
   const [expanded, setExpanded] = useState(false);
 
-  const items = data.filter((item) => item.id !== excludeId).map((item) => toAlbum(item, service));
+  const raw = data.filter((item) => item.id !== excludeId);
+  const items = raw.map((item) => toAlbum(item, service));
 
   /*
    * Artist feeds return people, not releases. Rendering them as album cards
@@ -209,7 +212,41 @@ function DiscoverySection({
    */
   const isArtistRow = items.length > 0 && items.every((item) => item.type === 'artist');
 
-  const renderCard = (album: AlbumCardData) =>
+  /*
+   * Track feeds are the same mistake with a different id.
+   *
+   * Top Tracks returns tracks, and every card treated one as an album: the
+   * click opened the album view with a track id, which resolves to nothing and
+   * reported "Could not load tracks", while the checkbox and the download
+   * button both queued it as an album.
+   */
+  const isTrackRow = items.length > 0 && items.every((item) => item.type === 'track');
+
+  /**
+   * Open the album a charting track belongs to.
+   *
+   * Clicking one used to open the album view with the *track's* id, which
+   * resolves to nothing and reported "Could not load tracks". The track's own
+   * payload carries the album it came from, so the click opens that — the same
+   * thing it always did, with the id it should have been using.
+   */
+  const onSelectTrack = (index: number) => {
+    const item = raw[index];
+    if (!item) return;
+    const relations = relationsOf(item.rawData, service);
+    if (!relations.albumId) return;
+
+    openAlbum({
+      id: relations.albumId,
+      title: relations.albumTitle ?? item.title,
+      artist: relations.artistName ?? item.artist,
+      cover: relations.albumCover ?? extractCover(item.rawData, service),
+      type: 'album',
+      service,
+    });
+  };
+
+  const renderCard = (album: AlbumCardData, index: number) =>
     isArtistRow ? (
       <ArtistCard
         key={album.id}
@@ -221,10 +258,13 @@ function DiscoverySection({
         key={album.id}
         album={album}
         className={expanded ? undefined : 'w-[46vw] shrink-0 sm:w-44'}
-        onClick={() => onSelect(album)}
+        onClick={() => (isTrackRow ? onSelectTrack(index) : onSelect(album))}
         selectable={{
           id: album.id,
-          type: (album.type === 'playlist' ? 'playlist' : 'album') as 'album' | 'playlist',
+          type: (isTrackRow ? 'track' : album.type === 'playlist' ? 'playlist' : 'album') as
+            | 'track'
+            | 'album'
+            | 'playlist',
           service,
           title: album.title,
           artist: album.artist,
@@ -233,7 +273,7 @@ function DiscoverySection({
         onDownload={() =>
           download({
             id: album.id,
-            type: album.type === 'playlist' ? 'playlist' : 'album',
+            type: isTrackRow ? 'track' : album.type === 'playlist' ? 'playlist' : 'album',
             title: album.title,
             artist: album.artist,
             cover: album.cover,

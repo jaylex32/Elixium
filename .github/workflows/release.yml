@@ -329,8 +329,23 @@ jobs:
           npx electron-builder --mac dir --${{ matrix.arch }}
           app=$(find out -maxdepth 2 -name '*.app' | head -1)
           [ -n "$app" ] || { echo "::error::no .app was produced"; exit 1; }
-          codesign --force --deep --sign - "$app"
-          codesign --verify --verbose "$app"
+          # Inside-out, not --deep. Apple deprecates --deep precisely because it
+          # re-signs nested code in the wrong order: the outer bundle is sealed
+          # before its frameworks and helpers are, so their signatures no longer
+          # match what the app seals. The app itself still launches, and then the
+          # process it spawns — the same binary, re-executed as Node — is killed
+          # by the kernel for a signature that does not verify. That reads as the
+          # engine never starting, which is what people were seeing.
+          find "$app/Contents/Frameworks" -name '*.framework' -maxdepth 1 -print0 2>/dev/null |
+            xargs -0 -I {} codesign --force --sign - {} || true
+          find "$app/Contents/Frameworks" -name '*.app' -maxdepth 1 -print0 2>/dev/null |
+            xargs -0 -I {} codesign --force --sign - {} || true
+          find "$app/Contents/Frameworks" \( -name '*.dylib' -o -name '*.node' \) -print0 2>/dev/null |
+            xargs -0 -I {} codesign --force --sign - {} || true
+          codesign --force --sign - "$app"
+
+          # --deep on verify is fine: there it only means "check nested code too".
+          codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | grep -q 'Signature=adhoc' \
             || { echo "::error::desktop app is not signed"; exit 1; }
           npx electron-builder --mac dmg zip --${{ matrix.arch }} --prepackaged "$app"

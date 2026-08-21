@@ -22,6 +22,7 @@ const {createServer} = require('net');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const {engineLogTail} = require('./engine-log');
 
 /**
  * Where the server's config, downloads and state live.
@@ -34,6 +35,10 @@ let dataDir = '';
 let serverProcess = null;
 let serverPort = 0;
 let mainWindow = null;
+/** True once /health has answered, so a later exit is a crash and not a boot failure. */
+let engineReady = false;
+/** How the engine died while starting, when it did. */
+let engineExit = null;
 /** Set during quit so the exit handler does not treat it as a crash. */
 let quitting = false;
 
@@ -116,7 +121,15 @@ const resolveServerEntry = () => {
 };
 
 /** Poll /health until the server answers, so the window never shows a dead page. */
-const waitForServer = (port, timeoutMs = 60_000) =>
+/*
+ * Two minutes, not one.
+ *
+ * The first launch on macOS is the slow one: Gatekeeper scans a freshly
+ * downloaded app before its child process is allowed to run, and that alone
+ * can take longer than a minute — reported to the reader as the engine being
+ * at fault.
+ */
+const waitForServer = (port, timeoutMs = 120_000) =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
 
@@ -134,7 +147,29 @@ const waitForServer = (port, timeoutMs = 60_000) =>
     };
 
     const retry = () => {
-      if (Date.now() > deadline) return reject(new Error('The Elixium engine did not start in time.'));
+      /*
+       * An engine that has already died is never going to answer.
+       *
+       * Waiting out the full two minutes for a process that exited in the
+       * first second told the reader the wrong thing — that it was slow,
+       * rather than that it had failed and why.
+       */
+      if (engineExit) {
+        const reason = engineExit.tail
+          ? `The engine stopped with exit code ${engineExit.code}.\n\nIts last words were:\n${engineExit.tail}`
+          : `The engine stopped with exit code ${engineExit.code} without writing a log.`;
+        return reject(new Error(reason));
+      }
+      if (Date.now() > deadline) {
+        const tail = engineLogTail(dataDir);
+        return reject(
+          new Error(
+            tail
+              ? `The Elixium engine did not start in time.\n\nIts last words were:\n${tail}`
+              : 'The Elixium engine did not start in time, and wrote no log at all.',
+          ),
+        );
+      }
       setTimeout(attempt, 300);
     };
 
@@ -188,6 +223,17 @@ const startServer = async () => {
 
   serverProcess.on('exit', (code) => {
     serverProcess = null;
+    /*
+     * A failure to boot used to be invisible.
+     *
+     * When the engine died before the window existed, this returned straight
+     * away — so the only thing anyone saw was the startup timeout two minutes
+     * later, with the real reason sitting unread in engine.log.
+     */
+    if (!quitting && !engineReady) {
+      engineExit = {code, tail: engineLogTail(dataDir)};
+      return;
+    }
     if (quitting || !mainWindow) return;
     // A crash after startup should say so rather than leaving a blank window.
     dialog
@@ -202,6 +248,7 @@ const startServer = async () => {
   });
 
   await waitForServer(serverPort);
+  engineReady = true;
 };
 
 /**
@@ -423,7 +470,30 @@ if (!app.requestSingleInstanceLock()) {
       buildMenu();
       createWindow();
     } catch (error) {
-      dialog.showErrorBox('Elixium could not start', String(error && error.message ? error.message : error));
+      /*
+       * Show the reason, and offer the log rather than describing where it is.
+       *
+       * showErrorBox takes a bare string and gives the reader nothing to act
+       * on. Anyone whose app will not open needs the engine's own words and a
+       * way to send them on, which is the difference between a report that can
+       * be fixed and "it does not work".
+       */
+      const detail = String(error && error.message ? error.message : error);
+      const choice = await dialog.showMessageBox({
+        type: 'error',
+        title: 'Elixium could not start',
+        message: 'Elixium could not start',
+        detail,
+        buttons: ['Open the log folder', 'Quit'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (choice.response === 0) {
+        // Reveal rather than open: the log is appended to while the reader is
+        // looking at it, and the folder holds the config beside it.
+        shell.openPath(dataDir);
+      }
       app.quit();
     }
   });
