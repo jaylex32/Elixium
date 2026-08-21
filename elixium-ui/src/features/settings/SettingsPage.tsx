@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, ArrowUpCircle, HardDrive, Sliders, RefreshCw, Mic2, FolderTree, FolderSearch, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
@@ -10,6 +10,7 @@ import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS, type Sett
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
+import {SignIn} from './SignIn';
 import {desktop} from '@/shared/lib/desktop';
 import {ApiAccess} from './ApiAccess';
 import {QualityProfile} from './QualityProfile';
@@ -135,7 +136,9 @@ export function SettingsPage() {
    */
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  /* Re-runnable: signing in writes new credentials server side, and the
+     fields below should show them without a page reload. */
+  const loadSettings = useCallback(() => {
     const socket = getSocket();
     socket.emit('getSettings');
     socket.once(
@@ -191,7 +194,13 @@ export function SettingsPage() {
         markClean();
       },
     );
-  }, []);
+    /* `update` and `markClean` are zustand actions, created once in the
+       store, so listing them cannot re-trigger this. */
+  }, [update, markClean]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const handleSave = () => {
     const socket = getSocket();
@@ -268,6 +277,10 @@ export function SettingsPage() {
 
       <Section title="Authentication" icon={Shield}>
         <ConnectionTest />
+        <div className="h-px bg-border" />
+        {/* Signing in fills the fields below, which otherwise mean digging
+            a cookie out of browser developer tools. */}
+        <SignIn onSignedIn={loadSettings} />
         <div className="h-px bg-border" />
         <Field label="Deezer ARL" description="From browser cookies (deezer.com)">
           <SecretInput

@@ -16,9 +16,17 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (r) => r,
   (e) => {
-    // Surface a refusal distinctly so the UI can ask for a token rather than
-    // reporting a generic failure the user cannot act on.
-    if (e.response?.status === 401) {
+    /*
+     * A 401 normally means this Elixium server wants an API token, and the
+     * UI should ask for one.
+     *
+     * Signing in to Deezer or Qobuz also answers 401 when the *service*
+     * rejects the credentials, which is a completely different thing. That
+     * endpoint marks its errors with a `stage`, so an unmarked 401 is the
+     * server's and a marked one belongs to the caller — otherwise a wrong
+     * password was reported to the user as the untranslatable 'auth_required'.
+     */
+    if (e.response?.status === 401 && !e.response?.data?.stage) {
       notifyAuthRequired();
       return Promise.reject(new Error('auth_required'));
     }

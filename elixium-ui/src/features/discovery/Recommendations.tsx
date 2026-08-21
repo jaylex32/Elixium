@@ -9,6 +9,8 @@ import {useSearchHistoryStore} from '@/store/search-history-store';
 import {useNavigationStore} from '@/store/navigation-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
+import {relationsOf} from '@/shared/lib/relations';
 import {Button} from '@/shared/components/ui/Button';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import type {RawSearchResult, Service} from '@/types';
@@ -33,6 +35,8 @@ const PER_QUERY = 8;
 
 interface Suggestion {
   album: AlbumCardData;
+  /** The service payload, for the artist link and for playing. */
+  rawData?: Record<string, unknown>;
   /** The search this came from, shown so the row is explicable. */
   from: string;
 }
@@ -64,6 +68,7 @@ export function Recommendations({service}: {service: Service}) {
   const entries = useSearchHistoryStore((s) => s.entries);
   const openAlbum = useNavigationStore((s) => s.openAlbum);
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
 
   // Stable across renders so the query key does not change on every paint.
   const queries = useMemo(
@@ -91,6 +96,7 @@ export function Recommendations({service}: {service: Service}) {
                 type: 'album',
                 explicit: isExplicit(r.rawData),
               } as AlbumCardData,
+              rawData: r.rawData as Record<string, unknown> | undefined,
             }));
           } catch {
             // One failed search should not empty the whole row.
@@ -142,11 +148,23 @@ export function Recommendations({service}: {service: Service}) {
                 <CardSkeleton />
               </div>
             ))
-          : data.map(({album, from}) => (
+          : data.map(({album, from, rawData}) => (
               <div key={`${album.id}-${from}`} className="w-[150px] shrink-0 sm:w-[170px]">
                 <AlbumCard
                   album={album}
                   onClick={() => openAlbum({...album, service})}
+                  relations={relationsOf(rawData, service)}
+                  service={service}
+                  onPlay={() =>
+                    playItem({
+                      id: album.id,
+                      type: 'album',
+                      service,
+                      title: album.title,
+                      artist: album.artist,
+                      cover: album.cover,
+                    })
+                  }
                   selectable={{
                     id: album.id,
                     type: 'album',

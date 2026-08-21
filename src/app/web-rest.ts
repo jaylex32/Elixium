@@ -34,6 +34,8 @@ interface WebRestDependencies {
   initQobuzForSearch: () => Promise<void>;
   makeHttpRequest: (url: string) => Promise<any>;
   initQobuzForDownload: () => Promise<void>;
+  /** Exchange an email and password for a stored credential. */
+  signInToService: (service: string, email: string, password: string) => Promise<{service: string; stored: string[]}>;
   startDownloadProcess: (
     downloadQueue: any[],
     quality: string,
@@ -61,8 +63,41 @@ export const registerWebRestRoutes = ({
   initQobuzForSearch,
   makeHttpRequest,
   initQobuzForDownload,
+  signInToService,
   startDownloadProcess,
 }: WebRestDependencies) => {
+  /*
+   * POST /api/auth/sign-in
+   *
+   * Body, never query parameters: a password in a URL ends up in access logs,
+   * proxy logs and shell history. Nothing here is stored except the credential
+   * the service hands back — the password is used for the exchange and dropped.
+   */
+  app.post('/api/auth/sign-in', async (req, res) => {
+    try {
+      const service = String(req.body?.service || '').toLowerCase();
+      const email = String(req.body?.email || '');
+      const password = String(req.body?.password || '');
+
+      if (service !== 'deezer' && service !== 'qobuz') {
+        return res.status(400).json({error: 'Choose either Deezer or Qobuz'});
+      }
+
+      const result = await signInToService(service, email, password);
+      return res.json(result);
+    } catch (error: any) {
+      /*
+       * The stage travels with the message so the interface can tell a typo
+       * from an account that cannot use this at all — the second needs the
+       * manual field, and telling someone to re-check their password when the
+       * account has none is how an evening gets wasted.
+       */
+      const stage = error?.stage;
+      const status = stage === 'credentials' ? 401 : stage === 'unsupported' ? 409 : 502;
+      return res.status(status).json({error: error?.message || 'Sign-in failed', stage: stage || 'service'});
+    }
+  });
+
   app.post('/api/search', async (req, res) => {
     try {
       const {query, service, type, limit = 50, offset = 0} = req.body;

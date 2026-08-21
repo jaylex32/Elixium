@@ -130,6 +130,25 @@ export const createServiceRuntime = ({
     return {appId, secrets: spoofer.get_secrets()};
   };
 
+  /**
+   * The app id to use, preferring one already stored.
+   *
+   * Signing in needs this before it has a token, because Qobuz ties the token
+   * it issues to the id the login was made with. Reusing a stored id keeps an
+   * existing token and a newly issued one interchangeable.
+   */
+  const ensureQobuzAppId = async (): Promise<number> => {
+    const cached = usableAppId(conf.get('qobuz.app_id'));
+    if (cached !== null) return cached;
+
+    const scraped = await scrapeQobuzCredentials();
+    conf.set('qobuz.app_id', scraped.appId);
+    if (scraped.secrets.length > 0 && !((conf.get('qobuz.secrets') as string) || '')) {
+      conf.set('qobuz.secrets', scraped.secrets.join(','));
+    }
+    return scraped.appId;
+  };
+
   const initQobuzForSearch = async () => {
     if (getIsQobuzInitialized()) return;
 
@@ -219,5 +238,6 @@ export const createServiceRuntime = ({
     refreshDeezerSession,
     initQobuzForSearch,
     initQobuzForDownload,
+    ensureQobuzAppId,
   };
 };
