@@ -32,7 +32,7 @@ const clientOf = (routes: Record<string, unknown>, record?: Array<{url: string; 
 // ── Deezer ───────────────────────────────────────────────────────────────────
 
 const deezerHappyPath = {
-  'auth.deezer.com': {status: 200, data: {access_token: 'access-123'}},
+  'user_auth.php': {status: 200, data: {access_token: 'access-123'}},
   'api.deezer.com': {status: 200, data: {}, headers: {'set-cookie': ['sid=session-abc; Path=/; HttpOnly']}},
   'gw-light.php': {status: 200, data: {results: 'the-arl-value'}},
 };
@@ -46,8 +46,10 @@ test('the Deezer password is hashed, never sent in the clear', async (t) => {
   const calls: Array<{url: string; config: any}> = [];
   await loginToDeezer('someone@example.com', 'hunter2', clientOf(deezerHappyPath, calls));
 
-  const auth = calls.find((call) => call.url.includes('auth.deezer.com'));
+  const auth = calls.find((call) => call.url.includes('user_auth.php'));
   t.is(auth?.config.params.password, md5('hunter2'));
+  t.is(auth?.config.params.login, 'someone@example.com');
+  t.is(auth?.config.params.app_id, '447462');
   t.not(auth?.config.params.password, 'hunter2');
   t.is(JSON.stringify(calls).includes('hunter2'), false, 'the raw password must not appear in any request');
 });
@@ -56,7 +58,7 @@ test('the Deezer request carries the signature the endpoint requires', async (t)
   const calls: Array<{url: string; config: any}> = [];
   await loginToDeezer('someone@example.com', 'hunter2', clientOf(deezerHappyPath, calls));
 
-  const auth = calls.find((call) => call.url.includes('auth.deezer.com'));
+  const auth = calls.find((call) => call.url.includes('user_auth.php'));
   const expected = md5(`447462someone@example.com${md5('hunter2')}a83bf7f38ad2f137e444727cfc3775cf`);
   t.is(auth?.config.params.hash, expected);
 });
@@ -66,7 +68,7 @@ test('a wrong Deezer password is reported as wrong credentials', async (t) => {
     loginToDeezer(
       'someone@example.com',
       'wrong',
-      clientOf({'auth.deezer.com': {status: 200, data: {error: {type: 'invalid_credentials'}}}}),
+      clientOf({'user_auth.php': {status: 200, data: {error: {type: 'invalid_credentials'}}}}),
     ),
   )) as LoginError;
   t.is(error.stage, 'credentials');
@@ -78,7 +80,7 @@ test('a captcha challenge is reported as unsupported, not as a bad password', as
     loginToDeezer(
       'someone@example.com',
       'hunter2',
-      clientOf({'auth.deezer.com': {status: 200, data: {error: {type: 'captcha_needed'}}}}),
+      clientOf({'user_auth.php': {status: 200, data: {error: {type: 'captcha_needed'}}}}),
     ),
   )) as LoginError;
   t.is(error.stage, 'unsupported');
@@ -91,7 +93,7 @@ test('a social-login account is told it has no password', async (t) => {
     loginToDeezer(
       'someone@example.com',
       'hunter2',
-      clientOf({'auth.deezer.com': {status: 200, data: {error: {type: 'social_account'}}}}),
+      clientOf({'user_auth.php': {status: 200, data: {error: {type: 'social_account'}}}}),
     ),
   )) as LoginError;
   t.is(error.stage, 'unsupported');
@@ -104,7 +106,7 @@ test('a missing session cookie is reported as a service problem, not a credentia
       'someone@example.com',
       'hunter2',
       clientOf({
-        'auth.deezer.com': {status: 200, data: {access_token: 'access-123'}},
+        'user_auth.php': {status: 200, data: {access_token: 'access-123'}},
         'api.deezer.com': {status: 200, data: {}, headers: {}},
       }),
     ),
@@ -125,9 +127,9 @@ test('a session that yields no ARL is reported as a service problem', async (t) 
 });
 
 test('an unreachable Deezer is reported as a network problem', async (t) => {
-  const offline = Object.assign(new Error('getaddrinfo ENOTFOUND auth.deezer.com'), {code: 'ENOTFOUND'});
+  const offline = Object.assign(new Error('getaddrinfo ENOTFOUND connect.deezer.com'), {code: 'ENOTFOUND'});
   const error = (await t.throwsAsync(
-    loginToDeezer('someone@example.com', 'hunter2', clientOf({'auth.deezer.com': offline})),
+    loginToDeezer('someone@example.com', 'hunter2', clientOf({'user_auth.php': offline})),
   )) as LoginError;
   t.is(error.stage, 'network');
 });
@@ -137,6 +139,61 @@ test('empty Deezer fields are refused before any request is made', async (t) => 
   const error = (await t.throwsAsync(loginToDeezer('  ', 'hunter2', clientOf({}, calls)))) as LoginError;
   t.is(error.stage, 'credentials');
   t.is(calls.length, 0, 'no point asking Deezer about an empty email address');
+});
+
+test('the request goes to the endpoint that exists, not the one that 404s', async (t) => {
+  const calls: Array<{url: string; config: any}> = [];
+  await loginToDeezer('someone@example.com', 'hunter2', clientOf(deezerHappyPath, calls));
+  t.true(calls[0].url.startsWith('https://connect.deezer.com/oauth/user_auth.php'));
+});
+
+test('a success returned as a query string is read, not only JSON', async (t) => {
+  // The endpoint answers JSON on failure and OAuth-style text on success;
+  // assuming JSON threw the successful case away.
+  const result = await loginToDeezer(
+    'someone@example.com',
+    'hunter2',
+    clientOf({
+      'user_auth.php': {status: 200, data: 'access_token=tok-from-query&expires=0'},
+      'api.deezer.com': {status: 200, data: {}, headers: {'set-cookie': ['sid=session-abc; Path=/']}},
+      'gw-light.php': {status: 200, data: {results: 'the-arl-value'}},
+    }),
+  );
+  t.is(result.arl, 'the-arl-value');
+});
+
+test('"wrong hash" is reported as our bug, not as a wrong password', async (t) => {
+  // Deezer distinguishes these precisely: code 150 means the signature was
+  // built wrong, code 160 means the account details were rejected. Conflating
+  // them has people retyping a password that was correct all along.
+  const error = (await t.throwsAsync(
+    loginToDeezer(
+      'someone@example.com',
+      'hunter2',
+      clientOf({
+        'user_auth.php': {status: 200, data: {error: {type: 'Exception', message: 'wrong hash !', code: 150}}},
+      }),
+    ),
+  )) as LoginError;
+  t.is(error.stage, 'service');
+  t.regex(error.message, /needs an update/);
+  t.notRegex(error.message, /did not accept that email/);
+});
+
+test('"authenticate user failed" is reported as wrong credentials', async (t) => {
+  const error = (await t.throwsAsync(
+    loginToDeezer(
+      'someone@example.com',
+      'hunter2',
+      clientOf({
+        'user_auth.php': {
+          status: 200,
+          data: {error: {type: 'Exception', message: 'authenticate user failed', code: 160}},
+        },
+      }),
+    ),
+  )) as LoginError;
+  t.is(error.stage, 'credentials');
 });
 
 // ── Qobuz ────────────────────────────────────────────────────────────────────

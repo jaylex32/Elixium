@@ -66,6 +66,32 @@ const newClient = (): AxiosInstance =>
     },
   });
 
+/** Pull one cookie's value out of a set-cookie header. */
+const readCookie = (setCookie: unknown, name: string): string | null => {
+  const cookies: string[] = Array.isArray(setCookie) ? setCookie : [];
+  for (const cookie of cookies) {
+    const match = new RegExp(`(?:^|;\s*)${name}=([^;]+)`).exec(cookie);
+    if (match) return match[1];
+  }
+  return null;
+};
+
+/**
+ * Read the access token out of whatever shape the response arrived in.
+ *
+ * The endpoint answers JSON on failure and an OAuth-style query string on
+ * success (`access_token=...&expires=...`), so assuming JSON throws away the
+ * successful case entirely.
+ */
+const readDeezerAccessToken = (data: unknown): string | null => {
+  if (typeof data === 'string') {
+    const match = /(?:^|&)access_token=([^&]+)/.exec(data);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+  const token = (data as {access_token?: unknown} | undefined)?.access_token;
+  return typeof token === 'string' && token ? token : null;
+};
+
 // ── Deezer ───────────────────────────────────────────────────────────────────
 
 export interface DeezerLoginResult {
@@ -95,14 +121,22 @@ export const loginToDeezer = async (
   }
 
   const hashedPassword = md5(password);
+  /*
+   * Deezer signs the request with an MD5 over the client id, the login, the
+   * hashed password and the client secret, in that order. It distinguishes the
+   * two failures precisely — code 150 "wrong hash !" means the signature was
+   * built wrong, which is our bug, and code 160 means the account details were
+   * rejected, which is the user's. Reporting the first as the second would
+   * have people retyping a correct password forever.
+   */
   const signature = md5(`${DEEZER_CLIENT_ID}${email}${hashedPassword}${DEEZER_CLIENT_SECRET}`);
 
   let tokenResponse;
   try {
-    tokenResponse = await http.get('https://auth.deezer.com/login/email', {
+    tokenResponse = await http.get('https://connect.deezer.com/oauth/user_auth.php', {
       params: {
-        i: DEEZER_CLIENT_ID,
-        mail: email,
+        app_id: DEEZER_CLIENT_ID,
+        login: email,
         password: hashedPassword,
         hash: signature,
       },
@@ -112,21 +146,25 @@ export const loginToDeezer = async (
     throw error;
   }
 
-  const accessToken = tokenResponse.data?.access_token;
+  const accessToken = readDeezerAccessToken(tokenResponse.data);
   if (!accessToken) {
-    /*
-     * Deezer answers 200 with an error object rather than a status code. The
-     * distinction that matters to the reader is whether the password was
-     * wrong, or whether this account simply cannot be signed into this way.
-     */
-    const reason = String(tokenResponse.data?.error?.type ?? tokenResponse.data?.error ?? '').toLowerCase();
+    const failure = tokenResponse.data?.error ?? {};
+    const code = Number(failure.code);
+    const reason = String(failure.message ?? failure.type ?? '').toLowerCase();
+
+    if (code === 150 || reason.includes('wrong hash')) {
+      throw new LoginError(
+        'service',
+        'Elixium could not sign the request Deezer expects — this needs an update. Paste your ARL in Settings for now',
+      );
+    }
     if (reason.includes('captcha') || reason.includes('challenge')) {
       throw new LoginError(
         'unsupported',
         'Deezer asked for a captcha, which cannot be answered here — paste your ARL in Settings instead',
       );
     }
-    if (reason.includes('social') || reason.includes('unknown user') || reason.includes('not_found')) {
+    if (reason.includes('social') || reason.includes('unknown user')) {
       throw new LoginError(
         'unsupported',
         'This Deezer account has no password (it signs in with Google, Facebook or Apple) — paste your ARL in Settings instead',
@@ -135,21 +173,20 @@ export const loginToDeezer = async (
     throw new LoginError('credentials', 'Deezer did not accept that email address and password');
   }
 
-  // 2. Trade the access token for a session on the main API.
+  /*
+   * The access token is not the ARL. Opening a session with it makes Deezer
+   * issue the session cookie that the private API answers to, and that API is
+   * the only thing that will hand over an ARL.
+   */
   const session = await http.get('https://api.deezer.com/platform/generic/track/3135556', {
     headers: {Authorization: `Bearer ${accessToken}`},
   });
 
-  const cookies: string[] = (session.headers?.['set-cookie'] as string[] | undefined) ?? [];
-  const sid = cookies
-    .map((cookie) => /(?:^|;\s*)sid=([^;]+)/.exec(cookie)?.[1])
-    .find((value): value is string => Boolean(value));
-
+  const sid = readCookie(session.headers?.['set-cookie'], 'sid');
   if (!sid) {
-    throw new LoginError('service', 'Deezer signed in but did not return a session — try again, or paste your ARL');
+    throw new LoginError('service', 'Deezer signed in but did not open a session — paste your ARL in Settings instead');
   }
 
-  // 3. Ask the private API for the ARL belonging to that session.
   const arlResponse = await http.get('https://www.deezer.com/ajax/gw-light.php', {
     params: {method: 'user.getArl', input: '3', api_version: '1.0', api_token: 'null'},
     headers: {Cookie: `sid=${sid}`},
