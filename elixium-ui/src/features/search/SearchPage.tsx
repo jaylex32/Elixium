@@ -26,6 +26,7 @@ import {TrackActions} from '@/shared/components/TrackActions';
 import {ArtistLink, AlbumLink} from '@/shared/components/RelationLinks';
 import {relationsOf} from '@/shared/lib/relations';
 import type {RawSearchResult, Service} from '@/types';
+import {serviceLabel} from '@/shared/lib/desktop';
 
 type SearchType = 'track' | 'album' | 'artist' | 'playlist';
 type SortMode = 'relevance' | 'newest' | 'title' | 'duration';
@@ -312,7 +313,7 @@ export function SearchPage() {
                 </button>
               ) : null
             }
-            placeholder={`Search ${service === 'deezer' ? 'Deezer' : 'Qobuz'}…`}
+            placeholder={`Search ${serviceLabel(service)}…`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="h-14 rounded-lg pl-11 pr-11 text-base shadow-md"

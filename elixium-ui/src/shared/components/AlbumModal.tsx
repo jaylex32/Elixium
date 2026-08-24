@@ -20,6 +20,7 @@ import {useSelectionStore} from '@/store/selection-store';
 import type {Service} from '@/types';
 import {extractCover} from '@/shared/lib/cover';
 import type {AlbumCardData} from './AlbumCard';
+import {serviceLabel} from '@/shared/lib/desktop';
 
 interface AlbumModalProps {
   album: AlbumCardData & {service: Service};
@@ -184,7 +185,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="mb-1 text-xs uppercase tracking-wide text-text-muted">
-                {album.type ?? 'Album'} · {album.service === 'deezer' ? 'Deezer' : 'Qobuz'}
+                {album.type ?? 'Album'} · {serviceLabel(album.service)}
               </p>
               <h2 className="line-clamp-2 text-base font-bold leading-tight text-text-primary sm:text-lg">
                 {album.title}

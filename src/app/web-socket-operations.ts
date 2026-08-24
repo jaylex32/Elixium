@@ -59,16 +59,30 @@ export const registerOperationsSocketHandlers = ({
           secrets: conf.get('qobuz.secrets'),
           token: conf.get('qobuz.token'),
         },
+        ytmusic: {
+          cookie: configAny.get('ytmusic.cookie'),
+        },
         saveLayout: conf.get('saveLayout'),
         coverSize: conf.get('coverSize'),
         playlist: configAny.get('playlist'),
+        /*
+         * Every path the interface can edit has to be sent back, not just the
+         * ones that existed when this was written.
+         *
+         * Saving replaces the whole `paths` object with what the interface
+         * holds, so a path that is never sent out comes back empty on the next
+         * save and erases itself. Adding a field here is not optional when one
+         * is added to the settings page.
+         */
         paths: {
           deezer: configAny.get('paths.deezer') || './Music/Deezer',
           qobuz: configAny.get('paths.qobuz') || './Music/Qobuz',
+          ytmusic: configAny.get('paths.ytmusic') || './Music/YouTube Music',
         },
         quality: {
           deezer: configAny.get('quality.deezer') || '320',
           qobuz: configAny.get('quality.qobuz') || '44khz',
+          ytmusic: configAny.get('quality.ytmusic') || 'aac',
         },
       };
       socket.emit('settings', settings);
@@ -156,6 +170,18 @@ export const registerOperationsSocketHandlers = ({
         }
       }
 
+      /*
+       * The YouTube cookie.
+       *
+       * YouTube refuses stream URLs to signed-out callers for most music —
+       * measured at one track in six — so without this, YouTube Music
+       * downloads mostly fail. It is a session credential like the Deezer
+       * ARL: revocable by signing out, and never sent anywhere but YouTube.
+       */
+      if (data.ytmusic && data.ytmusic.cookie !== undefined) {
+        configAny.set('ytmusic.cookie', String(data.ytmusic.cookie || '').trim());
+      }
+
       if (data.saveLayout) {
         conf.set('saveLayout', data.saveLayout);
       }
@@ -174,6 +200,11 @@ export const registerOperationsSocketHandlers = ({
         }
         if (data.quality.qobuz) {
           configAny.set('quality.qobuz', data.quality.qobuz);
+        }
+        /* Without this the format control saved nothing and every download
+           came back as AAC whatever the setting said. */
+        if (data.quality.ytmusic) {
+          configAny.set('quality.ytmusic', data.quality.ytmusic);
         }
       }
 

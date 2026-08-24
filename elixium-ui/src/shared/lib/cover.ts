@@ -4,6 +4,18 @@ type Raw = Record<string, unknown>;
 export function extractCover(rawData: Raw | undefined | null, service: string): string | undefined {
   if (!rawData) return undefined;
 
+  /*
+   * YouTube Music carries a ready-made URL, already upgraded to full size
+   * when it was parsed. Without this it falls through to the Deezer branch,
+   * which reads a picture hash that YouTube items do not have — so every
+   * YouTube cover would come back undefined, silently.
+   */
+  if (service === 'ytmusic' || rawData.ytmusic === true) {
+    const cover = rawData.cover;
+    if (typeof cover === 'string' && cover.startsWith('http')) return cover;
+    return undefined;
+  }
+
   if (service === 'qobuz') {
     // Standard Qobuz album object: image.large
     const img = rawData.image as Raw | undefined;

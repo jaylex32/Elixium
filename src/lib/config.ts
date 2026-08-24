@@ -10,6 +10,7 @@ type keysType =
   | 'saveLayout.album'
   | 'saveLayout.artist'
   | 'saveLayout.playlist'
+  | 'saveLayout.ytmusic'
   | 'playlist.resolveFullPath'
   | 'trackNumber'
   | 'fallbackTrack'
@@ -27,6 +28,11 @@ type keysType =
   | 'qobuz.app_id'
   | 'qobuz.secrets'
   | 'qobuz.token'
+  /* YouTube refuses stream URLs to signed-out callers for most music, so a
+     session cookie is what makes YouTube Music downloads work at all. */
+  | 'ytmusic.cookie'
+  | 'paths.ytmusic'
+  | 'quality.ytmusic'
   | 'auth'
   | 'auth.enabled'
   | 'auth.token'
@@ -47,6 +53,15 @@ type configType = {
     'qobuz-track': string;
     'qobuz-artist': string;
     'qobuz-playlist': string;
+    /*
+     * YouTube Music files itself by its own template.
+     *
+     * The others are written in their service's placeholder language, and
+     * YouTube Music understands none of it — pointing it at Deezer's template
+     * produced paths with every field empty, so a correctly downloaded and
+     * tagged track landed at "Deezer/Tracks/1.m4a".
+     */
+    ytmusic: string;
   };
   playlist: {
     resolveFullPath: boolean;
@@ -104,6 +119,7 @@ const defaultConfig: configType = {
     'qobuz-track': 'Music/{album.title}/{title}',
     'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
     'qobuz-playlist': 'Playlist/{list_title}/{title}',
+    ytmusic: '{album_artist}/{album}/{track_number} {title}',
   },
   playlist: {
     resolveFullPath: false,

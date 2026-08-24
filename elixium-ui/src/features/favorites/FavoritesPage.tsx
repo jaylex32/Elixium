@@ -15,6 +15,7 @@ import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 import {EmptyState, ListSkeleton} from '@/shared/components/States';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
+import {serviceLabel} from '@/shared/lib/desktop';
 
 type Filter = 'all' | FavoriteRecord['type'];
 
@@ -183,7 +184,7 @@ export function FavoritesPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-text-primary">{entry.title}</p>
                 <p className="truncate text-xs text-text-muted">
-                  {entry.artist} · {entry.service === 'deezer' ? 'Deezer' : 'Qobuz'}
+                  {entry.artist} · {serviceLabel(entry.service)}
                 </p>
               </div>
 

@@ -17,7 +17,10 @@ export function LyricsView() {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const reducedMotion = usePrefersReducedMotion();
 
-  const {data, isLoading, isError} = useLyrics(currentTrack?.id, currentTrack?.service, Boolean(currentTrack));
+  const {data, isLoading, isError} = useLyrics(currentTrack?.id, currentTrack?.service, Boolean(currentTrack), {
+    artist: currentTrack?.artist,
+    title: currentTrack?.title,
+  });
 
   const synced = data?.synced ?? [];
   const hasSynced = synced.length > 0;

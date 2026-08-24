@@ -2,6 +2,7 @@ import {useEffect, useRef} from 'react';
 import {motion, AnimatePresence} from 'framer-motion';
 import {ChevronLeft, ChevronRight, Disc3, X} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
+import {usePlayerStore} from '@/store/player-store';
 import {useAppStore, type Page} from '@/store/app-store';
 import {useDownloadStore} from '@/store/download-store';
 import {Tooltip, TooltipProvider} from '@/shared/components/ui/Tooltip';
@@ -103,12 +104,20 @@ function SidebarContent({collapsed, onNavigate}: {collapsed: boolean; onNavigate
 /** Persistent rail. Desktop only — below 1024px the drawer takes over. */
 export function Sidebar() {
   const {sidebarCollapsed, toggleSidebar, setPage} = useAppStore();
+  /*
+   * The player is fixed across the full width of the window, and the collapse
+   * button is the last thing in this column — so while something was playing
+   * the player sat directly on top of it and the sidebar could not be opened
+   * at all. The rail reserves the same height the scroll container does.
+   */
+  const hasTrack = usePlayerStore((s) => s.currentTrack !== null);
 
   return (
     <TooltipProvider>
       <motion.aside
         animate={{width: sidebarCollapsed ? 68 : 264}}
         transition={{duration: 0.24, ease: [0.22, 1, 0.36, 1]}}
+        style={hasTrack ? {paddingBottom: 'calc(var(--player-height) + var(--safe-bottom))'} : undefined}
         className="relative hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-secondary-bg lg:flex"
       >
         {/* Centred, then nudged slightly left — the extra right padding shifts

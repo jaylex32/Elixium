@@ -23,6 +23,7 @@ import {createExplorer} from './app/explorer';
 import {createSessionQueue} from './app/session-queue';
 import {createServiceRuntime} from './app/service-runtime';
 import {ProviderRegistry} from './app/provider-readiness';
+import {createYtMusicService} from './app/ytmusic-service';
 import {createDownloadQueueRuntime} from './app/download-queue-runtime';
 import {createWebData} from './app/web-data';
 import {createWebDownloads} from './app/web-downloads';
@@ -365,18 +366,38 @@ const setupWebServer = () => {
    */
   app.use('/api', createAuthMiddleware(conf, '/api'));
 
-  const staticRoots = [
+  const staticRootCandidates = [
     path.join(process.cwd(), 'public'),
     path.join(__dirname, 'public'),
     path.join(__dirname, '..', '..', 'public'),
-  ].filter((candidate, index, list) => list.indexOf(candidate) === index && existsSync(candidate));
+  ].filter((candidate, index, list) => list.indexOf(candidate) === index);
 
-  const indexHtmlPath = staticRoots
-    .map((rootDir) => path.join(rootDir, 'index.html'))
-    .find((candidate) => existsSync(candidate));
+  /*
+   * Found on demand, not once at startup.
+   *
+   * The Windows portable build unpacks itself into a temporary folder as it
+   * launches, and the engine can be serving before that finishes. Resolving
+   * this once meant a single early miss was permanent: `existsSync` said no,
+   * the path stayed null for the life of the process, and every page load
+   * afterwards returned the fallback — so the desktop window opened on a
+   * blank page and the app quit with no error anywhere.
+   *
+   * That race widened when the listener was moved ahead of provider
+   * initialisation, which is worth knowing: binding earlier is right, but
+   * it means nothing may assume the filesystem has settled.
+   */
+  let cachedIndexHtmlPath: string | undefined;
+  const findIndexHtml = (): string | undefined => {
+    if (cachedIndexHtmlPath && existsSync(cachedIndexHtmlPath)) return cachedIndexHtmlPath;
+    cachedIndexHtmlPath = staticRootCandidates
+      .map((rootDir) => path.join(rootDir, 'index.html'))
+      .find((candidate) => existsSync(candidate));
+    return cachedIndexHtmlPath;
+  };
 
   app.get('/', (req, res) => {
     try {
+      const indexHtmlPath = findIndexHtml();
       if (!indexHtmlPath) {
         throw new Error('No public/index.html found');
       }
@@ -391,7 +412,17 @@ const setupWebServer = () => {
     }
   });
 
-  staticRoots.forEach((rootDir) => {
+  /*
+   * Every candidate is mounted, existing or not.
+   *
+   * `express.static` looks for the file when a request arrives rather than
+   * when it is mounted, so a directory that does not exist yet costs
+   * nothing and begins working the moment it appears. Filtering by
+   * `existsSync` here had the same flaw as the index lookup above: on the
+   * portable build the interface files are still being unpacked, so the
+   * only real root was dropped and no asset was ever served.
+   */
+  staticRootCandidates.forEach((rootDir) => {
     app.use(express.static(rootDir));
   });
   registerWebRestRoutes({
@@ -399,6 +430,7 @@ const setupWebServer = () => {
     io,
     deezer,
     qobuz,
+    ytmusic: ytmusicService,
     artistContent,
     charts,
     genreContent,
@@ -424,6 +456,8 @@ const setupWebServer = () => {
     conf,
     appVersion: pkg.version,
     appBrand: APP_BRAND,
+    resolveYtMusicStream: (videoId: string) => ytmusicService.streamUrl(videoId),
+    resolveYtMusicLyrics: (videoId: string) => ytmusicService.lyrics(videoId),
     readiness: () => providers.snapshot(),
     retryProvider: (name: string) => providers.retry(name),
     deezer,
@@ -597,6 +631,46 @@ const {performDeezerSearch, performQobuzSearch} = createCatalogSearch({
   deezer,
   qobuz,
   ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
+});
+
+/*
+ * YouTube Music browses; Deezer and Qobuz supply the files.
+ *
+ * The search function handed over is the same one the rest of the app uses, so
+ * a resolved match is exactly the item that would have been found by searching
+ * for it directly — same ids, same tags, same download path.
+ */
+const ytmusicService = createYtMusicService({
+  search: (service, query, type, limit) =>
+    service === 'qobuz' ? performQobuzSearch(query, type, limit) : performDeezerSearch(query, type, limit),
+  getCookie: () => (conf.get('ytmusic.cookie') as string) || undefined,
+  setCookie: (cookie: string) => conf.set('ytmusic.cookie', cookie),
+  getDownloadPath: () => (conf.get('paths.ytmusic') as string) || './Music/YouTube Music',
+  /*
+   * YouTube Music files itself by its own template, not Deezer's.
+   *
+   * `saveLayout.track` is written in Deezer's placeholder language —
+   * `{ART_NAME}`, `{SNG_TITLE}` and so on — which means nothing here. Handing
+   * it over produced paths with every field blank: a four megabyte track
+   * landed at "Deezer/Tracks/1.m4a", correctly downloaded and tagged and
+   * impossible to find. A YouTube Music download uses `saveLayout.ytmusic`
+   * when one is set, and otherwise the layout below.
+   */
+  getLayout: () => (conf.get('saveLayout.ytmusic') as string) || undefined,
+  /*
+   * `trackNumber` is a boolean setting — whether to number files at all — so
+   * reading it as a width yields 1 from `Number(true)`, and every track is
+   * numbered "1" instead of "01".
+   */
+  getNumberWidth: () => 2,
+  /*
+   * YouTube offers the same track as AAC in MP4 and as Opus in WebM. Opus is
+   * a few kbps higher and the better codec at equal rate, but WebM cannot be
+   * tagged — an Opus download arrives with no title, artist or cover and stays
+   * that way. AAC is the default for that reason; this is the way out for
+   * somebody who would rather have the bitrate.
+   */
+  preferOpus: () => String(conf.get('quality.ytmusic') || 'aac') === 'opus',
 });
 
 const searchCatalog = (
@@ -930,6 +1004,18 @@ providers.register({
   optional: true,
   timeoutMs: 30_000,
   init: () => initDeezerForDownload(),
+});
+
+/*
+ * YouTube Music. Optional like the rest: it scrapes a page for its client
+ * configuration, so a layout change there degrades this one provider instead
+ * of doing anything to the app around it.
+ */
+providers.register({
+  name: 'ytmusic',
+  optional: true,
+  timeoutMs: 20_000,
+  init: () => ytmusicService.check(),
 });
 
 const initApp = async () => {

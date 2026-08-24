@@ -12,6 +12,7 @@ import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {PlayerFullscreen} from './PlayerFullscreen';
+import {serviceLabel} from '@/shared/lib/desktop';
 
 /** Map stored quality preferences onto the ids the stream endpoint expects. */
 const resolveQuality = (service: string | undefined, deezerQuality: string, qobuzQuality: string): string => {
@@ -125,7 +126,7 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
       if (warnedPreviewFor.current === currentTrack.id) return;
       warnedPreviewFor.current = currentTrack.id;
       toast.warning('Preview only (30s)', {
-        description: `${currentTrack.service === 'deezer' ? 'Deezer' : 'Qobuz'} credentials unavailable — check Settings.`,
+        description: `${serviceLabel(currentTrack.service)} credentials unavailable — check Settings.`,
       });
     });
 

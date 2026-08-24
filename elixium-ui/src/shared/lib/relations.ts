@@ -49,6 +49,14 @@ export function relationsOf(rawData: Raw, service: Service): Relations {
   if (!rawData) return {};
   const raw = rawData as Record<string, unknown>;
 
+  /*
+   * YouTube Music rows do not carry linkable ids for their album or artist —
+   * a search row names them as text only. Returning nothing is correct: the
+   * link components render plain text when there is no id, so the names still
+   * appear and simply are not clickable.
+   */
+  if (service === 'ytmusic' || raw.ytmusic === true) return {};
+
   if (service === 'deezer') {
     const album = obj(raw.album);
     const artist = obj(raw.artist);

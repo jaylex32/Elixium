@@ -73,9 +73,10 @@ export function useDiscovery(service: Service, type: string, enabled = true) {
   return useQuery<RawDiscoveryItem[]>({
     queryKey: ['discovery', service, type],
     queryFn: async () => {
-      const res = await http.get('/discovery', {
-        params: {service, type, limit: 18},
-      });
+      /* YouTube Music has its own feeds; the generic endpoint knows only
+         Deezer and Qobuz and silently answered with Deezer's. */
+      const path = service === 'ytmusic' ? '/ytmusic/discovery' : '/discovery';
+      const res = await http.get(path, {params: {service, type, limit: 18}});
       return (res.data?.items ?? res.data ?? []) as RawDiscoveryItem[];
     },
     staleTime: 1000 * 60 * 5,
@@ -110,12 +111,49 @@ export const SEARCH_PAGE_SIZE = 50;
  * A short page means the end of the catalog: neither service reports a total,
  * so running out is the only reliable signal that there is nothing more.
  */
+/*
+ * Cursors for YouTube Music's paged endpoints.
+ *
+ * Deezer and Qobuz page by a number, which `useInfiniteQuery` carries for free
+ * as the page parameter. YouTube pages by an opaque token that only the
+ * previous response knows — and a page here is an array, so consumers can keep
+ * calling `.flat()` on it, which leaves nowhere to put the token.
+ *
+ * So it is kept beside the query instead. Entries are overwritten as paging
+ * advances and mean nothing once a search changes, which is why none are
+ * pruned.
+ */
+const ytCursors = new Map<string, string | null>();
+
 export function useSearchPages(query: string, service: Service, type: string) {
   return useInfiniteQuery<RawSearchResult[]>({
     queryKey: ['search', service, type, query],
     initialPageParam: 0,
     queryFn: async ({pageParam}) => {
       if (!query || query.trim().length < 2) return [];
+
+      /*
+       * YouTube Music pages by cursor, not by offset.
+       *
+       * Asking it for an offset returns the first rows again, so each response
+       * carries a token for the next page and that token is what gets sent
+       * back. The response is `{items, cursor}` rather than a bare array.
+       */
+      if (service === 'ytmusic') {
+        const key = `search:${type}:${query.trim()}`;
+        const page = pageParam as number;
+        const cursor = page === 0 ? undefined : ytCursors.get(`${key}:${page}`);
+        // A later page with no stored token means the results ran out.
+        if (page > 0 && !cursor) return [];
+
+        const yt = await http.get('/ytmusic/search', {
+          params: {q: query.trim(), type, limit: SEARCH_PAGE_SIZE, ...(cursor ? {cursor} : {})},
+        });
+        const items = (yt.data?.items ?? []) as RawSearchResult[];
+        ytCursors.set(`${key}:${page + 1}`, yt.data?.cursor ?? null);
+        return items;
+      }
+
       const res = await http.post('/search', {
         query: query.trim(),
         service,
@@ -125,8 +163,13 @@ export function useSearchPages(query: string, service: Service, type: string) {
       });
       return (Array.isArray(res.data) ? res.data : res.data?.results ?? []) as RawSearchResult[];
     },
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < SEARCH_PAGE_SIZE ? undefined : allPages.length * SEARCH_PAGE_SIZE,
+    getNextPageParam: (lastPage, allPages) => {
+      /* For YouTube there is another page exactly when a token came back. */
+      if (service === 'ytmusic') {
+        return ytCursors.get(`search:${type}:${query.trim()}:${allPages.length}`) ? allPages.length : undefined;
+      }
+      return lastPage.length < SEARCH_PAGE_SIZE ? undefined : allPages.length * SEARCH_PAGE_SIZE;
+    },
     enabled: query.trim().length >= 2,
     staleTime: 1000 * 60 * 2,
   });
@@ -158,6 +201,25 @@ export function useArtistContent(
     queryKey: ['artist-content', service, kind, artistId],
     initialPageParam: 0,
     queryFn: async ({pageParam}) => {
+      /*
+       * One request for the whole tab.
+       *
+       * The artist page shows ten of each kind and hides the rest behind a
+       * "more" link. The server follows those, so everything arrives at once
+       * and there is nothing left to page through.
+       *
+       * Albums went from ten to fifty this way, and playlists from none at all
+       * — the tab returned an empty array whatever the artist had, while the
+       * albums grid was showing those same playlists as though they were
+       * records. Tracks are topped up from a search, because YouTube publishes
+       * only five top songs and no link to more.
+       */
+      if (service === 'ytmusic') {
+        if ((pageParam as number) > 0) return [];
+        const {data} = await http.get('/ytmusic/artist-content', {params: {id: artistId, kind}});
+        return (Array.isArray(data) ? data : []) as RawSearchResult[];
+      }
+
       const res = await http.get('/artist-content', {
         params: {service, artistId, kind, artistName, limit, offset: pageParam as number},
       });
@@ -192,6 +254,40 @@ export function useItemTracks(itemType: ItemType, id: string, service: Service, 
   return useQuery<ItemTracksResponse>({
     queryKey: ['item-tracks', service, itemType, id],
     queryFn: async () => {
+      /*
+       * YouTube Music is addressed by browse id, not by the numeric ids the
+       * other services use, and `/item-tracks` knows nothing about it — so
+       * every YouTube album, playlist and artist opened to an empty modal
+       * that had quietly asked Qobuz for it.
+       */
+      if (service === 'ytmusic') {
+        if (itemType === 'artist') {
+          const {data} = await http.get('/ytmusic/artist', {params: {id}});
+          return {
+            service,
+            itemType,
+            id,
+            tracks: (data?.topTracks ?? []) as ItemTracksResponse['tracks'],
+            metadata: {title: data?.name, artist: data?.name, cover: data?.cover},
+          } as ItemTracksResponse;
+        }
+
+        const endpoint = itemType === 'playlist' ? '/ytmusic/playlist' : '/ytmusic/album';
+        const {data} = await http.get(endpoint, {params: {id}});
+        return {
+          service,
+          itemType,
+          id,
+          tracks: (data?.tracks ?? []) as ItemTracksResponse['tracks'],
+          metadata: {
+            title: data?.title,
+            artist: data?.artist,
+            cover: data?.cover,
+            release_date: data?.year ? String(data.year) : undefined,
+          },
+        } as ItemTracksResponse;
+      }
+
       const res = await http.get('/item-tracks', {params: {service, itemType, id, limit}});
       return res.data as ItemTracksResponse;
     },
@@ -252,11 +348,50 @@ export interface LyricsResult {
  * 404 is an expected outcome (many tracks simply have none), so it is not
  * retried and the caller renders an empty state rather than an error.
  */
-export function useLyrics(id: string | undefined, service: Service | undefined, enabled = true) {
+/**
+ * YouTube Music's own front page, shelf by shelf.
+ *
+ * Deezer and Qobuz are asked for named editorial feeds — trending, new
+ * releases, best sellers — because that is how those services publish. YouTube
+ * Music names its own rows instead, and two of the fixed names resolved to the
+ * same feed, so the page showed one set of cards twice under different
+ * headings. These are the rows its website shows.
+ *
+ * One request for the whole page: every row comes out of the same few browse
+ * calls, so fetching per row would repeat the work.
+ */
+export function useYtMusicShelves(enabled = true) {
+  return useQuery<{title: string; items: RawSearchResult[]}[]>({
+    queryKey: ['ytmusic', 'shelves'],
+    queryFn: async () => {
+      const res = await http.get('/ytmusic/shelves');
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled,
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useLyrics(
+  id: string | undefined,
+  service: Service | undefined,
+  enabled = true,
+  /*
+   * YouTube tracks are identified by a video id, which no lyrics database
+   * knows. The name is what a fallback search needs, and only the caller has
+   * it — Deezer and Qobuz look theirs up server-side from the track id.
+   */
+  track?: {artist?: string; title?: string},
+) {
   return useQuery<LyricsResult | null>({
     queryKey: ['lyrics', service, id],
     queryFn: async () => {
-      const res = await http.get(`/v1/tracks/${encodeURIComponent(id!)}/lyrics`, {params: {service}});
+      const res = await http.get(`/v1/tracks/${encodeURIComponent(id!)}/lyrics`, {
+        params: {
+          service,
+          ...(service === 'ytmusic' ? {artist: track?.artist ?? '', title: track?.title ?? ''} : {}),
+        },
+      });
       return (res.data?.data ?? null) as LyricsResult | null;
     },
     enabled: Boolean(id && service) && enabled,
@@ -373,7 +508,17 @@ export function useArtistInfo(artistId: string, service: Service, enabled = true
 export function useGenres(service: Service) {
   return useQuery<ChartGenre[]>({
     queryKey: ['genres', service],
-    queryFn: async () => (await http.get('/genres', {params: {service}})).data as ChartGenre[],
+    queryFn: async () => {
+      /* Same story: picking YouTube Music used to show Deezer's genre list. */
+      if (service === 'ytmusic') {
+        const {data} = await http.get('/ytmusic/genres');
+        return (Array.isArray(data) ? data : []).map((g: {id: string; name: string}) => ({
+          id: g.id,
+          name: g.name,
+        })) as ChartGenre[];
+      }
+      return (await http.get('/genres', {params: {service}})).data as ChartGenre[];
+    },
     staleTime: 1000 * 60 * 60,
   });
 }
@@ -395,6 +540,20 @@ export function useGenreContent(service: Service, genreId: string, kind: GenreKi
     queryKey: ['genre-content', service, genreId, kind],
     initialPageParam: 0,
     queryFn: async ({pageParam}) => {
+      /*
+       * YouTube Music has its own genre pages, and the shared endpoint has no
+       * branch for it — a YouTube genre id sent there was handed to Deezer's
+       * catalogue, which returned whatever it made of an opaque blob. The
+       * genre list was YouTube's and the contents were somebody else's.
+       *
+       * The page arrives whole, so there is nothing after the first.
+       */
+      if (service === 'ytmusic') {
+        if ((pageParam as number) > 0) return [];
+        const {data} = await http.get('/ytmusic/genre-content', {params: {id: genreId, kind}});
+        return (Array.isArray(data) ? data : []) as RawSearchResult[];
+      }
+
       const res = await http.get('/genre-content', {
         params: {service, genreId, kind, limit: GENRE_PAGE_SIZE, offset: pageParam as number},
       });

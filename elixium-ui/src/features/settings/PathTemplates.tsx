@@ -4,7 +4,7 @@ import {cn} from '@/shared/lib/utils';
 import {useSettingsStore, type Settings} from '@/store/settings-store';
 import {Input} from '@/shared/components/ui/Input';
 import {Button} from '@/shared/components/ui/Button';
-import {renderTemplate} from './template-preview';
+import {renderTemplate, type Service} from './template-preview';
 
 type LayoutKey = keyof Settings['layout'];
 
@@ -23,7 +23,7 @@ type LayoutKey = keyof Settings['layout'];
  * means nothing to Deezer.
  */
 const SERVICES: {
-  id: 'deezer' | 'qobuz';
+  id: 'deezer' | 'qobuz' | 'ytmusic';
   label: string;
   accent: string;
   rows: {key: LayoutKey; label: string; row: 'track' | 'album' | 'artist' | 'playlist'}[];
@@ -108,6 +108,41 @@ const SERVICES: {
       '{maximum_sampling_rate}',
     ],
   },
+  {
+    id: 'ytmusic',
+    label: 'YouTube Music',
+    accent: '#ff0033',
+    /*
+     * One template, not four.
+     *
+     * A YouTube Music download is always a single track — an album or playlist
+     * is downloaded as its tracks, one at a time, through the same path. There
+     * is no separate album or playlist writer to give a template of its own,
+     * and offering four fields that all fed one code path would be a lie about
+     * what the setting does.
+     */
+    rows: [{key: 'ytmusic', label: 'Every download', row: 'track'}],
+    /*
+     * Its own vocabulary, and deliberately not either of the others'.
+     *
+     * Deezer substitutes SCREAMING_SNAKE field names off its private payload
+     * and Qobuz resolves a lowercase set; YouTube Music knows neither. Pointing
+     * it at Deezer's template resolved every field to empty and filed a track
+     * at "Deezer/Tracks/1.m4a" — correctly downloaded, correctly tagged, and
+     * impossible to find.
+     */
+    tokens: [
+      '{title}',
+      '{artist}',
+      '{album}',
+      '{album_artist}',
+      '{year}',
+      '{track_number}',
+      '{total_tracks}',
+      '{no_track_number}',
+      '{video_id}',
+    ],
+  },
 ];
 
 /** Mirrors the server defaults in src/lib/config.ts. */
@@ -120,11 +155,12 @@ const DEFAULTS: Settings['layout'] = {
   'qobuz-album': '{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
   'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
   'qobuz-playlist': 'Playlist/{list_title}/{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
+  ytmusic: '{album_artist}/{album}/{track_number} {title}',
 };
 
 export function PathTemplates() {
   const {settings, update} = useSettingsStore();
-  const [active, setActive] = useState<'deezer' | 'qobuz'>('deezer');
+  const [active, setActive] = useState<'deezer' | 'qobuz' | 'ytmusic'>('deezer');
   const service = SERVICES.find((s) => s.id === active) as (typeof SERVICES)[number];
 
   // Defensive: the persist merge keeps `layout` populated, but a settings
@@ -235,7 +271,7 @@ function TemplatePreview({
   settings,
 }: {
   template: string;
-  service: 'deezer' | 'qobuz';
+  service: Service;
   row: 'track' | 'album' | 'artist' | 'playlist';
   settings: Settings;
 }) {

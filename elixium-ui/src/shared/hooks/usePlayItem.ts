@@ -47,6 +47,51 @@ export function usePlayItem() {
       }
 
       try {
+        /*
+         * YouTube Music is fetched from its own endpoints.
+         *
+         * `/item-tracks` knows only the catalogue services, so a YouTube
+         * playlist resolved to something else entirely — the player showed a
+         * first track and then had nothing it could actually stream.
+         *
+         * The id carried forward has to be the videoId: that is what the
+         * stream route resolves, and a browse id there plays nothing.
+         */
+        if (item.service === 'ytmusic') {
+          const endpoint =
+            item.type === 'artist'
+              ? '/ytmusic/artist'
+              : item.type === 'playlist'
+                ? '/ytmusic/playlist'
+                : '/ytmusic/album';
+          const {data} = await http.get(endpoint, {params: {id: item.id}});
+          const source = (item.type === 'artist' ? data?.topTracks : data?.tracks) ?? [];
+
+          const ytTracks = (source as RawTrack[])
+            .map((raw) => {
+              const raw2 = raw.rawData as Record<string, unknown> | undefined;
+              const videoId = String(raw2?.videoId ?? raw.id ?? '');
+              if (!videoId) return null;
+              return makeTrack({
+                id: videoId,
+                title: raw.title,
+                artist: raw.artist || item.artist || '',
+                album: typeof raw.album === 'string' ? raw.album : item.title,
+                cover: (raw2?.cover as string | undefined) || data?.cover || item.cover,
+                duration: toSeconds(raw.duration),
+                service: 'ytmusic',
+              });
+            })
+            .filter(Boolean) as Track[];
+
+          if (ytTracks.length === 0) {
+            toast.error('Nothing to play', {description: item.title});
+            return;
+          }
+          setTrack(ytTracks[0], ytTracks);
+          return;
+        }
+
         const res = await http.get('/item-tracks', {
           params: {service: item.service, itemType: item.type, id: item.id, limit: 100},
         });

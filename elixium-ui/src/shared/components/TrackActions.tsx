@@ -43,7 +43,15 @@ export function TrackActions({track, relations, onDownload, onPlay, className}: 
 
   const copyLink = async () => {
     try {
-      const url = buildServiceUrl(track.id, 'track', track.service);
+      /*
+       * A YouTube Music track has no Deezer or Qobuz address to copy — it is
+       * only resolved onto one at download time, and that match is not what
+       * someone pasting a link means to share.
+       */
+      const url =
+        track.service === 'ytmusic'
+          ? `https://music.youtube.com/watch?v=${track.id}`
+          : buildServiceUrl(track.id, 'track', track.service);
       const ok = await copyText(url);
       if (ok) toast.success('Link copied', {description: url, duration: 2200});
       else toast.error('Could not copy the link');

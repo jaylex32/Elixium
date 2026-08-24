@@ -204,7 +204,15 @@ export const usePlayerStore = create<PlayerState>()(
             return {queue, queueIndex: queueIndex === -1 ? s.queueIndex : queueIndex};
           }),
 
-        clearQueue: () => set({queue: [], queueIndex: 0, shuffleOrder: []}),
+        /*
+         * Clearing the queue stops playback and dismisses the player.
+         *
+         * It used to empty the list and leave the current track playing, so the
+         * player bar stayed on screen with an empty queue behind it and no
+         * obvious way to get rid of it. An empty queue means nothing to play.
+         */
+        clearQueue: () =>
+          set({queue: [], queueIndex: 0, shuffleOrder: [], currentTrack: null, isPlaying: false}),
 
         toggleShuffle: () =>
           set((s) => {

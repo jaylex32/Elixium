@@ -245,6 +245,88 @@ export const qobuzSaveLayout = ({
   return path.replace(/[?%*|"<>]/g, '').trim();
 };
 
+/**
+ * Fields a YouTube Music download can fill a naming template with.
+ *
+ * Deliberately small. Deezer and Qobuz templates expose whatever their APIs
+ * return, and YouTube returns very little: a title, an uploader, and whatever
+ * the album page stated. Offering `{isrc}` or `{composer}` here would be
+ * offering placeholders that silently resolve to nothing.
+ */
+export interface YtMusicLayoutFields {
+  title: string;
+  artist: string;
+  album?: string;
+  albumArtist?: string;
+  year?: number | null;
+  trackNumber?: number | null;
+  trackTotal?: number | null;
+  videoId?: string;
+}
+
+/**
+ * Build a YouTube Music file path from a naming template.
+ *
+ * Its own vocabulary, like the other two services have theirs — lowercase,
+ * because that is the shape Qobuz templates already use and YouTube has no
+ * SCREAMING_SNAKE field names of its own to borrow.
+ *
+ * A template that names nothing usable still produces a filename: an empty
+ * placeholder leaves an empty segment, and a path of empty segments would
+ * write to a directory rather than a file.
+ */
+export const ytmusicSaveLayout = ({
+  fields,
+  path,
+  minimumIntegerDigits = 2,
+  trackNumber = true,
+}: {
+  fields: YtMusicLayoutFields;
+  path: string;
+  minimumIntegerDigits?: number;
+  trackNumber?: boolean;
+}): string => {
+  let result = path;
+
+  if (result.includes('{no_track_number}')) {
+    result = result.replace('{no_track_number}', '');
+    trackNumber = false;
+  }
+
+  const number = fields.trackNumber ? Number(fields.trackNumber).toLocaleString('en-US', {minimumIntegerDigits}) : '';
+
+  const values: Record<string, string> = {
+    title: fields.title ?? '',
+    artist: fields.artist ?? '',
+    album: fields.album ?? '',
+    album_artist: fields.albumArtist ?? fields.artist ?? '',
+    year: fields.year ? String(fields.year) : '',
+    track_number: number,
+    total_tracks: fields.trackTotal ? String(fields.trackTotal) : '',
+    video_id: fields.videoId ?? '',
+  };
+
+  for (const key of result.match(/(?<=\{)[^}]*/g) ?? []) {
+    const value = values[key];
+    result = result.replace(`{${key}}`, value ? sanitizeFilename(value) : '');
+  }
+
+  /* Prefix the number when the template did not place one itself. */
+  if (trackNumber && number && !path.includes('{track_number}')) {
+    const [dir, base] = [dirname(result), basename(result)];
+    result = join(dir, `${number} ${base}`);
+  }
+
+  /* Collapse the gaps an unfilled placeholder leaves behind. */
+  result = result
+    .split(/[\/]/)
+    .map((segment) => segment.replace(/\s{2,}/g, ' ').replace(/^[\s\-_]+|[\s\-_]+$/g, ''))
+    .filter(Boolean)
+    .join('/');
+
+  return result.replace(/[?%*|"<>]/g, '').trim();
+};
+
 export const progressBar = (total: number, width: number) => {
   const incomplete = Array(width).fill('█').join('');
   const complete = Array(width).fill('█').join('');

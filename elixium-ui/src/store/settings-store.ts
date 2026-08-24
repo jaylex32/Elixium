@@ -9,11 +9,15 @@ export interface Settings {
   qobuzAppId: string;
   qobuzSecrets: string;
   qobuzToken: string;
+  /** YouTube session cookie; YouTube refuses most streams without one. */
+  ytmusicCookie: string;
   deezerQuality: 'MP3_128' | 'MP3_320' | 'FLAC';
   qobuzQuality: '5' | '6' | '7' | '27';
   concurrency: number;
   downloadPath: string;
   qobuzDownloadPath: string;
+  ytmusicDownloadPath: string;
+  ytmusicFormat: 'aac' | 'opus';
   trackNumbering: boolean;
   coverArt: boolean;
   embedLyrics: boolean;
@@ -37,6 +41,8 @@ export interface Settings {
     'qobuz-album': string;
     'qobuz-artist': string;
     'qobuz-playlist': string;
+    /* YouTube Music has its own placeholder vocabulary; see PathTemplates. */
+    ytmusic: string;
   };
   coverSize: string;
 }
@@ -49,11 +55,14 @@ const defaults: Settings = {
   qobuzAppId: '',
   qobuzSecrets: '',
   qobuzToken: '',
+  ytmusicCookie: '',
   deezerQuality: 'FLAC',
   qobuzQuality: '27',
   concurrency: 3,
   downloadPath: '',
   qobuzDownloadPath: '',
+  ytmusicDownloadPath: '',
+  ytmusicFormat: 'aac',
   trackNumbering: true,
   coverArt: true,
   embedLyrics: true,
@@ -70,6 +79,7 @@ const defaults: Settings = {
     'qobuz-album': '{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
     'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
     'qobuz-playlist': 'Playlist/{list_title}/{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
+    ytmusic: '{album_artist}/{album}/{track_number} {title}',
   },
   coverSize: '1000',
 };

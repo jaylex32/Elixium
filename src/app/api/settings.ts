@@ -32,8 +32,8 @@ export interface ElixiumSettings {
   saveLayout: unknown;
   coverSize: unknown;
   playlist: unknown;
-  paths: {deezer: string; qobuz: string};
-  quality: {deezer: string; qobuz: string};
+  paths: {deezer: string; qobuz: string; ytmusic: string};
+  quality: {deezer: string; qobuz: string; ytmusic: string};
   /** The token itself is never included here — see GET /auth/token. */
   auth: {enabled: boolean; allowedOrigins: string[]};
   /** Cutoff below which an already-owned release is re-fetched. */
@@ -71,10 +71,13 @@ export const readSettings = (conf: any): ElixiumSettings => ({
   paths: {
     deezer: conf.get('paths.deezer') || './Music/Deezer',
     qobuz: conf.get('paths.qobuz') || './Music/Qobuz',
+    ytmusic: conf.get('paths.ytmusic') || './Music/YouTube Music',
   },
   quality: {
     deezer: conf.get('quality.deezer') || '320',
     qobuz: conf.get('quality.qobuz') || '44khz',
+    /* `aac` keeps tags; `opus` trades them for a little more bitrate. */
+    ytmusic: conf.get('quality.ytmusic') || 'aac',
   },
   auth: {
     enabled: conf.get('auth.enabled') !== false,
@@ -241,6 +244,11 @@ export const applySettings = (conf: any, data: any, hooks: SettingsInvalidationH
   }
 
   if (data.quality) {
+    if (data.quality.ytmusic) {
+      conf.set('quality.ytmusic', data.quality.ytmusic);
+      changed.push('quality.ytmusic');
+    }
+
     if (data.quality.deezer) {
       conf.set('quality.deezer', data.quality.deezer);
       changed.push('quality.deezer');

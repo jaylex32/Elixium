@@ -18,6 +18,8 @@ import type {Settings} from '@/store/settings-store';
 
 type Row = 'track' | 'album' | 'artist' | 'playlist';
 
+export type Service = 'deezer' | 'qobuz' | 'ytmusic';
+
 const DEEZER_SAMPLE: Record<string, string> = {
   ART_NAME: 'Daft Punk',
   ALB_TITLE: 'Discovery',
@@ -77,32 +79,56 @@ const QOBUZ_SAMPLE: Record<string, string> = {
   work: 'Discovery',
 };
 
-/** Placeholders that carry the track number, in each service's vocabulary. */
-const NUMBER_TOKENS: Record<'deezer' | 'qobuz', string[]> = {
-  deezer: ['TRACK_NUMBER', 'TRACK_POSITION'],
-  qobuz: ['track_number'],
+/**
+ * What a YouTube Music download knows about itself.
+ *
+ * A third vocabulary, because YouTube Music shares neither of the others'.
+ * Deezer substitutes SCREAMING_SNAKE names straight off its private payload
+ * and Qobuz resolves a lowercase set by name; these are the fields the
+ * YouTube Music downloader actually fills in.
+ */
+const YTMUSIC_SAMPLE: Record<string, string> = {
+  title: 'One More Time',
+  artist: 'Daft Punk',
+  album: 'Discovery',
+  album_artist: 'Daft Punk',
+  year: '2001',
+  track_number: '1',
+  total_tracks: '14',
+  video_id: 'FGBhQbmPwH8',
 };
 
-const SUPPRESS_TOKEN: Record<'deezer' | 'qobuz', string> = {
+/** Placeholders that carry the track number, in each service's vocabulary. */
+const NUMBER_TOKENS: Record<Service, string[]> = {
+  deezer: ['TRACK_NUMBER', 'TRACK_POSITION'],
+  qobuz: ['track_number'],
+  ytmusic: ['track_number'],
+};
+
+const SUPPRESS_TOKEN: Record<Service, string> = {
   deezer: 'NO_TRACK_NUMBER',
   qobuz: 'no_track_number',
+  ytmusic: 'no_track_number',
 };
 
 const pad = (value: string) => String(Number(value)).padStart(2, '0');
 
-const extensionFor = (service: 'deezer' | 'qobuz', settings: Settings): string => {
+const extensionFor = (service: Service, settings: Settings): string => {
   if (service === 'deezer') return settings.deezerQuality === 'FLAC' ? '.flac' : '.mp3';
+  /*
+   * Whichever container the chosen format lands in.
+   *
+   * Opus is written as Ogg rather than the WebM YouTube serves, because WebM
+   * has no tag writer and Ogg does — the audio is the same either way.
+   */
+  if (service === 'ytmusic') return settings.ytmusicFormat === 'opus' ? '.opus' : '.m4a';
   // Qobuz 5 is the lossy tier; 6, 7 and 27 are all FLAC at rising resolutions.
   return settings.qobuzQuality === '5' ? '.mp3' : '.flac';
 };
 
-export function renderTemplate(
-  template: string,
-  service: 'deezer' | 'qobuz',
-  row: Row,
-  settings: Settings,
-): string {
-  const sample = service === 'deezer' ? {...DEEZER_SAMPLE} : {...QOBUZ_SAMPLE};
+export function renderTemplate(template: string, service: Service, row: Row, settings: Settings): string {
+  const sample =
+    service === 'deezer' ? {...DEEZER_SAMPLE} : service === 'ytmusic' ? {...YTMUSIC_SAMPLE} : {...QOBUZ_SAMPLE};
 
   // A playlist is named after the list rather than the album it came from.
   if (row === 'playlist' && service === 'deezer') sample.TITLE = 'Summer Essentials';

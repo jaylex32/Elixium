@@ -439,10 +439,15 @@ jobs:
           # ten artifacts still published nothing.
           if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             notes="CHANGELOG-${TAG#v}.md"
+            # A semver prerelease tag (v1.4.0-beta.1) is published as one, so a
+            # beta does not displace the stable release as "Latest" for anyone
+            # downloading from the releases page.
+            prerelease=""
+            case "${TAG#v}" in *-*) prerelease="--prerelease" ;; esac
             if [ -f "$notes" ]; then
-              gh release create "$TAG" --title "Elixium ${TAG#v}" --notes-file "$notes" --repo "${{ github.repository }}"
+              gh release create "$TAG" --title "Elixium ${TAG#v}" --notes-file "$notes" $prerelease --repo "${{ github.repository }}"
             else
-              gh release create "$TAG" --title "Elixium ${TAG#v}" --generate-notes --repo "${{ github.repository }}"
+              gh release create "$TAG" --title "Elixium ${TAG#v}" --generate-notes $prerelease --repo "${{ github.repository }}"
             fi
           fi
           # --clobber so re-running replaces assets rather than erroring, and

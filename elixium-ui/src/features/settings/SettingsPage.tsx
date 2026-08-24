@@ -1,16 +1,33 @@
 import {useEffect, useState} from 'react';
-import {Save, Eye, EyeOff, Palette, Shield, ShieldCheck, ArrowUpCircle, HardDrive, Sliders, RefreshCw, Mic2, FolderTree, FolderSearch, FolderOpen} from 'lucide-react';
+import {
+  Save,
+  Eye,
+  EyeOff,
+  Palette,
+  Shield,
+  ShieldCheck,
+  ArrowUpCircle,
+  HardDrive,
+  Sliders,
+  RefreshCw,
+  Mic2,
+  FolderTree,
+  FolderSearch,
+  FolderOpen,
+} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
 import {Input} from '@/shared/components/ui/Input';
 import {Switch} from '@/shared/components/ui/Switch';
 import {Select} from '@/shared/components/ui/Select';
 import {Badge} from '@/shared/components/ui/Badge';
+import {Tooltip, TooltipProvider} from '@/shared/components/ui/Tooltip';
 import {useSettingsStore, DEEZER_QUALITY_LABELS, QOBUZ_QUALITY_LABELS, type Settings} from '@/store/settings-store';
 import {useAppStore, THEMES} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {ConnectionTest} from './ConnectionTest';
 import {desktop} from '@/shared/lib/desktop';
+import {http} from '@/shared/lib/api';
 import {ApiAccess} from './ApiAccess';
 import {QualityProfile} from './QualityProfile';
 import {PathTemplates} from './PathTemplates';
@@ -143,9 +160,10 @@ export function SettingsPage() {
       (data: {
         cookies?: {arl?: string; sp_dc?: string; spotifyClientId?: string; spotifyClientSecret?: string};
         qobuz?: {app_id?: string; secrets?: string; token?: string};
+        ytmusic?: {cookie?: string};
         concurrency?: number;
-        paths?: {deezer?: string; qobuz?: string};
-        quality?: {deezer?: string; qobuz?: string};
+        paths?: {deezer?: string; qobuz?: string; ytmusic?: string};
+        quality?: {deezer?: string; qobuz?: string; ytmusic?: string};
         trackNumber?: boolean;
         deezerDownloadCover?: boolean;
         fallbackTrack?: boolean;
@@ -164,9 +182,11 @@ export function SettingsPage() {
           qobuzAppId: String(data.qobuz?.app_id ?? ''),
           qobuzSecrets: data.qobuz?.secrets ?? '',
           qobuzToken: data.qobuz?.token ?? '',
+          ytmusicCookie: data.ytmusic?.cookie ?? '',
           concurrency: data.concurrency ?? 3,
           downloadPath: data.paths?.deezer ?? '',
           qobuzDownloadPath: data.paths?.qobuz ?? '',
+          ytmusicDownloadPath: data.paths?.ytmusic ?? '',
           trackNumbering: data.trackNumber ?? true,
           coverArt: data.deezerDownloadCover ?? true,
           fallbackTrack: data.fallbackTrack ?? true,
@@ -186,6 +206,7 @@ export function SettingsPage() {
            */
           ...(data.quality?.deezer ? {deezerQuality: normaliseDeezerQuality(data.quality.deezer)} : {}),
           ...(data.quality?.qobuz ? {qobuzQuality: String(data.quality.qobuz) as Settings['qobuzQuality']} : {}),
+          ...(data.quality?.ytmusic ? {ytmusicFormat: data.quality.ytmusic === 'opus' ? 'opus' : 'aac'} : {}),
         });
         setLoaded(true);
         markClean();
@@ -220,10 +241,19 @@ export function SettingsPage() {
               secrets: settings.qobuzSecrets,
               token: settings.qobuzToken,
             },
+            ytmusic: {cookie: settings.ytmusicCookie},
           }
         : {qobuz: {app_id: settings.qobuzAppId}}),
-      paths: {deezer: settings.downloadPath, qobuz: settings.qobuzDownloadPath},
-      quality: {deezer: settings.deezerQuality, qobuz: settings.qobuzQuality},
+      paths: {
+        deezer: settings.downloadPath,
+        qobuz: settings.qobuzDownloadPath,
+        ytmusic: settings.ytmusicDownloadPath,
+      },
+      quality: {
+        deezer: settings.deezerQuality,
+        qobuz: settings.qobuzQuality,
+        ytmusic: settings.ytmusicFormat,
+      },
     });
     socket.once('settingsSaved', () => {
       toast.success('Settings saved');
@@ -306,6 +336,13 @@ export function SettingsPage() {
             placeholder="Comma-separated secrets"
           />
         </Field>
+        <div className="border-t border-border" />
+        <Field
+          label="YouTube"
+          description="Optional. Most tracks download without one — add a session only if something is refused."
+        >
+          <YouTubeSession value={settings.ytmusicCookie} onChange={(v) => update({ytmusicCookie: v})} />
+        </Field>
       </Section>
 
       {/* Access control for this server, distinct from the service credentials
@@ -316,19 +353,13 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Lyrics" icon={Mic2}>
-        <Field
-          label="Embed lyrics in files"
-          description="Written into the tags (USLT for MP3, LYRICS for FLAC)"
-        >
+        <Field label="Embed lyrics in files" description="Written into the tags (USLT for MP3, LYRICS for FLAC)">
           <div className="flex sm:justify-end">
             <Switch checked={settings.embedLyrics} onCheckedChange={(v) => update({embedLyrics: v})} />
           </div>
         </Field>
         <div className="border-t border-border" />
-        <Field
-          label="Save .lrc file"
-          description="A sidecar with timings, for players that read synced lyrics"
-        >
+        <Field label="Save .lrc file" description="A sidecar with timings, for players that read synced lyrics">
           <div className="flex sm:justify-end">
             <Switch checked={settings.saveLrcFile} onCheckedChange={(v) => update({saveLrcFile: v})} />
           </div>
@@ -352,6 +383,26 @@ export function SettingsPage() {
             value={settings.qobuzQuality}
             onValueChange={(v) => update({qobuzQuality: v as typeof settings.qobuzQuality})}
             options={Object.entries(QOBUZ_QUALITY_LABELS).map(([value, label]) => ({value, label}))}
+          />
+        </Field>
+        {/*
+          Tags are not part of this choice any more, so they are not mentioned:
+          both formats carry them in full. Opus used to lose its metadata
+          because YouTube ships it inside WebM, which has no tag writer — it is
+          rewrapped into Ogg on the way to disk, leaving the audio identical.
+          What is left to weigh is quality against compatibility.
+        */}
+        <Field
+          label="YouTube Music format"
+          description="Opus is the better codec and the higher bitrate. AAC plays on anything, Apple devices included."
+        >
+          <Select
+            value={settings.ytmusicFormat}
+            onValueChange={(v) => update({ytmusicFormat: v as typeof settings.ytmusicFormat})}
+            options={[
+              {value: 'aac', label: 'AAC · m4a — ~131 kbps'},
+              {value: 'opus', label: 'Opus · opus — ~147 kbps'},
+            ]}
           />
         </Field>
         <Field label="Concurrency" description="Parallel downloads (1–10)">
@@ -393,6 +444,13 @@ export function SettingsPage() {
             value={settings.qobuzDownloadPath}
             onChange={(v) => update({qobuzDownloadPath: v})}
             placeholder="e.g. C:\Music\Qobuz"
+          />
+        </Field>
+        <Field label="YouTube Music downloads" wide>
+          <PathField
+            value={settings.ytmusicDownloadPath}
+            onChange={(v) => update({ytmusicDownloadPath: v})}
+            placeholder="e.g. C:\Music\YouTube Music"
           />
         </Field>
       </Section>
@@ -452,6 +510,156 @@ export function SettingsPage() {
 }
 
 /**
+ * Hand Elixium a YouTube session, via a cookies.txt export.
+ *
+ * There is no sign-in button, and there cannot be. Google refuses to
+ * authenticate anybody from a window embedded in another program — an
+ * anti-phishing measure rather than something to work around — and the OAuth
+ * device-code flow that briefly replaced it was withdrawn. Chromium browsers
+ * have encrypted their cookie stores against everything but themselves since
+ * Chrome 127, so Chrome, Edge and Brave cannot be read either.
+ *
+ * What every browser does have is an extension that exports cookies.txt, the
+ * same format yt-dlp consumes. So the file comes from the browser the person
+ * already uses, whichever one that is.
+ */
+function YouTubeSession({value, onChange}: {value: string; onChange: (value: string) => void}) {
+  const [busy, setBusy] = useState(false);
+  const signedIn = value.trim().length > 0;
+
+  const uploadCookiesTxt = async (file: File) => {
+    setBusy(true);
+    try {
+      const text = await file.text();
+      const {data} = await http.post('/ytmusic/cookies-txt', {text});
+      if (data?.imported) {
+        /*
+         * Read the stored session back rather than marking the field with a
+         * placeholder.
+         *
+         * The server has already saved the real cookie, but this form posts
+         * its own field on Save — so putting anything else in it, even as a
+         * marker, overwrites the real session with that marker the moment
+         * Save is pressed. Which is exactly what happened.
+         */
+        const socket = getSocket();
+        socket.emit('getSettings');
+        socket.once('settings', (fresh: {ytmusic?: {cookie?: string}}) => {
+          if (fresh?.ytmusic?.cookie) onChange(fresh.ytmusic.cookie);
+        });
+        /*
+         * Say now whether YouTube actually accepts it.
+         *
+         * A file can carry every cookie by name — SAPISID included — and still
+         * be a signed-out session, because the values rotate and an export
+         * taken from a profile that was not signed in looks identical from
+         * here. Without this the first sign of trouble is a download failing
+         * much later, which sends people looking at the downloader.
+         */
+        if (data.signedIn === false) {
+          toast.error('That file is not a signed-in session', {
+            description:
+              'YouTube reports it as signed out. Sign in to youtube.com, check your avatar is showing, then export cookies.txt again from that tab.',
+            duration: 10000,
+          });
+        } else if (data.signedIn === true) {
+          toast.success(data.account ? `Signed in as ${data.account}` : 'YouTube session verified', {
+            description: `${data.cookies} cookies read from ${file.name}. Remember to press Save.`,
+          });
+        } else {
+          toast.success('YouTube session imported', {
+            description: `${data.cookies} cookies from ${file.name}. Could not reach YouTube to confirm it. Press Save.`,
+          });
+        }
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error('Could not read that cookies.txt', {description: message});
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              className="sr-only"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                // Cleared so choosing the same file twice still fires.
+                e.target.value = '';
+                if (file) void uploadCookiesTxt(file);
+              }}
+            />
+            <span
+              className={cn(
+                'inline-flex h-9 cursor-pointer items-center rounded-sm px-3 text-xs font-semibold transition-colors',
+                signedIn ? 'bg-surface-bg text-text-primary' : 'bg-accent text-white',
+                busy && 'pointer-events-none opacity-60',
+              )}
+            >
+              {busy ? 'Reading…' : 'Upload cookies.txt'}
+            </span>
+          </label>
+          {signedIn && (
+            <Button size="sm" variant="ghost" onClick={() => onChange('')} disabled={busy}>
+              Clear
+            </Button>
+          )}
+          <span className="text-xs text-text-muted">{signedIn ? 'Session saved' : 'No session'}</span>
+          <Tooltip
+            side="left"
+            wide
+            delayDuration={150}
+            content={
+              <div className="space-y-1.5">
+                <p className="font-semibold text-text-primary">Exporting a YouTube session</p>
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li>In a private/incognito window, sign in to youtube.com.</li>
+                  <li>Export cookies.txt from that tab with a cookies.txt extension.</li>
+                  <li>Close the window without browsing, then upload the file.</li>
+                </ol>
+                <p className="text-text-muted">
+                  The private window matters: YouTube rotates a normal session as you browse, which invalidates an
+                  earlier export.
+                </p>
+              </div>
+            }
+          >
+            <button
+              type="button"
+              aria-label="How to export a YouTube session"
+              className={cn(
+                'flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] font-semibold',
+                'text-text-muted transition-colors hover:border-accent/50 hover:text-text-primary',
+              )}
+            >
+              i
+            </button>
+          </Tooltip>
+        </div>
+        {/*
+        The steps live behind the hover, not on the page.
+
+        They are read once if at all — most people never need a session, since
+        downloads work without one — and printing them permanently took more
+        room than the control they explain. The private-window instruction is
+        the load-bearing part: YouTube rotates a live session as you browse,
+        which silently invalidates an export taken from it earlier.
+      */}
+        <SecretInput value={value} onChange={onChange} placeholder="Or paste a Cookie header" />
+      </div>
+    </TooltipProvider>
+  );
+}
+
+/**
  * A path with Browse and Open beside it — desktop only.
  *
  * The buttons appear solely inside the Electron shell, where the window and the
@@ -467,6 +675,7 @@ function PathField({
   placeholder,
 }: {
   value: string;
+
   onChange: (value: string) => void;
   placeholder?: string;
 }) {

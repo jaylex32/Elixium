@@ -27,6 +27,15 @@ export interface MediaRouteDependencies {
   refreshDeezerSession: () => Promise<void>;
   initQobuzForSearch: () => Promise<void>;
   initQobuzForDownload: () => Promise<void>;
+  /**
+   * A playable URL for a YouTube Music track.
+   *
+   * Optional: the API is mounted in builds that have no YouTube support, and
+   * a missing resolver should answer "not available" rather than crash.
+   */
+  resolveYtMusicStream?: (videoId: string) => Promise<{url: string; mimeType: string} | null>;
+  /** YouTube Music's own lyrics, licensed and usually present. */
+  resolveYtMusicLyrics?: (videoId: string) => Promise<{text: string; source: string} | null>;
 }
 
 const mimeFor = (extension: 'flac' | 'mp3'): string => (extension === 'flac' ? 'audio/flac' : 'audio/mpeg');
@@ -136,6 +145,8 @@ export const registerMediaRoutes = ({
   refreshDeezerSession,
   initQobuzForSearch,
   initQobuzForDownload,
+  resolveYtMusicStream,
+  resolveYtMusicLyrics,
 }: MediaRouteDependencies): void => {
   /** Fetch + decrypt a Deezer track in full, reusing the cache when warm. */
   const materializeDeezerTrack = async (id: string, quality: string) => {
@@ -232,6 +243,43 @@ export const registerMediaRoutes = ({
    * AVPlayer style clients can seek and probe duration without a full fetch.
    */
   const streamHandler = route(async (req, res) => {
+    /*
+     * YouTube Music first, before `parseService`.
+     *
+     * That helper only accepts the two catalogue services, so a YouTube track
+     * was rejected as an unsupported service and never played at all — the
+     * same gap that left its albums and artists opening onto empty modals.
+     */
+    if (String(req.query.service ?? '').toLowerCase() === 'ytmusic') {
+      const videoId = requireString(req.params.id ?? req.query.id, 'id');
+      if (!resolveYtMusicStream) throw ApiError.notFound('YouTube Music is not available on this server');
+
+      /*
+       * Report why, not just that it failed.
+       *
+       * YouTube refuses most music to a signed-out caller, and "could not be
+       * played" sends the reader looking for a broken track when the answer
+       * is a missing session. The two need different actions.
+       */
+      let resolved: {url: string; mimeType: string} | null = null;
+      try {
+        resolved = await resolveYtMusicStream(videoId);
+      } catch (error: any) {
+        if (error?.kind === 'login-required') {
+          throw new ApiError(
+            'unauthorized',
+            'YouTube will not play this without a signed-in session. Upload a cookies.txt in Settings.',
+          );
+        }
+        throw ApiError.notFound(error?.message || 'That track could not be played');
+      }
+      if (!resolved) throw ApiError.notFound('That track could not be played');
+
+      res.setHeader('X-Elixium-Stream', 'full');
+      proxyStream(req, res, resolved.url, resolved.mimeType || 'audio/mp4');
+      return;
+    }
+
     const service = parseService(req.query.service);
     const id = requireString(req.params.id ?? req.query.id, 'id');
     const quality = String(req.query.quality || defaultQualityFor(service));
@@ -453,8 +501,33 @@ export const registerMediaRoutes = ({
   app.get(
     `${basePath}/tracks/:id/lyrics`,
     route(async (req, res) => {
-      const service = parseService(req.query.service);
       const id = requireString(req.params.id, 'id');
+
+      /*
+       * YouTube Music first, before `parseService`.
+       *
+       * That helper only accepts the two catalogue services, so a YouTube
+       * track was rejected as unsupported and never got as far as asking —
+       * the same gap that stopped its tracks playing at all.
+       */
+      if (String(req.query.service ?? '').toLowerCase() === 'ytmusic') {
+        const native = resolveYtMusicLyrics ? await resolveYtMusicLyrics(id).catch(() => null) : null;
+
+        /* Falling back to LRCLIB needs a name to search by, which only the
+           caller has for a YouTube track. */
+        const artist = String(req.query.artist ?? '').trim();
+        const title = String(req.query.title ?? '').trim();
+        const found = native ?? (artist && title ? await fetchLrclib({artist, title}).catch(() => null) : null);
+        if (!found) throw ApiError.notFound('No lyrics available for this track');
+
+        return sendData(res, {
+          text: found.text,
+          synced: 'synced' in found ? found.synced : [],
+          source: found.source,
+        });
+      }
+
+      const service = parseService(req.query.service);
 
       let result: LyricsResult | null = null;
       let meta: {artist?: string; title?: string; album?: string; durationSec?: number} = {};

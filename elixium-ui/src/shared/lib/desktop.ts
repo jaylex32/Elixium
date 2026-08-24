@@ -24,3 +24,19 @@ export const desktop = (): DesktopBridge | undefined =>
   typeof window !== 'undefined' && window.elixium?.isDesktop ? window.elixium : undefined;
 
 export const isDesktopApp = (): boolean => Boolean(desktop());
+
+/**
+ * A service's display name.
+ *
+ * Written as `service === 'deezer' ? 'Deezer' : 'Qobuz'` in half a dozen
+ * places, which quietly labelled every YouTube Music artist, album and
+ * playlist as "QOBUZ" the moment a third service existed — and the modals then
+ * queried Qobuz for them and found nothing. One function, so adding a fourth
+ * service cannot repeat it.
+ */
+export const serviceLabel = (service: string): string => {
+  if (service === 'deezer') return 'Deezer';
+  if (service === 'qobuz') return 'Qobuz';
+  if (service === 'ytmusic') return 'YouTube Music';
+  return service;
+};

@@ -9,6 +9,7 @@ import type {GenreContent, GenreKind} from './genre-content';
 import type {FavoritesStore, FavoriteType} from './favorites-store';
 import type {PlaylistSearch, PlaylistSearchService} from './playlist-search';
 import {getLogEntries, clearLogEntries} from './log-buffer';
+import type {YtMusicService, ResolveTarget} from './ytmusic-service';
 
 interface WebRestDependencies {
   app: Express;
@@ -41,6 +42,12 @@ interface WebRestDependencies {
     settings: any,
     socket?: any,
   ) => Promise<void>;
+  /**
+   * YouTube Music browsing, and resolution of what it finds onto Deezer or
+   * Qobuz. Optional: the routes answer 503 rather than 404 when it is absent,
+   * so a client can tell "not built with this" from "temporarily down".
+   */
+  ytmusic?: YtMusicService;
 }
 
 export const registerWebRestRoutes = ({
@@ -48,6 +55,7 @@ export const registerWebRestRoutes = ({
   io,
   deezer,
   qobuz,
+  ytmusic,
   artistContent,
   charts,
   genreContent,
@@ -167,6 +175,309 @@ export const registerWebRestRoutes = ({
    * They are not genres, and offering them here asked the catalogue for "the
    * best-sellers genre". Deezer's list is unchanged either way.
    */
+  /*
+   * YouTube Music.
+   *
+   * Its own routes rather than a third value on `service`, because it is not a
+   * download source: everything it finds is resolved onto Deezer or Qobuz
+   * before it reaches the queue. Threading it through every service branch
+   * would have implied a parity — charts, quality profiles, watchlists — that
+   * does not exist and could not be honoured.
+   */
+  const requireYtMusic = (res: any): YtMusicService | null => {
+    if (ytmusic) return ytmusic;
+    res.status(503).json({error: 'YouTube Music is not available on this server'});
+    return null;
+  };
+
+  app.get('/api/ytmusic/search', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const query = String(req.query.q || '');
+      const rawType = String(req.query.type || 'track').toLowerCase();
+      const type = (['track', 'album', 'artist', 'playlist'] as const).find((value) => value === rawType) ?? 'track';
+      const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 50);
+      /*
+       * Paged by cursor, because YouTube pages by cursor.
+       *
+       * An offset returns the first rows again, so the caller sends back the
+       * token it was given rather than counting. Without this a search stopped
+       * at twenty results with no way to reach the rest.
+       */
+      const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+      return res.json(await service.searchPage(query, type, limit, cursor));
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  app.get('/api/ytmusic/album', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const id = String(req.query.id || '');
+      if (!id) return res.status(400).json({error: 'Missing id'});
+      const album = await service.album(id);
+      if (!album) return res.status(404).json({error: 'That album could not be read'});
+      return res.json(album);
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  app.get('/api/ytmusic/playlist', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const id = String(req.query.id || '');
+      if (!id) return res.status(400).json({error: 'Missing id'});
+      const playlist = await service.playlist(id);
+      if (!playlist) return res.status(404).json({error: 'That playlist could not be read'});
+      return res.json(playlist);
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  /**
+   * Download a track from YouTube Music itself.
+   *
+   * This is the service proper. `/resolve` is the other thing — it finds the
+   * same recording on Deezer or Qobuz for a better file — and the two are
+   * deliberately separate endpoints because they answer different needs.
+   *
+   * Progress goes out on the same socket events every other download uses, so
+   * a YouTube track appears in the queue looking like anything else.
+   */
+  app.post('/api/ytmusic/download', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+
+    const body = req.body ?? {};
+    const videoId = String(body.videoId || '');
+    const itemId = String(body.itemId || `ytmusic-${videoId}-${Date.now()}`);
+    if (!/^[\w-]{11}$/.test(videoId)) return res.status(400).json({error: 'Not a YouTube video id'});
+
+    const title = String(body.title || 'Unknown title');
+    const artist = String(body.artist || 'Unknown artist');
+
+    /* Answer immediately; the download reports itself over the socket. A
+       three-minute request would time out in every client there is. */
+    res.json({started: true, itemId});
+
+    const emit = (payload: Record<string, unknown>) => io.emit('downloadProgress', {itemId, ...payload});
+
+    try {
+      emit({itemStatus: 'downloading', currentTrack: title, percentage: 0});
+
+      const result = await service.downloadToLibrary(
+        videoId,
+        {
+          title,
+          artist,
+          album: String(body.album || ''),
+          albumArtist: String(body.albumArtist || artist),
+          year: body.year ? Number(body.year) : null,
+          trackNumber: body.trackNumber ? Number(body.trackNumber) : null,
+          trackTotal: body.trackTotal ? Number(body.trackTotal) : null,
+          coverUrl: String(body.cover || ''),
+          /* Provenance. YouTube offers no ISRC, catalogue number or
+             composer, so the one durable fact worth keeping is where the
+             file came from. */
+          comment: `YouTube Music · https://music.youtube.com/watch?v=${videoId}`,
+        },
+        (received, total) => {
+          if (total) emit({itemStatus: 'downloading', percentage: Math.round((received / total) * 100)});
+        },
+      );
+
+      if (!result.tagged) console.log('ytmusic: saved without tags — ' + result.path);
+      emit({itemStatus: 'completed', percentage: 100, folder: result.folder, files: [result.path]});
+      io.emit('downloadComplete', {itemId, count: 1, files: [result.path]});
+    } catch (error: any) {
+      const message = error?.message || 'The download failed';
+      emit({itemStatus: 'error', message});
+      io.emit('directUrlDownloadError', {itemId, message});
+    }
+  });
+
+  app.get('/api/ytmusic/home', async (_req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      return res.json(await service.home());
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  /**
+   * Home rows, mapped onto YouTube Music's own feeds.
+   *
+   * The interface asks for a row by name — new releases, charts, and so on —
+   * and each is answered from the matching YouTube feed rather than from one
+   * generic list, so the rows differ from each other the way they do on every
+   * other service.
+   */
+  app.get('/api/ytmusic/discovery', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const type = String(req.query.type || '').toLowerCase();
+      const shelves = /new|release/.test(type)
+        ? await service.newReleases()
+        : /chart|top|popular|trend/.test(type)
+        ? await service.charts()
+        : await service.home();
+
+      /* Flattened: a row is a flat list, and which shelf an item came from is
+         not something the row can show. */
+      const items = shelves.flatMap((shelf) => shelf.items);
+      return res.json({service: 'ytmusic', type, items});
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  /**
+   * YouTube Music's own front page, shelf by shelf.
+   *
+   * One request for the whole page rather than one per row: the rows all come
+   * out of the same few browse calls, so fetching them separately would repeat
+   * the same work and show the same cards twice.
+   */
+  app.get('/api/ytmusic/shelves', async (_req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      return res.json(await service.shelves());
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  /**
+   * Everything an artist has of one kind.
+   *
+   * The artist page itself shows ten of each and hides the rest behind a
+   * "more" link, so a fifty-album discography arrived as ten and the tabs had
+   * nothing to page through.
+   */
+  app.get('/api/ytmusic/artist-content', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const id = String(req.query.id || '');
+      const raw = String(req.query.kind || 'albums').toLowerCase();
+      const kind = (['albums', 'playlists', 'tracks'] as const).find((value) => value === raw) ?? 'albums';
+      if (!id) return res.status(400).json({error: 'Missing id'});
+      return res.json(await service.artistContent(id, kind));
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  app.get('/api/ytmusic/genres', async (_req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      return res.json(await service.genres());
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  app.get('/api/ytmusic/genre-content', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const params = String(req.query.id || '');
+      if (!params) return res.status(400).json({error: 'Missing id'});
+
+      /*
+       * A kind returns a flat list; without one, the shelves as they came.
+       * The interface asks per tab, and asking for shelves and flattening them
+       * there would mean every tab fetching all four.
+       */
+      const raw = String(req.query.kind || '').toLowerCase();
+      const kind = (['albums', 'tracks', 'artists', 'playlists'] as const).find((value) => value === raw);
+      if (kind) return res.json(await service.genreItems(params, kind));
+      return res.json(await service.genreContent(params));
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  app.get('/api/ytmusic/artist', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const id = String(req.query.id || '');
+      if (!id) return res.status(400).json({error: 'Missing id'});
+      const artist = await service.artist(id);
+      if (!artist) return res.status(404).json({error: 'That artist could not be read'});
+      return res.json(artist);
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  /**
+   * Turn YouTube Music items into downloadable ones.
+   *
+   * Answers for every track, matched or not, and says which. A caller that
+   * only received the matches would have no way to tell the user that three
+   * tracks off an album are not on either service.
+   */
+  app.post('/api/ytmusic/resolve', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const body = req.body ?? {};
+      const preferred: ResolveTarget = body.preferred === 'qobuz' ? 'qobuz' : 'deezer';
+      const tracks = Array.isArray(body.tracks) ? body.tracks : [];
+      if (tracks.length === 0) return res.status(400).json({error: 'No tracks to resolve'});
+      if (tracks.length > 200) return res.status(400).json({error: 'Too many tracks in one request'});
+
+      const resolved = await service.resolveTracks(tracks, preferred);
+      return res.json({
+        resolved,
+        matched: resolved.filter((entry) => entry.match).length,
+        total: resolved.length,
+      });
+    } catch (error: any) {
+      return res.status(502).json({error: error.message});
+    }
+  });
+
+  /**
+   * Accept a cookies.txt export.
+   *
+   * Google refuses embedded sign-in windows and withdrew its device-code flow,
+   * and Chromium encrypts its cookie store against everything but itself — so
+   * a file the user exports themselves is the one route that works from any
+   * browser.
+   */
+  app.post('/api/ytmusic/cookies-txt', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    try {
+      const text = String(req.body?.text ?? '');
+      if (!text.trim()) return res.status(400).json({error: 'No cookies.txt content was sent'});
+      const summary = await service.importCookiesTxt(text);
+      return res.json({
+        imported: true,
+        cookies: summary.names.length,
+        names: summary.names,
+        signedIn: summary.signedIn,
+        account: summary.account,
+      });
+    } catch (error: any) {
+      return res.status(400).json({error: error?.message ?? 'That file could not be read'});
+    }
+  });
+
   app.get('/api/genres', async (req, res) => {
     try {
       const service = String(req.query.service || 'deezer').toLowerCase();

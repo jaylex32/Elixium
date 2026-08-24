@@ -1,4 +1,4 @@
-export type Service = 'deezer' | 'qobuz';
+export type Service = 'deezer' | 'qobuz' | 'ytmusic';
 
 // ── Core media entities ──────────────────────────────────────────────
 
@@ -102,6 +102,8 @@ export interface AppSettings {
   concurrency: number;
   downloadPath: string;
   qobuzDownloadPath: string;
+  ytmusicDownloadPath: string;
+  ytmusicFormat: 'aac' | 'opus';
   trackNumbering: boolean;
   coverArt: boolean;
   createPlaylists: boolean;

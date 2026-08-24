@@ -54,6 +54,7 @@ export const SECONDARY_NAV_ITEMS: NavItem[] = NAV_ITEMS.filter((item) => !PRIMAR
 export const SERVICE_ITEMS: {id: Service; label: string; color: string}[] = [
   {id: 'deezer', label: 'Deezer', color: '#a259ff'},
   {id: 'qobuz', label: 'Qobuz', color: '#0067b3'},
+  {id: 'ytmusic', label: 'YT Music', color: '#ff0033'},
 ];
 
 /** Display titles per page, used by the header and the error-boundary label. */

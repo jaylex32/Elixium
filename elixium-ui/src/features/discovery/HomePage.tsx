@@ -18,7 +18,7 @@ import {
   Headphones,
   Library,
 } from 'lucide-react';
-import {useDiscovery} from '@/shared/lib/api';
+import {useDiscovery, useYtMusicShelves} from '@/shared/lib/api';
 import {cn} from '@/shared/lib/utils';
 import {relationsOf} from '@/shared/lib/relations';
 import {usePlayItem} from '@/shared/hooks/usePlayItem';
@@ -34,7 +34,7 @@ import {Recommendations} from './Recommendations';
 import {Button} from '@/shared/components/ui/Button';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {ErrorState} from '@/shared/components/States';
-import type {RawDiscoveryItem, Service} from '@/types';
+import type {RawDiscoveryItem, RawSearchResult, Service} from '@/types';
 
 interface Section {
   type: string;
@@ -187,6 +187,7 @@ function DiscoverySection({
   icon: Icon,
   service,
   excludeId,
+  presetItems,
   onSelect,
 }: {
   type: string;
@@ -196,9 +197,20 @@ function DiscoverySection({
   service: Service;
   /** Id already shown by the hero, so the row does not repeat it. */
   excludeId?: string;
+  /**
+   * Items already in hand, for rows that came from a single page fetch.
+   *
+   * YouTube Music's shelves all arrive together, so asking again per row would
+   * repeat the same browse calls to get the same cards back.
+   */
+  presetItems?: RawSearchResult[];
   onSelect: (album: AlbumCardData) => void;
 }) {
-  const {data = [], isLoading, isError, refetch} = useDiscovery(service, type);
+  const query = useDiscovery(service, type, !presetItems);
+  const {isLoading, isError, refetch} = presetItems
+    ? {isLoading: false, isError: false, refetch: () => undefined}
+    : query;
+  const data = presetItems ?? query.data ?? [];
   const {download} = useDownload();
   const {playItem} = usePlayItem();
   const openAlbum = useNavigationStore((s) => s.openAlbum);
@@ -414,7 +426,17 @@ export function HomePage() {
 
   const featured = heroPool.length > 0 ? toAlbum(heroPool[heroIndex], service) : null;
 
-  const sections = [...COMMON_SECTIONS, ...(SERVICE_SECTIONS[service] ?? [])];
+  const {data: ytShelves = []} = useYtMusicShelves(service === 'ytmusic');
+
+  /*
+   * YouTube Music brings its own rows.
+   *
+   * The fixed three are Deezer's and Qobuz's editorial shape; YouTube Music
+   * names its shelves itself, and two of the fixed names resolved to the same
+   * feed — so the page showed the same cards twice under different headings.
+   */
+  const sections =
+    service === 'ytmusic' ? [] : [...COMMON_SECTIONS, ...(SERVICE_SECTIONS[service] ?? [])];
 
   return (
     <div className="animate-fade-in space-y-8 px-4 pb-8 pt-5 sm:space-y-10 sm:px-6 sm:pt-6">
@@ -455,6 +477,21 @@ export function HomePage() {
           onSelect={(album) => openAlbum({...album, service})}
         />
       ))}
+
+      {service === 'ytmusic' &&
+        ytShelves.map((shelf, index) => (
+          <DiscoverySection
+            key={`ytshelf-${shelf.title}`}
+            type={`shelf-${index}`}
+            title={shelf.title}
+            subtitle="From YouTube Music"
+            icon={ListMusic}
+            service={service}
+            excludeId={featured?.id}
+            presetItems={shelf.items}
+            onSelect={(album) => openAlbum({...album, service})}
+          />
+        ))}
 
     </div>
   );

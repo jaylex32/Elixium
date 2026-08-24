@@ -35,7 +35,15 @@ export function PlaylistsPage() {
    * needs an authenticated session — a Tidal link still works via URL download
    * and the playlist watcher.
    */
-  const [searchService, setSearchService] = useState<PlaylistSearchService>(service);
+  /*
+   * Playlist search has its own sources — Deezer, Qobuz, Spotify — and
+   * YouTube Music is not among them: its playlists are browsed through its
+   * own pages. Starting on Deezer beats starting on a value this control
+   * cannot represent.
+   */
+  const [searchService, setSearchService] = useState<PlaylistSearchService>(
+    service === 'deezer' || service === 'qobuz' ? service : 'deezer',
+  );
   const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   // Keeps typing responsive: the input updates every keystroke while the

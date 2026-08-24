@@ -15,7 +15,18 @@ export type Page =
   | 'logs'
   | 'settings';
 
-export type Service = 'deezer' | 'qobuz';
+/*
+ * Re-exported, not redeclared.
+ *
+ * There were two `Service` types — this one and the one in `types/index`
+ * — and they drifted the moment a third service was added: every component
+ * that passed a value from one to the other stopped compiling, while a
+ * plain `tsc --noEmit` here reported nothing, because the interface is only
+ * checked under `tsconfig.app.json`. One definition cannot drift from
+ * itself.
+ */
+export type {Service} from '@/types';
+import type {Service} from '@/types';
 
 export const THEMES = [
   {id: 'ember-signal', label: 'Ember Signal'},

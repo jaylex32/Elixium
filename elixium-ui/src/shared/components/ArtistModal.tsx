@@ -21,6 +21,7 @@ import {ListSkeleton, GridSkeleton, ErrorState, EmptyState} from '@/shared/compo
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
 import type {Artist, Service, RawSearchResult} from '@/types';
+import {serviceLabel} from '@/shared/lib/desktop';
 
 interface ArtistModalProps {
   artist: Artist;
@@ -266,7 +267,7 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
 
               <div className="min-w-0 flex-1">
                 <p className="text-xs uppercase tracking-wide text-text-muted">
-                  Artist · {artist.service === 'deezer' ? 'Deezer' : 'Qobuz'}
+                  Artist · {serviceLabel(artist.service)}
                 </p>
                 <h2 className="truncate text-base font-bold text-text-primary sm:text-lg">{artist.name}</h2>
               </div>

@@ -123,7 +123,13 @@ export function useSocket() {
        * rather than a download target; anything unrecognised falls back to the
        * service the app is currently pointed at.
        */
-      const fallbackService = useAppStore.getState().service;
+      /*
+       * Only Deezer and Qobuz reach the queue: a YouTube Music item is resolved
+       * onto one of them before it is ever queued, so it cannot be the fallback
+       * for an item that arrived without a service of its own.
+       */
+      const appService = useAppStore.getState().service;
+      const fallbackService: 'deezer' | 'qobuz' = appService === 'qobuz' ? 'qobuz' : 'deezer';
       const groups = new Map<'deezer' | 'qobuz', Array<Record<string, unknown>>>();
 
       for (const item of queue) {

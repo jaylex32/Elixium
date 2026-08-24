@@ -16,9 +16,18 @@ const NAV_ITEMS: {page: Page; icon: React.ElementType; label: string; descriptio
   {page: 'settings', icon: Settings, label: 'Settings', description: 'Auth, quality, paths'},
 ];
 
-const SERVICE_ITEMS: {service: Service; label: string; color: string}[] = [
-  {service: 'deezer', label: 'Switch to Deezer', color: '#a259ff'},
-  {service: 'qobuz', label: 'Switch to Qobuz', color: '#0067b3'},
+/*
+ * Every service, including the one already selected.
+ *
+ * The current service used to be filtered out, which left a lone "Switch to
+ * Qobuz" row under a "Service" heading and no way to tell what you were on.
+ * Showing all three with the active one marked answers "where am I" as well as
+ * "where can I go", and it stops the list changing shape as you switch.
+ */
+const SERVICE_ITEMS: {service: Service; label: string; description: string; color: string}[] = [
+  {service: 'deezer', label: 'Deezer', description: 'Lossless FLAC, wide catalogue', color: '#a259ff'},
+  {service: 'qobuz', label: 'Qobuz', description: 'Hi-res up to 24-bit', color: '#0067b3'},
+  {service: 'ytmusic', label: 'YouTube Music', description: 'Widest catalogue, AAC audio', color: '#ff0033'},
 ];
 
 interface CommandPaletteProps {
@@ -98,8 +107,15 @@ export function CommandPalette({open, onClose}: CommandPaletteProps) {
               </Command.Group>
 
               <Command.Group heading="Service">
-                {SERVICE_ITEMS.filter((s) => s.service !== service).map(({service: svc, label, color}) => (
-                  <CommandItem key={svc} label={label} color={color} onSelect={() => run(() => setService(svc))} />
+                {SERVICE_ITEMS.map(({service: svc, label, description, color}) => (
+                  <CommandItem
+                    key={svc}
+                    label={label}
+                    description={description}
+                    color={color}
+                    active={svc === service}
+                    onSelect={() => run(() => setService(svc))}
+                  />
                 ))}
               </Command.Group>
             </Command.List>
@@ -115,12 +131,15 @@ function CommandItem({
   label,
   description,
   color,
+  active,
   onSelect,
 }: {
   icon?: React.ElementType;
   label: string;
   description?: string;
   color?: string;
+  /** The service currently selected, marked rather than hidden. */
+  active?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -142,20 +161,29 @@ function CommandItem({
       )}
       {!Icon && color && (
         <div
-          className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0"
-          style={{background: `${color}22`}}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset"
+          style={{background: `${color}22`, ['--tw-ring-color' as string]: `${color}55`}}
         >
-          <span className="h-2 w-2 rounded-full" style={{background: color}} />
+          <span className="h-2.5 w-2.5 rounded-full" style={{background: color}} />
         </div>
       )}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-text-primary">{label}</p>
-        {description && <p className="text-xs text-text-muted">{description}</p>}
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-text-primary">{label}</p>
+        {description && <p className="truncate text-xs text-text-muted">{description}</p>}
       </div>
-      <ArrowRight
-        size={13}
-        className="text-text-muted opacity-0 group-data-[selected=true]:opacity-100 transition-opacity shrink-0"
-      />
+      {active ? (
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          style={{background: `${color ?? 'var(--accent)'}22`, color: color ?? 'var(--accent)'}}
+        >
+          Current
+        </span>
+      ) : (
+        <ArrowRight
+          size={13}
+          className="shrink-0 text-text-muted opacity-0 transition-opacity group-data-[selected=true]:opacity-100"
+        />
+      )}
     </Command.Item>
   );
 }
