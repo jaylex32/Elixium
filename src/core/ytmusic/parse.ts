@@ -133,6 +133,44 @@ const yearOf = (segments: string[]): number | null => {
  * "Album" in a segment that is localised, and reading a localised string to
  * decide a code path is a bug waiting for the first non-English user.
  */
+/**
+ * The ids a row links its artist and album to.
+ *
+ * Every name in a row is a link with a browse id behind it, tagged by what it
+ * points at — so an artist can be told from an album without depending on which
+ * column it landed in, which varies by row type. Reading them is what lets a
+ * YouTube Music track behave like a Deezer or Qobuz one: the names become ways
+ * into the catalogue rather than plain text.
+ */
+export const linkedIdsOf = (item: any): {artistId?: string; albumId?: string} => {
+  const found: {artistId?: string; albumId?: string} = {};
+
+  for (const column of item?.flexColumns ?? []) {
+    for (const run of column?.musicResponsiveListItemFlexColumnRenderer?.text?.runs ?? []) {
+      const endpoint = run?.navigationEndpoint?.browseEndpoint;
+      const browseId = endpoint?.browseId;
+      if (!browseId) continue;
+      const pageType = String(
+        endpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType ?? '',
+      );
+      if (pageType === 'MUSIC_PAGE_TYPE_ARTIST' && !found.artistId) found.artistId = String(browseId);
+      if (pageType === 'MUSIC_PAGE_TYPE_ALBUM' && !found.albumId) found.albumId = String(browseId);
+    }
+  }
+
+  return found;
+};
+
+/**
+ * Is this row marked explicit?
+ *
+ * YouTube Music badges it the same way the other services flag it, and even
+ * distinguishes a clean edit of the same song — so this is read rather than
+ * inferred from the title.
+ */
+export const isExplicitRow = (item: any): boolean =>
+  (item?.badges ?? []).some((badge: any) => badge?.musicInlineBadgeRenderer?.icon?.iconType === 'MUSIC_EXPLICIT_BADGE');
+
 export const parseSearchItem = (item: any, type: 'track' | 'album' | 'artist' | 'playlist'): SearchResult | null => {
   if (!item) return null;
 
@@ -183,6 +221,8 @@ export const parseSearchItem = (item: any, type: 'track' | 'album' | 'artist' | 
         cover,
         durationSeconds: durationToSeconds(durationText),
         artists: withoutDuration.slice(0, Math.max(1, withoutDuration.length - 1)),
+        explicit: isExplicitRow(item),
+        ...linkedIdsOf(item),
       },
     };
   }
@@ -200,7 +240,7 @@ export const parseSearchItem = (item: any, type: 'track' | 'album' | 'artist' | 
       duration: '',
       year: yearOf(segments),
       type: 'album',
-      rawData: {ytmusic: true, browseId: id, cover, segments},
+      rawData: {ytmusic: true, browseId: id, cover, segments, explicit: isExplicitRow(item), ...linkedIdsOf(item)},
     };
   }
 
@@ -215,7 +255,7 @@ export const parseSearchItem = (item: any, type: 'track' | 'album' | 'artist' | 
     duration: '',
     type: 'playlist',
     ...(trackCount ? {trackCount} : {}),
-    rawData: {ytmusic: true, browseId: id, cover, segments},
+    rawData: {ytmusic: true, browseId: id, cover, segments, explicit: isExplicitRow(item), ...linkedIdsOf(item)},
   };
 };
 
@@ -274,6 +314,15 @@ export const continuationOf = (response: any): string | null => {
   return fromGrid ? String(fromGrid) : null;
 };
 
+/** The cursor for the next batch of home shelves, if there is one. */
+export const shelfContinuationOf = (response: any): string | null => {
+  const list =
+    response?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer ??
+    response?.continuationContents?.sectionListContinuation;
+  const token = list?.continuations?.[0]?.nextContinuationData?.continuation;
+  return token ? String(token) : null;
+};
+
 /**
  * The rows of a search continuation.
  *
@@ -303,12 +352,12 @@ export const parseSearchContinuation = (
  * These arrive as a grid of the same two-row cards the artist page used, so
  * they are read the same way and carry the same types.
  */
-export const parseGrid = (response: any, artistName = '', limit = 100): SearchResult[] => {
+export const parseGrid = (response: any, artistName = '', limit = 100, artistBrowseId = ''): SearchResult[] => {
   const results: SearchResult[] = [];
   const seen = new Set<string>();
 
   const take = (node: any) => {
-    const card = parseCarouselCard(node, artistName);
+    const card = parseCarouselCard(node, artistName, artistBrowseId);
     if (card && !seen.has(card.id)) {
       seen.add(card.id);
       results.push(card);
@@ -426,6 +475,10 @@ export const parseCollectionTrack = (item: any, album: string, cover: string): S
       cover: thumbnailOf(item) || cover,
       durationSeconds: durationToSeconds(duration),
       ...(trackNumber ? {trackNumber} : {}),
+      /* An album row is badged the same way a search row is, so a track keeps
+         its marking when the album it belongs to is opened. */
+      explicit: isExplicitRow(item),
+      ...linkedIdsOf(item),
     },
   };
 };
@@ -438,7 +491,35 @@ export const parseCollectionTrack = (item: any, album: string, cover: string): S
  */
 export const parseCollection = (response: any, id: string): YtMusicCollection | null => {
   const header = headerOf(response);
-  const title = runsOf(header?.title).join('').trim();
+  let title = runsOf(header?.title).join('').trim();
+
+  /*
+   * An album shared as a playlist arrives with no header at all.
+   *
+   * A `music.youtube.com/playlist?list=OLAK5uy_...` link — what the share
+   * button gives for an album — answers in the two-column layout with the
+   * tracks present and nothing describing them: no header, no microformat, not
+   * even a title. Declining on a missing header meant that link resolved to
+   * nothing, and the paste failed.
+   *
+   * Every row names its own album and artist, so the description is rebuilt
+   * from the tracks. The album named by most rows is the album, which is
+   * steadier than trusting the first row on a compilation.
+   */
+  if (!title) {
+    const named = trackRowsOf(response)
+      .map((row) => parseCollectionTrack(row?.musicResponsiveListItemRenderer, '', ''))
+      .filter((track): track is SearchResult => track !== null);
+
+    const counts = new Map<string, number>();
+    for (const track of named) {
+      const album = String(track.album ?? '').trim();
+      if (album) counts.set(album, (counts.get(album) ?? 0) + 1);
+    }
+    const commonest = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    title = commonest || named[0]?.title || '';
+  }
+
   if (!title) return null;
 
   const subtitle = runsOf(header?.subtitle);
@@ -461,8 +542,28 @@ export const parseCollection = (response: any, id: string): YtMusicCollection | 
       .find((run) => !/^(19|20)\d{2}$/.test(run.trim())) ||
     '';
 
-  const cover = thumbnailOf(header) || thumbnailOf(header?.thumbnail);
+  /*
+   * The artist link, from the header.
+   *
+   * An album page names its artist once, beside the round photo, rather than on
+   * every row — so the rows have no artist link of their own and the tracks
+   * inherit this one. Without it a track opened from an album named its artist
+   * as plain text while the same track found in search linked through.
+   */
+  const artistId = String(
+    (header?.straplineTextOne?.runs ?? []).find(
+      (run: any) =>
+        run?.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig
+          ?.pageType === 'MUSIC_PAGE_TYPE_ARTIST',
+    )?.navigationEndpoint?.browseEndpoint?.browseId ?? '',
+  );
+
   const rows = trackRowsOf(response);
+
+  /* With no header there is no artwork or artist either; the rows carry both. */
+  const firstRow = rows[0]?.musicResponsiveListItemRenderer;
+  const cover = thumbnailOf(header) || thumbnailOf(header?.thumbnail) || thumbnailOf(firstRow);
+  const artistName = artist || parseCollectionTrack(firstRow, '', '')?.artist || '';
   const tracks = rows
     .map((row) => parseCollectionTrack(row?.musicResponsiveListItemRenderer, title, cover))
     .filter((track): track is SearchResult => track !== null)
@@ -471,14 +572,23 @@ export const parseCollection = (response: any, id: string): YtMusicCollection | 
      * once in the header. Leaving those rows blank would hand the matcher a
      * track with no artist to match on.
      */
-    .map((track) => (track.artist ? track : {...track, artist: artist.trim()}));
+    .map((track) => (track.artist ? track : {...track, artist: artistName.trim()}))
+    /* Rows inherit the page's artist link and its album id. */
+    .map((track) => ({
+      ...track,
+      rawData: {
+        ...track.rawData,
+        ...(artistId && !track.rawData?.artistId ? {artistId} : {}),
+        ...(!track.rawData?.albumId ? {albumId: id} : {}),
+      },
+    }));
 
   const declaredCount = Number(/(\d+)\s+(song|track)/i.exec(secondSubtitle)?.[1] ?? 0);
 
   return {
     id,
     title,
-    artist: artist.trim(),
+    artist: artistName.trim(),
     year,
     cover,
     trackCount: declaredCount || tracks.length,
@@ -518,7 +628,7 @@ export interface YtMusicArtist {
  * The subtitle is "2023" or "Album • 2023" depending on the shelf, so the year
  * is extracted by pattern rather than by position.
  */
-const parseCarouselCard = (node: any, artistName: string): SearchResult | null => {
+const parseCarouselCard = (node: any, artistName: string, artistBrowseId = ''): SearchResult | null => {
   const item = node?.musicTwoRowItemRenderer;
   if (!item) return null;
 
@@ -563,7 +673,14 @@ const parseCarouselCard = (node: any, artistName: string): SearchResult | null =
     duration: '',
     year,
     type,
-    rawData: {ytmusic: true, browseId, cover: thumbnailOf(item), subtitle},
+    rawData: {
+      ytmusic: true,
+      browseId,
+      cover: thumbnailOf(item),
+      subtitle,
+      /* An album card links to the artist whose shelf it came from. */
+      ...(type === 'album' && artistBrowseId ? {artistId: artistBrowseId} : {}),
+    },
   };
 };
 
@@ -618,7 +735,7 @@ export const parseArtist = (response: any, id: string): YtMusicArtist | null => 
     if (Array.isArray(cards)) {
       let kind: SearchResult['type'] | null = null;
       for (const card of cards) {
-        const release = parseCarouselCard(card, name);
+        const release = parseCarouselCard(card, name, id);
         if (!release) continue;
         kind = kind ?? release.type;
         // Carousels overlap — a record appears under Albums and again under
@@ -714,9 +831,20 @@ export interface YtMusicShelf {
  * and dropping either leaves visible gaps.
  */
 export const parseShelves = (response: any, limitPerShelf = 20): YtMusicShelf[] => {
+  /*
+   * A home page arrives a few shelves at a time.
+   *
+   * The first response carries two or three and a token for the next, which is
+   * what the website follows as you scroll. A continuation puts them under
+   * `sectionListContinuation` rather than where the first page put them, so
+   * reading only the first shape found nothing in them and the home page
+   * stopped at whatever the first response happened to include.
+   */
   const sections =
     response?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer
-      ?.contents ?? [];
+      ?.contents ??
+    response?.continuationContents?.sectionListContinuation?.contents ??
+    [];
 
   const shelves: YtMusicShelf[] = [];
   for (const section of Array.isArray(sections) ? sections : []) {

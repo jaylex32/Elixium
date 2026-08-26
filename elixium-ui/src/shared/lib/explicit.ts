@@ -31,6 +31,13 @@ export function isExplicit(rawData: Raw): boolean {
     return false;
   };
 
+  /*
+   * YouTube Music. It badges rows the same way the others flag a field, and
+   * even distinguishes a clean edit of the same song, so this is read from the
+   * badge rather than guessed from the title.
+   */
+  if (truthy(rawData.explicit)) return true;
+
   // Qobuz.
   if (truthy(rawData.parental_warning)) return true;
 

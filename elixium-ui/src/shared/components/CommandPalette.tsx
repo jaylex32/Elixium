@@ -3,6 +3,7 @@ import {Command} from 'cmdk';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {Search, Home, Download, Eye, Music2, Link2, ListMusic, Settings, ArrowRight} from 'lucide-react';
 import {useAppStore, type Page, type Service} from '@/store/app-store';
+import {useEnabledServices} from '@/shared/lib/enabled-services';
 import {cn} from '@/shared/lib/utils';
 
 const NAV_ITEMS: {page: Page; icon: React.ElementType; label: string; description?: string}[] = [
@@ -37,6 +38,8 @@ interface CommandPaletteProps {
 
 export function CommandPalette({open, onClose}: CommandPaletteProps) {
   const {setPage, setService, setSearchQuery, service} = useAppStore();
+  /* A service switched off in Settings is not offered here either. */
+  const enabled = useEnabledServices();
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -107,16 +110,18 @@ export function CommandPalette({open, onClose}: CommandPaletteProps) {
               </Command.Group>
 
               <Command.Group heading="Service">
-                {SERVICE_ITEMS.map(({service: svc, label, description, color}) => (
-                  <CommandItem
-                    key={svc}
-                    label={label}
-                    description={description}
-                    color={color}
-                    active={svc === service}
-                    onSelect={() => run(() => setService(svc))}
-                  />
-                ))}
+                {SERVICE_ITEMS.filter(({service: svc}) => enabled.some((item) => item.id === svc)).map(
+                  ({service: svc, label, description, color}) => (
+                    <CommandItem
+                      key={svc}
+                      label={label}
+                      description={description}
+                      color={color}
+                      active={svc === service}
+                      onSelect={() => run(() => setService(svc))}
+                    />
+                  ),
+                )}
               </Command.Group>
             </Command.List>
           </Command>

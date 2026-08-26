@@ -1,5 +1,6 @@
 import {Download, Play, Music2, Eye} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
+import {coverAtSize, CARD_COVER_PX} from '@/shared/lib/cover';
 import {Button} from '@/shared/components/ui/Button';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
@@ -92,7 +93,9 @@ export function AlbumCard({
         )}
         {album.cover ? (
           <img
-            src={album.cover}
+            /* A card draws this small; asking for a card-sized image keeps a
+               long grid from requesting a hundred full-size covers at once. */
+            src={coverAtSize(album.cover, CARD_COVER_PX)}
             alt=""
             className="h-full w-full object-cover transition-transform duration-slow ease-out group-hover:scale-110"
             loading="lazy"

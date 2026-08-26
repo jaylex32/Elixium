@@ -80,6 +80,18 @@ export const registerWebRestRoutes = ({
         results = await performDeezerSearch(query, type, Number(limit), Number(offset));
       } else if (service === 'qobuz') {
         results = await performQobuzSearch(query, type, Number(limit), Number(offset));
+      } else if (service === 'ytmusic') {
+        /*
+         * YouTube Music had no branch here, so this returned an empty list for
+         * it — no error, just nothing. Anything reading this route saw a
+         * service with no results rather than one it could not ask, which is
+         * why the home page's suggestions were blank on YouTube Music while
+         * search itself worked: search has its own route, this one did not.
+         */
+        const ytmusic = requireYtMusic(res);
+        if (!ytmusic) return;
+        const kind = (['track', 'album', 'artist', 'playlist'] as const).find((value) => value === type) ?? 'track';
+        results = await ytmusic.searchCatalog(String(query ?? ''), kind, Number(limit) || 25);
       }
 
       res.json(results);

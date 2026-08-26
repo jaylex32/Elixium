@@ -105,6 +105,43 @@ export function extractCover(rawData: Raw | undefined | null, service: string): 
   return undefined;
 }
 
+/**
+ * The width a grid card draws its artwork at, with room for a high-density
+ * screen. Cards render around 180px; twice that stays sharp on a retina
+ * display and is still a fraction of a full-size cover.
+ */
+export const CARD_COVER_PX = 360;
+
+/**
+ * The same image, asked for at the size it will actually be drawn.
+ *
+ * Covers are stored at full resolution, because that is what gets embedded in
+ * a downloaded file and shown on an album page — and that must not change. A
+ * card, though, draws it at a couple of hundred pixels, so requesting a
+ * thousand fetches roughly thirty times the pixels it can display.
+ *
+ * That was invisible while an artist's grid held ten cards. It stopped being
+ * invisible at fifty-six: the browser asks Google's image CDN for fifty-six
+ * full-size images at once, the CDN throttles the burst, and the dropped ones
+ * render as blank squares until something makes the browser ask again.
+ *
+ * Only YouTube's own image hosts are rewritten, and only when the URL carries
+ * a size to rewrite. Anything else — Deezer, Qobuz, an unfamiliar host — is
+ * returned exactly as it came, so no other service's artwork can be affected
+ * by this.
+ */
+export function coverAtSize(url: string | undefined, size: number): string | undefined {
+  if (!url || !url.startsWith('http')) return url;
+  if (!/(googleusercontent|ggpht|ytimg)\.com/.test(url)) return url;
+
+  /* "=w1000-h1000-l90-rj" — width and height, with the rest left alone. */
+  if (/=.*w\d+-h\d+/.test(url)) return url.replace(/w\d+-h\d+/, `w${size}-h${size}`);
+  /* "=s1200" — a single square dimension. */
+  if (/=s\d+/.test(url)) return url.replace(/=s\d+/, `=s${size}`);
+
+  return url;
+}
+
 /** Build a Deezer CDN cover URL from an ALB_PICTURE hash */
 export function deezerCoverUrl(hash: string, size = 500): string {
   return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;

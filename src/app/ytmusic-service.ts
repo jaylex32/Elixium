@@ -23,6 +23,7 @@ import {
   parseArtist,
   parseGenres,
   parseShelves,
+  shelfContinuationOf,
   type YtMusicCollection,
   type YtMusicArtist,
   type YtMusicGenre,
@@ -194,7 +195,7 @@ export const createYtMusicService = ({
     for (const link of page.more[kind] ?? []) {
       try {
         const more = await yt.browseMore(link.browseId, link.params);
-        for (const item of parseGrid(more, page.name)) {
+        for (const item of parseGrid(more, page.name, 100, browseId)) {
           if (item.type === wanted && !seen.has(item.id)) {
             seen.add(item.id);
             items.push(item);
@@ -226,7 +227,31 @@ export const createYtMusicService = ({
    * service's catalogue while believing you are in another's is worse than an
    * empty page, so these now come from YouTube Music or not at all.
    */
-  const home = async (): Promise<YtMusicShelf[]> => parseShelves(await yt.browse('FEmusic_home'));
+  /**
+   * YouTube Music's home page, followed past its first response.
+   *
+   * It hands over two or three shelves and a token for the next few — the
+   * website follows those as you scroll, which is why its home page is long
+   * and ours was not. A handful of pages is plenty for a home screen; the feed
+   * goes on well past anything worth rendering at once.
+   */
+  const home = async (pages = 4): Promise<YtMusicShelf[]> => {
+    let response = await yt.browse('FEmusic_home');
+    const shelves = parseShelves(response);
+
+    for (let page = 1; page < pages; page += 1) {
+      const cursor = shelfContinuationOf(response);
+      if (!cursor) break;
+      try {
+        response = await yt.call('browse', {continuation: cursor});
+      } catch {
+        break;
+      }
+      shelves.push(...parseShelves(response));
+    }
+
+    return shelves;
+  };
 
   const newReleases = async (): Promise<YtMusicShelf[]> => parseShelves(await yt.browse('FEmusic_new_releases'));
 
@@ -305,6 +330,142 @@ export const createYtMusicService = ({
   };
 
   /**
+   * The album a track belongs to, looked up when the link does not say.
+   *
+   * A pasted link resolves through `videoDetails`, which carries a title and an
+   * author and no album at all — and a music-video link resolves to a different
+   * id from the album version, so there is nothing on it to follow.
+   *
+   * Searching for the track finds what YouTube Music says its album is:
+   * "Never Gonna Give You Up" belongs to *Whenever You Need Somebody*, not to
+   * an album of its own name. Only a result whose title is the same song is
+   * accepted, because a wrong album is worse than none — once written into the
+   * file it is indistinguishable from a right one.
+   *
+   * A genuine single returns its own title, which is what YouTube Music itself
+   * reports for one.
+   */
+  const albumFor = async (title: string, artist: string): Promise<string> => {
+    const simplify = (text: string) =>
+      text
+        .toLowerCase()
+        .replace(/\(.*?\)|\[.*?\]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+    try {
+      const found = await searchCatalog(`${title} ${artist}`.trim(), 'track', 5);
+      const wanted = simplify(title);
+      const hit = found.find((result) => simplify(result.title) === wanted);
+      if (hit?.album) return hit.album;
+    } catch {
+      /* A lookup that cannot run is not worth failing a paste over. */
+    }
+    return title;
+  };
+
+  /**
+   * A track with no album named after itself.
+   *
+   * YouTube supplies an album for most tracks but not for all — a pasted link
+   * resolves through `videoDetails`, which has no album field at all, and a
+   * standalone single often has none either.
+   *
+   * A single is released *as* an album holding one track, which is how every
+   * catalogue models it, so its own title is the right answer. The alternative
+   * is an empty tag and a folder called "Unknown Album" that every unrelated
+   * single in the library ends up sharing.
+   */
+  const withAlbum = (metadata: TrackMetadata): TrackMetadata =>
+    metadata.album && metadata.album.trim() ? metadata : {...metadata, album: metadata.title};
+
+  /**
+   * Turn a pasted YouTube or YouTube Music link into tracks.
+   *
+   * Pasting one used to route to Qobuz. That was right when YouTube was only a
+   * source to convert from — read the names off the link, find them on Qobuz,
+   * the way Spotify and Tidal links still work. Now that YouTube Music is a
+   * service of its own, a YouTube link should come from YouTube Music, and
+   * routing it elsewhere failed outright for anyone whose Qobuz token had
+   * expired: "qobuz-search is unavailable", for a link that has nothing to do
+   * with Qobuz.
+   *
+   * Returns null for a link this cannot resolve, so the caller can fall back to
+   * the matcher rather than fail.
+   */
+  const resolveUrl = async (
+    rawUrl: string,
+  ): Promise<{kind: 'track' | 'album' | 'playlist' | 'artist'; title: string; tracks: SearchResult[]} | null> => {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl.trim());
+    } catch {
+      return null;
+    }
+
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (!/(^|\.)youtube\.com$/.test(host) && host !== 'youtu.be' && host !== 'music.youtube.com') return null;
+
+    const path = parsed.pathname;
+    const listId = parsed.searchParams.get('list');
+    const videoId = host === 'youtu.be' ? path.slice(1).split('/')[0] : parsed.searchParams.get('v');
+
+    /* An album or playlist page, addressed by its browse id or list id. */
+    const browseMatch = /\/(?:browse|playlist)\/([\w-]+)/.exec(path);
+    const browseId = browseMatch?.[1];
+
+    if (browseId?.startsWith('MPRE')) {
+      const found = await album(browseId);
+      return found ? {kind: 'album', title: found.title, tracks: found.tracks} : null;
+    }
+
+    /* A channel link is an artist; their top tracks are what a paste can act on. */
+    const channel = /\/channel\/([\w-]+)/.exec(path)?.[1];
+    if (channel) {
+      const found = await artist(channel);
+      return found ? {kind: 'artist', title: found.name, tracks: found.topTracks} : null;
+    }
+
+    /*
+     * A playlist wins over a video when both are present: a watch link opened
+     * from a playlist carries both, and the paste means the list.
+     */
+    const list = listId ?? (browseId && !browseId.startsWith('MPRE') ? browseId : undefined);
+    if (list) {
+      /* Playlist browse ids are the list id behind a `VL`, unless already one. */
+      const id = list.startsWith('VL') || list.startsWith('MPRE') ? list : `VL${list}`;
+      const found = await playlist(id);
+      if (found) return {kind: 'playlist', title: found.title, tracks: found.tracks};
+    }
+
+    if (videoId && /^[\w-]{11}$/.test(videoId)) {
+      const details = (await yt.call('player', {videoId}))?.videoDetails;
+      if (!details) return null;
+      const seconds = Number(details.lengthSeconds) || 0;
+      const cover = details?.thumbnail?.thumbnails?.slice(-1)?.[0]?.url ?? '';
+      const name = String(details.title ?? '');
+      const by = String(details.author ?? '').replace(/ - Topic$/, '');
+      return {
+        kind: 'track',
+        title: name,
+        tracks: [
+          {
+            id: videoId,
+            title: name,
+            artist: by,
+            album: await albumFor(name, by),
+            duration: seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : '',
+            type: 'track',
+            rawData: {ytmusic: true, videoId, cover, durationSeconds: seconds},
+          },
+        ],
+      };
+    }
+
+    return null;
+  };
+
+  /**
    * Find one YouTube Music track on a lossless service.
    *
    * `preferred` is tried first and the other is the fallback, because a
@@ -343,6 +504,50 @@ export const createYtMusicService = ({
       confidence: best?.outcome.score?.score ?? null,
       reason: best?.outcome.reason ?? 'no-results',
     };
+  };
+
+  /**
+   * Find tracks from another service in YouTube Music's catalogue.
+   *
+   * The mirror of `resolveTracks`, and the same matcher pointed the other way:
+   * pasting a Spotify or Deezer playlist while on YouTube Music should convert
+   * it, exactly as pasting a YouTube link while on Deezer converts it there.
+   *
+   * The source tracks arrive in whichever service's shape they came from, so
+   * only a title, an artist and a duration are taken — that is all a match
+   * needs, and it saves this from having to know four payload formats.
+   */
+  const matchToYtMusic = async (
+    sources: Array<{title: string; artist: string; durationSeconds?: number | null}>,
+  ): Promise<
+    Array<{source: {title: string; artist: string}; match: SearchResult | null; reason: MatchOutcome['reason']}>
+  > => {
+    const matched: Array<{
+      source: {title: string; artist: string};
+      match: SearchResult | null;
+      reason: MatchOutcome['reason'];
+    }> = [];
+
+    for (let index = 0; index < sources.length; index += BATCH_SIZE) {
+      const batch = sources.slice(index, index + BATCH_SIZE);
+      matched.push(
+        ...(await Promise.all(
+          batch.map(async (source) => {
+            const outcome = await matchTrack(
+              {title: source.title, artist: source.artist, durationSeconds: source.durationSeconds ?? null},
+              (query) => searchCatalog(query, 'track', CANDIDATE_LIMIT),
+            );
+            return {
+              source: {title: source.title, artist: source.artist},
+              match: outcome.match,
+              reason: outcome.reason,
+            };
+          }),
+        )),
+      );
+    }
+
+    return matched;
   };
 
   /** Resolve a whole album or playlist, in batches. */
@@ -389,7 +594,7 @@ export const createYtMusicService = ({
     outputBase: string,
     onProgress?: (received: number, total: number | null) => void,
   ): Promise<DownloadedTrack> =>
-    downloadTrack(videoId, metadata, outputBase, {
+    downloadTrack(videoId, withAlbum(metadata), outputBase, {
       cookie: getCookie?.(),
       preferOpus: preferOpus?.(),
       onProgress,
@@ -428,9 +633,10 @@ export const createYtMusicService = ({
    */
   const downloadToLibrary = async (
     videoId: string,
-    metadata: TrackMetadata,
+    raw: TrackMetadata,
     onProgress?: (received: number, total: number | null) => void,
   ): Promise<{path: string; folder: string; tagged: boolean; bitrate: number}> => {
+    const metadata = withAlbum(raw);
     const root = getDownloadPath?.() || path.join('Music', 'YouTube Music');
 
     /*
@@ -536,6 +742,8 @@ export const createYtMusicService = ({
     searchPage,
     artistContent,
     genreItems,
+    resolveUrl,
+    matchToYtMusic,
     importCookiesTxt,
     lyrics,
     isSignedIn,

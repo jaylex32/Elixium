@@ -119,6 +119,15 @@ function SecretInput({
   );
 }
 
+/** The services that can be switched off, in the order the switcher shows them. */
+const SERVICE_TOGGLES: {key: 'deezer' | 'qobuz' | 'ytmusic'; label: string; note: string}[] = [
+  {key: 'deezer', label: 'Deezer', note: 'Lossless FLAC, wide catalogue'},
+  {key: 'qobuz', label: 'Qobuz', note: 'Hi-res up to 24-bit'},
+  {key: 'ytmusic', label: 'YouTube Music', note: 'Widest catalogue, AAC or Opus'},
+];
+
+const SERVICE_TOGGLE_KEYS = SERVICE_TOGGLES.map((s) => s.key);
+
 const defaultLayout = useSettingsStoreRaw.getState().settings.layout;
 
 /**
@@ -164,6 +173,7 @@ export function SettingsPage() {
         concurrency?: number;
         paths?: {deezer?: string; qobuz?: string; ytmusic?: string};
         quality?: {deezer?: string; qobuz?: string; ytmusic?: string};
+        services?: {deezer?: boolean; qobuz?: boolean; ytmusic?: boolean};
         trackNumber?: boolean;
         deezerDownloadCover?: boolean;
         fallbackTrack?: boolean;
@@ -207,6 +217,15 @@ export function SettingsPage() {
           ...(data.quality?.deezer ? {deezerQuality: normaliseDeezerQuality(data.quality.deezer)} : {}),
           ...(data.quality?.qobuz ? {qobuzQuality: String(data.quality.qobuz) as Settings['qobuzQuality']} : {}),
           ...(data.quality?.ytmusic ? {ytmusicFormat: data.quality.ytmusic === 'opus' ? 'opus' : 'aac'} : {}),
+          ...(data.services
+            ? {
+                enabledServices: {
+                  deezer: data.services.deezer !== false,
+                  qobuz: data.services.qobuz !== false,
+                  ytmusic: data.services.ytmusic !== false,
+                },
+              }
+            : {}),
         });
         setLoaded(true);
         markClean();
@@ -254,6 +273,7 @@ export function SettingsPage() {
         qobuz: settings.qobuzQuality,
         ytmusic: settings.ytmusicFormat,
       },
+      services: settings.enabledServices,
     });
     socket.once('settingsSaved', () => {
       toast.success('Settings saved');
@@ -426,6 +446,31 @@ export function SettingsPage() {
           what counts as good enough for something already in the library. */}
       <Section title="Quality profile" icon={ArrowUpCircle}>
         <QualityProfile />
+      </Section>
+
+      {/*
+        Turning a service off removes it from the switcher entirely.
+        *
+        * Somebody with no Qobuz subscription has no use for a Qobuz button —
+        * it can only ever report credentials they do not have. One has to stay
+        * on, or the switcher would be empty with no way back.
+      */}
+      <Section title="Services" icon={Sliders}>
+        {SERVICE_TOGGLES.map(({key, label, note}) => {
+          const enabled = settings.enabledServices[key];
+          const lastOne = enabled && SERVICE_TOGGLE_KEYS.filter((k) => settings.enabledServices[k]).length === 1;
+          return (
+            <Field key={key} label={label} description={lastOne ? 'At least one service has to stay on' : note}>
+              <Switch
+                checked={enabled}
+                disabled={lastOne}
+                onCheckedChange={(v) =>
+                  update({enabledServices: {...settings.enabledServices, [key]: v}})
+                }
+              />
+            </Field>
+          );
+        })}
       </Section>
 
       <Section title="Download Paths" icon={HardDrive}>

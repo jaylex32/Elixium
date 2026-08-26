@@ -33,6 +33,10 @@ type keysType =
   | 'ytmusic.cookie'
   | 'paths.ytmusic'
   | 'quality.ytmusic'
+  | 'services'
+  | 'services.deezer'
+  | 'services.qobuz'
+  | 'services.ytmusic'
   | 'auth'
   | 'auth.enabled'
   | 'auth.token'
@@ -65,6 +69,18 @@ type configType = {
   };
   playlist: {
     resolveFullPath: boolean;
+  };
+  /**
+   * Which services the interface offers.
+   *
+   * All three by default. Somebody with no Qobuz subscription has no use for a
+   * Qobuz button, and turning one off removes it from the switcher rather than
+   * leaving a service that only ever reports credentials it does not have.
+   */
+  services: {
+    deezer: boolean;
+    qobuz: boolean;
+    ytmusic: boolean;
   };
   trackNumber: boolean;
   fallbackTrack: boolean;
@@ -123,6 +139,11 @@ const defaultConfig: configType = {
   },
   playlist: {
     resolveFullPath: false,
+  },
+  services: {
+    deezer: true,
+    qobuz: true,
+    ytmusic: true,
   },
   trackNumber: true,
   fallbackTrack: true,

@@ -84,6 +84,16 @@ export const registerOperationsSocketHandlers = ({
           qobuz: configAny.get('quality.qobuz') || '44khz',
           ytmusic: configAny.get('quality.ytmusic') || 'aac',
         },
+        /*
+         * Which services the switcher offers. Absent means on: an existing
+         * config predates the setting and turning services off for people who
+         * never asked would be a strange upgrade.
+         */
+        services: {
+          deezer: configAny.get('services.deezer') !== false,
+          qobuz: configAny.get('services.qobuz') !== false,
+          ytmusic: configAny.get('services.ytmusic') !== false,
+        },
       };
       socket.emit('settings', settings);
     } catch (error: any) {
@@ -205,6 +215,21 @@ export const registerOperationsSocketHandlers = ({
            came back as AAC whatever the setting said. */
         if (data.quality.ytmusic) {
           configAny.set('quality.ytmusic', data.quality.ytmusic);
+        }
+      }
+
+      if (data.services && typeof data.services === 'object') {
+        /*
+         * At least one has to remain. Saving none would leave a switcher with
+         * nothing in it and no way back to this setting's own page.
+         */
+        const wanted = {
+          deezer: data.services.deezer !== false,
+          qobuz: data.services.qobuz !== false,
+          ytmusic: data.services.ytmusic !== false,
+        };
+        if (wanted.deezer || wanted.qobuz || wanted.ytmusic) {
+          configAny.set('services', wanted);
         }
       }
 

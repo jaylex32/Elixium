@@ -104,6 +104,8 @@ export interface AppSettings {
   qobuzDownloadPath: string;
   ytmusicDownloadPath: string;
   ytmusicFormat: 'aac' | 'opus';
+  /** Which services the switcher offers. */
+  enabledServices: {deezer: boolean; qobuz: boolean; ytmusic: boolean};
   trackNumbering: boolean;
   coverArt: boolean;
   createPlaylists: boolean;

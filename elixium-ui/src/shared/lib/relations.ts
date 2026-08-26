@@ -50,12 +50,25 @@ export function relationsOf(rawData: Raw, service: Service): Relations {
   const raw = rawData as Record<string, unknown>;
 
   /*
-   * YouTube Music rows do not carry linkable ids for their album or artist —
-   * a search row names them as text only. Returning nothing is correct: the
-   * link components render plain text when there is no id, so the names still
-   * appear and simply are not clickable.
+   * YouTube Music.
+   *
+   * This used to return nothing, on the belief that its rows named their album
+   * and artist as text only. They do not: every name in a row is a link, and
+   * the browse id behind it is tagged by what it points at. An album page names
+   * its artist once in the header instead of on every row, so tracks inherit it
+   * there — which is why a track linked through from search but not from inside
+   * the album it belongs to.
    */
-  if (service === 'ytmusic' || raw.ytmusic === true) return {};
+  if (service === 'ytmusic' || raw.ytmusic === true) {
+    return {
+      artistId: str(raw.artistId),
+      artistName: str(raw.artist) ?? (Array.isArray(raw.artists) ? str(raw.artists[0]) : undefined),
+      albumId: str(raw.albumId),
+      albumTitle: str(raw.album),
+      albumCover: str(raw.cover),
+      artistPicture: str(raw.cover),
+    };
+  }
 
   if (service === 'deezer') {
     const album = obj(raw.album);

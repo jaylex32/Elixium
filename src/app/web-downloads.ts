@@ -1,5 +1,5 @@
 import {EOL} from 'os';
-import {writeFileSync} from 'fs';
+import {writeFileSync, mkdirSync} from 'fs';
 import {dirname, join, resolve, sep} from 'path';
 
 interface WebDownloadsDependencies {
@@ -42,13 +42,15 @@ export const createWebDownloads = ({
   const createPlaylistFile = async (savedFiles: string[], m3u8: string[], parsedData: any, data: any, socket: any) => {
     if (m3u8.length > 1 && !process.env.SIMULATE) {
       try {
+        /*
+         * Any playlist or artist download gets a playlist file, whichever
+         * service produced it — matching on the suffix rather than listing
+         * every prefix, so a new service does not silently lose the feature
+         * the way YouTube Music did.
+         */
+        const linktype = String(parsedData.linktype ?? '');
         const shouldCreatePlaylist =
-          parsedData.linktype === 'playlist' ||
-          parsedData.linktype === 'qobuz-playlist' ||
-          parsedData.linktype === 'spotify-playlist' ||
-          parsedData.linktype === 'artist' ||
-          parsedData.linktype === 'qobuz-artist' ||
-          (conf as any).get('playlist.createPlaylist');
+          /(^|-)(playlist|artist)$/.test(linktype) || (conf as any).get('playlist.createPlaylist');
 
         if (shouldCreatePlaylist) {
           const playlistDir = commonPath([...new Set(savedFiles.map(dirname))]);
@@ -59,6 +61,10 @@ export const createWebDownloads = ({
               'Downloaded Content',
           );
           const playlistFile = join(playlistDir, playlistName + '.m3u8');
+
+          /* A last resort: the folder is derived, so make sure it is there
+             rather than losing the playlist to an ENOENT. */
+          mkdirSync(playlistDir, {recursive: true});
 
           const resolveFullPath: boolean =
             data.settings.resolveFullPath ?? (conf as any).get('playlist.resolveFullPath');
@@ -318,5 +324,5 @@ export const createWebDownloads = ({
     console.log(`🎉 Deezer download complete! ${savedFiles.length} files saved.`);
   };
 
-  return {downloadQobuzTracks, downloadDeezerTracks};
+  return {downloadQobuzTracks, downloadDeezerTracks, createPlaylistFile};
 };

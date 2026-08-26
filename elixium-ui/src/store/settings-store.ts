@@ -18,6 +18,7 @@ export interface Settings {
   qobuzDownloadPath: string;
   ytmusicDownloadPath: string;
   ytmusicFormat: 'aac' | 'opus';
+  enabledServices: {deezer: boolean; qobuz: boolean; ytmusic: boolean};
   trackNumbering: boolean;
   coverArt: boolean;
   embedLyrics: boolean;
@@ -63,6 +64,7 @@ const defaults: Settings = {
   qobuzDownloadPath: '',
   ytmusicDownloadPath: '',
   ytmusicFormat: 'aac',
+  enabledServices: {deezer: true, qobuz: true, ytmusic: true},
   trackNumbering: true,
   coverArt: true,
   embedLyrics: true,

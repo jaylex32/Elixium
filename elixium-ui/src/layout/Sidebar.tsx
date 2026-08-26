@@ -7,7 +7,8 @@ import {useAppStore, type Page} from '@/store/app-store';
 import {useDownloadStore} from '@/store/download-store';
 import {Tooltip, TooltipProvider} from '@/shared/components/ui/Tooltip';
 import {Badge} from '@/shared/components/ui/Badge';
-import {NAV_ITEMS, SERVICE_ITEMS, type NavItem} from './nav-items';
+import {NAV_ITEMS, type NavItem} from './nav-items';
+import {useEnabledServices} from '@/shared/lib/enabled-services';
 
 /** Shared row rendering so the desktop rail and the mobile drawer stay identical. */
 function NavButton({
@@ -58,6 +59,8 @@ function NavButton({
 
 function SidebarContent({collapsed, onNavigate}: {collapsed: boolean; onNavigate: (id: Page) => void}) {
   const {service, setService} = useAppStore();
+  /* Only the services Settings leaves switched on. */
+  const services = useEnabledServices();
   const active = useDownloadStore((s) => s.active);
   const downloading = Object.values(active).filter((d) => d.status === 'downloading').length;
   const pending = Object.values(active).filter((d) => d.status === 'starting' || d.status === 'converting').length;
@@ -66,7 +69,7 @@ function SidebarContent({collapsed, onNavigate}: {collapsed: boolean; onNavigate
     <>
       {!collapsed && (
         <div className="flex shrink-0 gap-1.5 border-b border-border px-3 py-2.5">
-          {SERVICE_ITEMS.map((s) => (
+          {services.map((s) => (
             <button
               key={s.id}
               onClick={() => setService(s.id)}

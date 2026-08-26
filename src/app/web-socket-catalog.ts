@@ -10,7 +10,36 @@ interface WebSocketCatalogDependencies {
   ensureQobuzSearchReady: () => Promise<void>;
   parseToQobuz: (url: string) => Promise<any>;
   parseDeezerUrl: (url: string) => Promise<any>;
+  /** Resolve a YouTube link natively, or null when it is not one. */
+  resolveYtMusicUrl?: (url: string) => Promise<{
+    kind: 'track' | 'album' | 'playlist' | 'artist';
+    title: string;
+    tracks: SearchResult[];
+  } | null>;
 }
+
+/**
+ * A message worth showing for a failed paste.
+ *
+ * Spotify's client reports its errors as objects, so `error.message` comes out
+ * as the string "[object Object]" — which tells the reader nothing at all, and
+ * hides the common case: being rate limited, which passes on its own.
+ */
+const describeParseError = (error: any): string => {
+  const message = String(error?.message ?? '');
+  if (message && message !== '[object Object]') return message;
+
+  const status = Number(error?.statusCode ?? error?.status ?? 0);
+  const retryAfter = Number(error?.headers?.['retry-after'] ?? 0);
+  if (status === 429 || retryAfter > 0) {
+    return retryAfter
+      ? `Spotify is rate limiting requests — try again in about ${retryAfter} seconds`
+      : 'Spotify is rate limiting requests — try again shortly';
+  }
+  if (status === 401 || status === 403) return 'Spotify rejected the request — check the sp_dc cookie in Settings';
+  if (status === 404) return 'That link could not be found';
+  return status ? `The link could not be read (HTTP ${status})` : 'The link could not be read';
+};
 
 export const registerCatalogSocketHandlers = ({
   socket,
@@ -20,6 +49,7 @@ export const registerCatalogSocketHandlers = ({
   ensureQobuzSearchReady,
   parseToQobuz,
   parseDeezerUrl,
+  resolveYtMusicUrl,
 }: WebSocketCatalogDependencies) => {
   socket.on('search', async (data) => {
     try {
@@ -83,7 +113,79 @@ export const registerCatalogSocketHandlers = ({
   socket.on('parseUrl', async (data) => {
     try {
       let parsedData: any;
+
+      /*
+       * A YouTube link comes from YouTube Music.
+       *
+       * It used to be handed to the Qobuz matcher, along with Spotify and
+       * Tidal links — correct when YouTube was only a source to convert from,
+       * wrong now that it is a service that can serve the link itself. Anyone
+       * whose Qobuz token had expired got "qobuz-search is unavailable" for a
+       * link that has nothing to do with Qobuz.
+       *
+       * Falls through to the old path when the link cannot be resolved, or
+       * when a service was asked for explicitly.
+       */
+      const link = String(data?.url || '');
+      const isYouTubeLink = link.includes('youtube.com') || link.includes('youtu.be');
+      /*
+       * A YouTube link is read by YouTube Music, and downloaded from whichever
+       * service is selected.
+       *
+       * On YouTube Music that means downloading it directly. On Deezer or
+       * Qobuz it means converting — finding those same tracks in that
+       * catalogue — which is what pasting a Spotify or TIDAL link already does.
+       * You cannot download from a service you have not selected.
+       *
+       * Reading the link always goes through YouTube Music, because it is the
+       * only thing that can say what is at a YouTube URL. Only the download
+       * target follows the selection.
+       */
+      if (isYouTubeLink && resolveYtMusicUrl) {
+        /*
+         * Failures are reported, not swallowed.
+         *
+         * Returning null here used to drop through to the Qobuz branch, which
+         * is how a YouTube problem kept surfacing as a Qobuz credentials error
+         * and hid the real reason for three attempts at this.
+         */
+        const resolved = await resolveYtMusicUrl(link).catch((error: any) => {
+          throw new Error(`YouTube Music could not read that link: ${error?.message ?? error}`);
+        });
+        if (!resolved || resolved.tracks.length === 0) {
+          throw new Error('YouTube Music found nothing at that link');
+        }
+        if (resolved && resolved.tracks.length > 0) {
+          /*
+           * The preview names the service the tracks will come from, which is
+           * the selected one — the download follows the same rule.
+           */
+          const target = data?.service === 'deezer' || data?.service === 'qobuz' ? data.service : 'ytmusic';
+          socket.emit('urlParseResults', {
+            tracks: resolved.tracks,
+            linktype: `${target}-${resolved.kind}`,
+            linkinfo: {title: resolved.title, artist: {name: resolved.tracks[0]?.artist ?? ''}},
+            service: target,
+            metadata: {
+              originalUrl: String(data.url),
+              service: target,
+              contentType: `${target}-${resolved.kind}`,
+              trackCount: resolved.tracks.length,
+              title: resolved.title || resolved.tracks[0]?.title || 'Unknown Content',
+            },
+          });
+          return;
+        }
+      }
       const hasExplicitService = typeof data?.service === 'string' && data.service.length > 0;
+      /*
+       * On YouTube Music, another service's link is read by that service and
+       * converted — so the preview names YouTube Music, because that is where
+       * the tracks will come from. Reading it is still Deezer's or Qobuz's job:
+       * only they can say what is in their own playlist.
+       */
+      const convertingToYtMusic = data?.service === 'ytmusic' && !isYouTubeLink;
+
       const isQobuzTarget =
         data?.service === 'qobuz' ||
         (!hasExplicitService &&
@@ -101,7 +203,15 @@ export const registerCatalogSocketHandlers = ({
         data.url.includes('open.spotify.com') ||
         data.url.startsWith('spotify:')
       ) {
-        await ensureQobuzSearchReady();
+        /*
+         * Only wake Qobuz when Qobuz is the one reading.
+         *
+         * This waited on Qobuz for every Spotify link, including the ones it
+         * then handed to Deezer — so an expired Qobuz token broke Spotify
+         * links for people not using Qobuz at all, and reported it as a Qobuz
+         * credentials error.
+         */
+        if (isQobuzTarget) await ensureQobuzSearchReady();
         parsedData = isQobuzTarget ? await parseToQobuz(data.url) : await parseDeezerUrl(data.url);
 
         if (data.url.includes('/playlist/')) {
@@ -188,10 +298,17 @@ export const registerCatalogSocketHandlers = ({
           'Unknown Content',
       };
 
+      if (convertingToYtMusic) {
+        parsedData.metadata.service = 'ytmusic';
+        parsedData.metadata.contentType = `ytmusic-${String(parsedData.linktype || 'track')
+          .split('-')
+          .pop()}`;
+      }
+
       socket.emit('urlParseResults', parsedData);
     } catch (error: any) {
       console.error('URL parsing error:', error);
-      socket.emit('urlParseError', {message: error.message});
+      socket.emit('urlParseError', {message: describeParseError(error)});
     }
   });
 };

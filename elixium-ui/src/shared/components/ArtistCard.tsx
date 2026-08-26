@@ -1,6 +1,7 @@
 import {User, Download, Play} from 'lucide-react';
 import {toast} from 'sonner';
 import {cn} from '@/shared/lib/utils';
+import {coverAtSize, CARD_COVER_PX} from '@/shared/lib/cover';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {useSelectionStore} from '@/store/selection-store';
 import {useNavigationStore} from '@/store/navigation-store';
@@ -55,7 +56,7 @@ export function ArtistCard({artist, className}: ArtistCardProps) {
           <div className="h-20 w-20 rounded-full overflow-hidden bg-surface-bg shrink-0">
             {artist.picture ? (
               <img
-                src={artist.picture}
+                src={coverAtSize(artist.picture, CARD_COVER_PX)}
                 alt={artist.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"

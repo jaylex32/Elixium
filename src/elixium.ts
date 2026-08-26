@@ -508,6 +508,8 @@ const setupWebServer = () => {
       ensureQobuzSearchReady: () => providers.ensure('qobuz-search'),
       parseToQobuz,
       parseDeezerUrl: parseInfo,
+      /* A YouTube link is served by YouTube Music, not sent to the matcher. */
+      resolveYtMusicUrl: (url: string) => ytmusicService.resolveUrl(url),
     });
 
     registerOperationsSocketHandlers({
@@ -552,6 +554,17 @@ const setupWebServer = () => {
       shouldUseVariousArtists,
       downloadQobuzTracks,
       downloadDeezerTracks,
+
+      /* A YouTube link on YouTube Music downloads from YouTube Music. */
+      resolveYtMusicUrl: (url: string) => ytmusicService.resolveUrl(url),
+      downloadYtMusicTrack: (videoId: string, metadata: any, onProgress?: any) =>
+        ytmusicService.downloadToLibrary(videoId, metadata, onProgress),
+      /* Converting a YouTube link into the selected catalogue. */
+      matchYtMusicTracks: (tracks: any[], preferred: 'deezer' | 'qobuz') =>
+        ytmusicService.resolveTracks(tracks, preferred),
+      /* And the other direction: a Spotify or Deezer link onto YouTube Music. */
+      matchIntoYtMusic: (sources: any[]) => ytmusicService.matchToYtMusic(sources),
+      createPlaylistFile,
     });
     registerDiscoverySocketHandler({
       socket,
@@ -734,7 +747,7 @@ const {startDownload, startQobuzDownload} = createCliDownloads({
   onCancel,
 });
 
-const {downloadQobuzTracks, downloadDeezerTracks} = createWebDownloads({
+const {downloadQobuzTracks, downloadDeezerTracks, createPlaylistFile} = createWebDownloads({
   conf,
   qobuzDownloadTrack: qdlt,
   deezerDownloadTrack: downloadTrack,

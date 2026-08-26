@@ -341,13 +341,30 @@ export const progressBar = (total: number, width: number) => {
   };
 };
 
+/**
+ * The deepest folder every one of these paths sits inside.
+ *
+ * Cut at a separator, not at a character. Comparing the strings alone returns
+ * the longest shared prefix, which can stop in the middle of a folder name —
+ * "Justin Quiles & Lenny Tavárez" and "Justin Quiles" share "Justin Quiles",
+ * and a playlist written to that folder fails with ENOENT because no such
+ * folder was ever created. It only shows up when a playlist spans folders
+ * whose names share a prefix, which is why it went unnoticed.
+ */
 export const commonPath = (paths: string[]) => {
-  const A = paths.concat().sort(),
-    a1 = A[0],
-    a2 = A[A.length - 1],
-    L = a1.length;
+  if (paths.length === 0) return '';
+
+  const sorted = paths.concat().sort();
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
 
   let i = 0;
-  while (i < L && a1.charAt(i) === a2.charAt(i)) i++;
-  return a1.substring(0, i);
+  while (i < first.length && first.charAt(i) === last.charAt(i)) i++;
+  const prefix = first.substring(0, i);
+
+  /* Every path identical: the prefix is that folder, whole. */
+  if (first === last) return prefix;
+
+  const cut = Math.max(prefix.lastIndexOf('/'), prefix.lastIndexOf('\\'));
+  return cut >= 0 ? prefix.substring(0, cut) : prefix;
 };
