@@ -101,6 +101,29 @@ const serveBuffer = (req: Request, res: Response, buffer: Buffer, contentType: s
  * destination, skips the copy, and leaves us in control of the headers.
  */
 const proxyStream = (req: Request, res: Response, url: string, fallbackContentType: string): void => {
+  /*
+   * A HEAD asks for headers. It must not fetch the audio.
+   *
+   * Without this, every probe opened an upstream stream with no Range and
+   * pulled the whole track off the CDN — a body that HTTP then forbids sending
+   * back. The client sees a fast, empty answer while the engine quietly
+   * downloads a five-megabyte file it will throw away.
+   *
+   * The app probes once per track to learn whether a stream is the real thing
+   * or a 30-second preview, so playing a queue meant downloading every track
+   * twice: once to hear it and once to read one header. Four of those at once
+   * measured 70 to 202 seconds and starved everything behind them, which is
+   * what stopped playback every few tracks.
+   *
+   * Everything a probe needs is already set by the caller — X-Elixium-Stream
+   * says whether this is the full track, and the content type is known here.
+   */
+  if (req.method === 'HEAD') {
+    setAudioHeaders(res, fallbackContentType);
+    res.status(200).end();
+    return;
+  }
+
   const range = req.headers.range as string | undefined;
   const upstream = got.stream(url, range ? {headers: {Range: range}} : {});
   const relay = new PassThrough();

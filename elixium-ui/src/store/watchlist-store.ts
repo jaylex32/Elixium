@@ -63,6 +63,8 @@ export interface WantedItem {
   id: string;
   title: string;
   artist: string;
+  /** The server sends it with every candidate; it makes the name a link. */
+  artistId?: string;
   cover: string;
   type: 'album' | 'ep' | 'single';
   releaseDate: string;

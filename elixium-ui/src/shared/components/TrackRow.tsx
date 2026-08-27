@@ -2,6 +2,9 @@ import {Play, Download, Music2, MoreHorizontal} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {formatDuration} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
+import {TrackByline} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
+import type {Service} from '@/types';
 
 export interface TrackData {
   id: string;
@@ -12,6 +15,9 @@ export interface TrackData {
   duration?: number;
   trackNumber?: number;
   isExplicit?: boolean;
+  /** Kept so the artist and album under the title can be opened. */
+  service?: Service;
+  rawData?: Record<string, unknown>;
 }
 
 interface TrackRowProps {
@@ -72,7 +78,12 @@ export function TrackRow({track, index, onPlay, onDownload, isActive, isPlaying,
         <p className={cn('text-sm font-medium truncate', isActive ? 'text-accent' : 'text-text-primary')}>
           {track.title}
         </p>
-        <p className="text-xs text-text-muted truncate">{track.artist}</p>
+        <TrackByline
+          artist={track.artist}
+          album={track.album}
+          relations={track.service ? relationsOf(track.rawData, track.service) : undefined}
+          service={track.service ?? 'deezer'}
+        />
       </div>
 
       {/* Duration + actions */}

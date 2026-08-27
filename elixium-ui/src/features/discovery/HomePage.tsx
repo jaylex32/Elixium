@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import {useDiscovery, useYtMusicShelves} from '@/shared/lib/api';
 import {cn} from '@/shared/lib/utils';
-import {relationsOf} from '@/shared/lib/relations';
+import {relationsOf, type Relations} from '@/shared/lib/relations';
+import {ArtistLink} from '@/shared/components/RelationLinks';
 import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {extractCover} from '@/shared/lib/cover';
 import {isExplicit} from '@/shared/lib/explicit';
@@ -99,10 +100,12 @@ function toAlbum(item: RawDiscoveryItem, service: Service): AlbumCardData {
 /** Large featured tile built from the first new release. */
 function Hero({
   item,
+  relations,
   service,
   onOpen,
 }: {
   item: AlbumCardData;
+  relations: Relations;
   service: Service;
   onOpen: () => void;
 }) {
@@ -142,7 +145,14 @@ function Hero({
             {service === 'deezer' ? 'Trending now' : 'Featured release'}
           </p>
           <h2 className="mt-1.5 text-display-sm font-bold text-text-primary">{item.title}</h2>
-          <p className="mt-1 truncate text-sm text-text-secondary">{item.artist}</p>
+          <p className="mt-1 truncate text-sm text-text-secondary">
+            <ArtistLink
+              name={item.artist}
+              relations={relations}
+              service={service}
+              className="inline-block max-w-full align-bottom"
+            />
+          </p>
           {item.year && <p className="mt-0.5 text-xs text-text-muted">{item.year}</p>}
 
           <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
@@ -424,7 +434,8 @@ export function HomePage() {
     return pool > 0 ? Math.floor(Date.now() / (3 * 60 * 1000)) % pool : 0;
   }, [heroPool.length]);
 
-  const featured = heroPool.length > 0 ? toAlbum(heroPool[heroIndex], service) : null;
+  const featuredRaw = heroPool.length > 0 ? heroPool[heroIndex] : null;
+  const featured = featuredRaw ? toAlbum(featuredRaw, service) : null;
 
   const {data: ytShelves = []} = useYtMusicShelves(service === 'ytmusic');
 
@@ -440,7 +451,14 @@ export function HomePage() {
 
   return (
     <div className="animate-fade-in space-y-8 px-4 pb-8 pt-5 sm:space-y-10 sm:px-6 sm:pt-6">
-      {featured && <Hero item={featured} service={service} onOpen={() => openAlbum({...featured, service})} />}
+      {featured && (
+        <Hero
+          item={featured}
+          relations={relationsOf(featuredRaw?.rawData, service)}
+          service={service}
+          onOpen={() => openAlbum({...featured, service})}
+        />
+      )}
 
       {/* Home is where a cold start lands, so the way into selection mode has
           to exist here too — every row below is selectable once it is on. */}

@@ -58,6 +58,55 @@ const NOISE_PATTERNS = [
   /\bhq\b|\bhd\b|\b4k\b/gi,
 ];
 
+/**
+ * Words that mean "a different recording of this song".
+ *
+ * Noise above is removed because it says nothing about identity. These are the
+ * opposite: they are the whole difference between two things that otherwise
+ * share a title. "Walk This Way" and "Walk This Way (Instrumental)" overlap on
+ * every word, which scored high enough to be accepted — and an instrumental is
+ * not the song anybody asked for.
+ *
+ * Compared as a set on both sides rather than searched for on one, so a live
+ * track still matches a live track and a remix still matches the same remix.
+ * Read from the raw title, before the bracket stripping above erases
+ * "[Instrumental]" along with the rest of the brackets.
+ */
+const VERSION_TAGS: Array<[string, RegExp]> = [
+  ['instrumental', /\binstrumentals?\b/],
+  ['karaoke', /\bkaraoke\b/],
+  ['acapella', /\ba[\s-]?cappella\b|\bacapella\b/],
+  ['live', /\blive\b/],
+  ['remix', /\bremix(?:es)?\b|\brmx\b/],
+  ['cover', /\bcover(?:ed)?\s+(?:version|by)\b|\(\s*cover\s*\)/],
+  ['sped', /\bsped[\s-]?up\b|\bspeed[\s-]?up\b/],
+  ['slowed', /\bslowed\b/],
+  ['reverb', /\breverb\b/],
+  ['nightcore', /\bnightcore\b/],
+  ['eightd', /\b8d\b/],
+  ['demo', /\bdemo\b/],
+  ['extended', /\bextended\b/],
+  ['radioedit', /\bradio\s+edit\b/],
+  ['mono', /\bmono\b/],
+];
+
+/** Which of those a title declares. */
+export const versionTags = (value: string): Set<string> => {
+  const text = String(value ?? '').toLowerCase();
+  const found = new Set<string>();
+  for (const [name, pattern] of VERSION_TAGS) if (pattern.test(text)) found.add(name);
+  return found;
+};
+
+/** Do two titles describe the same kind of recording? */
+export const sameVersion = (a: string, b: string): boolean => {
+  const left = versionTags(a);
+  const right = versionTags(b);
+  if (left.size !== right.size) return false;
+  for (const tag of left) if (!right.has(tag)) return false;
+  return true;
+};
+
 /** Featured-artist markers, which the two sides place differently. */
 const FEATURE_PATTERN = /\s*[([]?\s*(?:feat\.?|ft\.?|featuring|with)\s+[^)\]]*[)\]]?/gi;
 
@@ -151,6 +200,13 @@ export const scoreCandidate = (
   const title = similarity(source.title, candidate.title);
   const artist = similarity(source.artist, candidate.artist);
   const duration = durationCloseness(source.durationSeconds, secondsOf(candidate.duration));
+
+  /*
+   * A different kind of recording is not this recording, however well the
+   * words line up. Scored zero rather than penalised: there is no confidence
+   * at which an instrumental is the right answer for a song with vocals.
+   */
+  if (!sameVersion(source.title, candidate.title)) return {score: 0, title, artist, duration};
 
   const parts: Array<[number, number]> =
     duration === null

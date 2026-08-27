@@ -16,6 +16,8 @@ import {
   parseCollection,
   durationToSeconds,
   upgradeThumbnail,
+  musicVideoTypeOf,
+  isAlbumAudio,
 } from '../src/core/ytmusic/parse';
 import {
   normalise,
@@ -23,8 +25,11 @@ import {
   durationCloseness,
   scoreCandidate,
   matchTrack,
+  versionTags,
+  sameVersion,
   MATCH_THRESHOLD,
 } from '../src/app/ytmusic-match';
+import {YtMusicClient} from '../src/core/ytmusic/innertube';
 import type {SearchResult} from '../src/app/interactive-types';
 
 // ── fixtures, shaped as the live API returns them ────────────────────────────
@@ -302,4 +307,145 @@ test('a failing search does not abort the match', async (t) => {
     return [candidate('Get Lucky', 'Daft Punk', '6:09')];
   });
   t.is(outcome.reason, 'matched', 'the second query still had its chance');
+});
+
+/*
+ * Album audio against music video.
+ *
+ * A music video's audio is not the record — it carries an intro, an outro,
+ * applause and a different mix — so a playlist of videos downloads as files
+ * that do not match the album they claim to come from. YouTube marks which is
+ * which; these pin that reading, and pin the refusal to accept a different
+ * recording of the same song as a substitute.
+ */
+
+const watchRow = (musicVideoType?: string) => ({
+  overlay: {
+    musicItemThumbnailOverlayRenderer: {
+      content: {
+        musicPlayButtonRenderer: {
+          playNavigationEndpoint: {
+            watchEndpoint: {
+              videoId: 'abc123',
+              ...(musicVideoType
+                ? {watchEndpointMusicSupportedConfigs: {watchEndpointMusicConfig: {musicVideoType}}}
+                : {}),
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
+test('a row says whether it is album audio or a video', (t) => {
+  t.is(musicVideoTypeOf(watchRow('MUSIC_VIDEO_TYPE_ATV')), 'MUSIC_VIDEO_TYPE_ATV');
+  t.is(musicVideoTypeOf(watchRow('MUSIC_VIDEO_TYPE_OMV')), 'MUSIC_VIDEO_TYPE_OMV');
+  t.is(musicVideoTypeOf(watchRow()), '', 'no marker is not the same as a video');
+});
+
+test('only the album track counts as album audio', (t) => {
+  t.true(isAlbumAudio('MUSIC_VIDEO_TYPE_ATV'));
+  t.false(isAlbumAudio('MUSIC_VIDEO_TYPE_OMV'), 'the official video is still a video');
+  t.false(isAlbumAudio('MUSIC_VIDEO_TYPE_OFFICIAL_SOURCE_MUSIC'));
+  t.false(isAlbumAudio('MUSIC_VIDEO_TYPE_UGC'));
+  t.false(isAlbumAudio(undefined), 'not knowing is not a yes');
+});
+
+test('a version qualifier is read from the raw title', (t) => {
+  t.deepEqual([...versionTags('Walk This Way (Instrumental)')], ['instrumental']);
+  t.deepEqual([...versionTags('Walk This Way [Instrumental]')], ['instrumental'], 'brackets count too');
+  t.deepEqual([...versionTags('Walk This Way')], []);
+  t.deepEqual([...versionTags('Alive')], [], 'a word inside another word is not a qualifier');
+});
+
+test('the same kind of recording matches, a different kind does not', (t) => {
+  t.true(sameVersion('Walk This Way', 'Walk This Way (Official Video)'));
+  t.true(sameVersion('Song (Live)', 'Song - Live'), 'live still matches live');
+  t.false(sameVersion('Walk This Way', 'Walk This Way (Instrumental)'));
+  t.false(sameVersion('Song', 'Song (Karaoke Version)'));
+  t.false(sameVersion('Song', 'Song (Remix)'));
+});
+
+test('an instrumental is refused however well the words line up', (t) => {
+  /* This scored 0.94 and was downloaded in place of the song: every word of
+     the title matches, the artist matches, and the length can too. */
+  const score = scoreCandidate(
+    {title: 'Walk This Way', artist: 'Run-D.M.C.', durationSeconds: 244},
+    candidate('Walk This Way (Instrumental)', 'Run-D.M.C.', '4:04'),
+  );
+  t.is(score.score, 0, 'no confidence makes an instrumental the right answer');
+});
+
+test('a live take is not offered for a studio track, or the reverse', (t) => {
+  t.is(
+    scoreCandidate({title: 'Africa', artist: 'Toto', durationSeconds: 295}, candidate('Africa (Live)', 'Toto', '4:55'))
+      .score,
+    0,
+  );
+  t.true(
+    scoreCandidate(
+      {title: 'Africa (Live)', artist: 'Toto', durationSeconds: 295},
+      candidate('Africa (Live)', 'Toto', '4:55'),
+    ).score >= MATCH_THRESHOLD,
+    'the same live take is still a match',
+  );
+});
+
+/*
+ * Transient failures.
+ *
+ * A dropped connection or a moment of 503 in the middle of a hundred-track
+ * playlist used to end that track for good: the request threw, nothing caught
+ * it, and the download reported a failure for something that would have
+ * worked a second later. A refusal is still a refusal, though — retrying a 403
+ * only makes it firmer.
+ */
+
+/** A client whose transport can be told how to fail. */
+const clientOver = (responses: Array<{status: number; data?: unknown; headers?: Record<string, string>} | Error>) => {
+  const calls: number[] = [];
+  let index = 0;
+  const http = {
+    get: async () => ({
+      status: 200,
+      data: '"INNERTUBE_API_KEY":"k","INNERTUBE_CLIENT_VERSION":"1.0","VISITOR_DATA":"v"',
+    }),
+    post: async () => {
+      const next = responses[Math.min(index, responses.length - 1)];
+      index += 1;
+      calls.push(Date.now());
+      if (next instanceof Error) throw next;
+      return {status: next.status, data: next.data ?? {ok: true}, headers: next.headers ?? {}};
+    },
+  } as never;
+  return {client: new YtMusicClient(http), attempts: () => index};
+};
+
+test('a dropped connection is retried rather than failing the track', async (t) => {
+  const {client, attempts} = clientOver([new Error('ECONNRESET'), {status: 200, data: {ok: true}}]);
+  const data = await client.call('browse', {browseId: 'x'});
+  t.deepEqual(data, {ok: true});
+  t.is(attempts(), 2, 'it asked again rather than giving up');
+});
+
+test('a rate limit is waited out, once', async (t) => {
+  const {client, attempts} = clientOver([
+    {status: 429, headers: {'retry-after': '0'}},
+    {status: 200, data: {ok: true}},
+  ]);
+  t.deepEqual(await client.call('search', {query: 'x'}), {ok: true});
+  t.is(attempts(), 2);
+});
+
+test('a refusal is reported immediately', async (t) => {
+  const {client, attempts} = clientOver([{status: 403}]);
+  await t.throwsAsync(client.call('browse', {browseId: 'x'}));
+  t.is(attempts(), 1, 'retrying a refusal only makes it firmer');
+});
+
+test('a service that stays down is reported rather than looped on', async (t) => {
+  const {client, attempts} = clientOver([{status: 503}]);
+  await t.throwsAsync(client.call('browse', {browseId: 'x'}));
+  t.is(attempts(), 3, 'bounded');
 });

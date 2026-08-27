@@ -19,12 +19,21 @@ export type FavoriteType = 'track' | 'album' | 'artist' | 'playlist';
 export interface FavoriteRecord {
   id: string;
   type: FavoriteType;
-  service: 'deezer' | 'qobuz';
+  service: 'deezer' | 'qobuz' | 'ytmusic';
   title: string;
   artist?: string;
   cover?: string;
   /** Kept so a favourited album can be re-opened without another lookup. */
   duration?: string;
+  /**
+   * Where this belongs in the catalogue, kept so a starred track can still
+   * reach its artist and its album. A favourite outlives the page it was
+   * starred from, and without these it is a name with nowhere to go. Absent on
+   * anything starred before they were recorded, which reads as plain text.
+   */
+  album?: string;
+  artistId?: string;
+  albumId?: string;
   addedAt: number;
 }
 

@@ -224,6 +224,50 @@ export const registerWebRestRoutes = ({
     }
   });
 
+  /**
+   * The album master for a video id, with the names and artwork that go with it.
+   *
+   * The player asks before it plays, so that what is heard and what is shown
+   * are the same recording: a playlist row for a music video otherwise plays
+   * the video's soundtrack under a title reading "(Official Video)" beside a
+   * screenshot of the video. Cheap for anything already album audio — the
+   * caller passes what the row said it was, and that answer needs no request
+   * at all.
+   */
+  app.get('/api/ytmusic/album-audio', async (req, res) => {
+    const service = requireYtMusic(res);
+    if (!service) return;
+    const videoId = String(req.query.videoId || '');
+    if (!videoId) return res.status(400).json({error: 'Missing videoId'});
+
+    try {
+      const choice = await service.albumAudioFor(videoId, {
+        title: req.query.title ? String(req.query.title) : undefined,
+        artist: req.query.artist ? String(req.query.artist) : undefined,
+        musicVideoType: req.query.musicVideoType ? String(req.query.musicVideoType) : undefined,
+      });
+
+      const raw = (choice.replacement?.rawData ?? {}) as {cover?: string};
+      return res.json({
+        videoId: choice.videoId,
+        swapped: choice.outcome === 'swapped',
+        outcome: choice.outcome,
+        ...(choice.replacement
+          ? {
+              title: choice.replacement.title,
+              artist: choice.replacement.artist,
+              album: choice.replacement.album,
+              cover: raw.cover,
+            }
+          : {}),
+      });
+    } catch (error: any) {
+      /* Never a reason not to play: on any failure the caller keeps the id it
+         already had, which is exactly the behaviour before this existed. */
+      return res.json({videoId, swapped: false, outcome: 'unknown', error: String(error?.message ?? error)});
+    }
+  });
+
   app.get('/api/ytmusic/album', async (req, res) => {
     const service = requireYtMusic(res);
     if (!service) return;
@@ -294,6 +338,8 @@ export const registerWebRestRoutes = ({
           trackNumber: body.trackNumber ? Number(body.trackNumber) : null,
           trackTotal: body.trackTotal ? Number(body.trackTotal) : null,
           coverUrl: String(body.cover || ''),
+          /* What the row said it was, so the album-audio swap need not ask. */
+          musicVideoType: body.musicVideoType ? String(body.musicVideoType) : undefined,
           /* Provenance. YouTube offers no ISRC, catalogue number or
              composer, so the one durable fact worth keeping is where the
              file came from. */
@@ -579,11 +625,13 @@ export const registerWebRestRoutes = ({
 
   app.post('/api/favorites/toggle', (req, res) => {
     try {
-      const {id, type, service, title, artist, cover, duration} = req.body || {};
+      const {id, type, service, title, artist, cover, duration, album, artistId, albumId} = req.body || {};
       if (!id || !type || !service || !title) {
         return res.status(400).json({error: 'id, type, service and title are required'});
       }
-      res.json(favorites.toggle({id: String(id), type, service, title, artist, cover, duration}));
+      res.json(
+        favorites.toggle({id: String(id), type, service, title, artist, cover, duration, album, artistId, albumId}),
+      );
     } catch (error: any) {
       res.status(500).json({error: error.message});
     }

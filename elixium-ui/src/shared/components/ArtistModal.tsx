@@ -8,7 +8,7 @@ import {extractCover} from '@/shared/lib/cover';
 import {isExplicit} from '@/shared/lib/explicit';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
-import {AlbumLink} from '@/shared/components/RelationLinks';
+import {TrackByline} from '@/shared/components/RelationLinks';
 import {relationsOf} from '@/shared/lib/relations';
 import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 import {useNavigationStore} from '@/store/navigation-store';
@@ -20,6 +20,7 @@ import {keepOpenForSelection} from '@/shared/lib/keep-open-for-selection';
 import {ListSkeleton, GridSkeleton, ErrorState, EmptyState} from '@/shared/components/States';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import type {Artist, Service, RawSearchResult} from '@/types';
 import {serviceLabel} from '@/shared/lib/desktop';
 
@@ -124,6 +125,7 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
   const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const {setTrack, currentTrack, isPlaying, pause, resume} = usePlayerStore();
   /*
    * Selection is read here as well as in the bar.
@@ -186,6 +188,7 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
             duration: toSeconds(t.duration),
             service: artist.service,
             previewUrl: t.rawData?.preview as string | undefined,
+            rawData: t.rawData as Record<string, unknown> | undefined,
           }),
         )
       : [];
@@ -408,6 +411,17 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
                         key={`${item.id}-${item.title}`}
                         album={card}
                         onClick={() => openAlbum({...card, service: artist.service})}
+                        onPlay={() =>
+                          playItem({
+                            id: item.id,
+                            type: tab === 'albums' ? 'album' : 'playlist',
+                            service: artist.service,
+                            title: item.title,
+                            artist: card.artist,
+                            cover: card.cover,
+                            rawData: item.rawData as Record<string, unknown> | undefined,
+                          })
+                        }
                         selectable={{
                           id: item.id,
                           type: tab === 'albums' ? 'album' : 'playlist',
@@ -453,12 +467,23 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
                           />
                         )}
 
-                        <button
+                        {/* A div rather than a button: the artist and album
+                            beneath the title are themselves buttons, and a
+                            button cannot legally contain one. */}
+                        <div
+                          role="button"
+                          tabIndex={0}
                           // While selecting, the row picks instead of playing:
                           // starting playback on every tick would fight the
                           // run of choices being made.
                           onClick={() => (selectionActive ? toggleSelect(asSelectable(index)) : playFrom(index))}
-                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            if (selectionActive) toggleSelect(asSelectable(index));
+                            else playFrom(index);
+                          }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
                           aria-label={isActive ? (isPlaying ? 'Pause' : 'Resume') : `Play ${track.title}`}
                         >
                           <span className="relative h-10 w-10 shrink-0">
@@ -498,16 +523,15 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
                               <span className="truncate">{track.title}</span>
                               {isExplicit(items[index]?.rawData) && <ExplicitBadge />}
                             </span>
-                            {track.album && (
-                              <span className="block truncate text-xs text-text-muted">
-                                {/* The album a top track came from, as a way in. */}
-                                <AlbumLink
-                                  title={track.album}
-                                  relations={relationsOf(items[index]?.rawData, artist.service)}
-                                  service={artist.service}
-                                />
-                              </span>
-                            )}
+                            {/* Who is credited and what it came from — a top
+                                track is often a feature, so the name here is
+                                not always the artist whose page this is. */}
+                            <TrackByline
+                              artist={track.artist}
+                              album={track.album}
+                              relations={relationsOf(items[index]?.rawData, artist.service)}
+                              service={artist.service}
+                            />
                           </span>
 
                           {track.duration ? (
@@ -515,7 +539,7 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
                               {formatDuration(track.duration)}
                             </span>
                           ) : null}
-                        </button>
+                        </div>
 
                         <Button
                           variant="ghost"

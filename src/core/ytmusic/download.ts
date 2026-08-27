@@ -41,6 +41,21 @@ export interface TrackMetadata {
   /** Full-size artwork, fetched and embedded. */
   coverUrl?: string;
   comment?: string;
+  /**
+   * The words, written into the file's tag.
+   *
+   * Deezer and Qobuz downloads have carried these for a while; YouTube Music's
+   * tagger simply never wrote them, so the lyrics setting did nothing here.
+   */
+  lyrics?: string;
+  /**
+   * What kind of upload the row was: album audio or a music video.
+   *
+   * Carried from the listing that produced it so the album-audio swap does not
+   * have to ask YouTube again for something the row already said — on a
+   * hundred-track playlist that is a hundred requests saved.
+   */
+  musicVideoType?: string;
 }
 
 export interface DownloadOptions {
@@ -107,6 +122,7 @@ export const tagFile = (filePath: string, metadata: TrackMetadata, cover: Buffer
       if (metadata.trackNumber) file.tag.track = metadata.trackNumber;
       if (metadata.trackTotal) file.tag.trackCount = metadata.trackTotal;
       if (metadata.comment) file.tag.comment = metadata.comment;
+      if (metadata.lyrics) file.tag.lyrics = metadata.lyrics;
 
       if (cover && cover.length > 0) {
         const picture = taglib.Picture.fromData(taglib.ByteVector.fromByteArray(cover));

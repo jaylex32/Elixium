@@ -17,6 +17,7 @@ import {FavoriteGenres} from './FavoriteGenres';
 import {WatchPlaylistForm} from './WatchPlaylistForm';
 import {ReleaseTypeFilter} from './ReleaseTypeFilter';
 import {ListSkeleton} from '@/shared/components/States';
+import {TrackByline} from '@/shared/components/RelationLinks';
 
 interface WatchlistState {
   watchedArtists?: Array<{
@@ -166,6 +167,7 @@ export function WatchlistPage() {
             id: a.id,
             title: a.title,
             artist: a.artist ?? 'Unknown',
+            artistId: a.artistId,
             cover: a.image ?? '',
             type: 'album' as const,
             releaseDate: a.year ? String(a.year) : '',
@@ -627,7 +629,11 @@ export function WatchlistPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text-primary truncate">{item.title}</p>
-                  <p className="text-xs text-text-muted truncate">{item.artist}</p>
+                  <TrackByline
+                    artist={item.artist}
+                    relations={{artistId: item.artistId, artistName: item.artist, artistPicture: item.cover}}
+                    service={service}
+                  />
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant="secondary" className="capitalize">
@@ -682,7 +688,7 @@ export function WatchlistPage() {
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-text-primary">{t.title}</p>
-                    <p className="truncate text-xs text-text-muted">{t.artist}</p>
+                    <TrackByline artist={t.artist} album={t.album} relations={undefined} service={service} />
                   </div>
 
                   <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">

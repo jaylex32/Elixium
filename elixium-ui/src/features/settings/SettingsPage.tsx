@@ -54,11 +54,20 @@ function Section({title, icon: Icon, children}: {title: string; icon: React.Elem
 function Field({
   label,
   description,
+  hint,
   children,
   wide,
 }: {
   label: string;
   description?: string;
+  /**
+   * A caveat worth keeping but not worth a line of its own.
+   *
+   * The quality rows above are one line each; a two-line explanation under one
+   * of them makes that row read as the complicated one when it is the same
+   * choice as the others. Behind the hint it is still a hover away.
+   */
+  hint?: React.ReactNode;
   children: React.ReactNode;
   /** Give the control most of the row — for file paths and other long values. */
   wide?: boolean;
@@ -66,7 +75,23 @@ function Field({
   return (
     <div className="flex flex-col gap-1.5 py-1 sm:flex-row sm:items-start sm:gap-4">
       <div className="min-w-0 flex-1 sm:pt-0.5">
-        <p className="text-sm font-medium text-text-primary">{label}</p>
+        <p className="flex items-center gap-1.5 text-sm font-medium text-text-primary">
+          {label}
+          {hint && (
+            <Tooltip side="right" wide delayDuration={150} content={hint}>
+              <button
+                type="button"
+                aria-label={`About ${label}`}
+                className={cn(
+                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-[9px] font-semibold',
+                  'text-text-muted transition-colors hover:border-accent/50 hover:text-text-primary',
+                )}
+              >
+                i
+              </button>
+            </Tooltip>
+          )}
+        </p>
         {description && <p className="mt-0.5 text-xs text-text-muted">{description}</p>}
       </div>
       {/* The default column is sized for a toggle or a short select. A download
@@ -130,6 +155,22 @@ const SERVICE_TOGGLE_KEYS = SERVICE_TOGGLES.map((s) => s.key);
 
 const defaultLayout = useSettingsStoreRaw.getState().settings.layout;
 
+/** The format trade-off, kept off the page so the row reads like its neighbours. */
+const FORMAT_HINT = (
+  <div className="space-y-1.5">
+    <p className="font-semibold text-text-primary">Which format to pick</p>
+    <p>
+      <span className="text-text-primary">Opus</span> is the higher bitrate and the better codec at equal rate — the
+      best YouTube offers for a given track.
+    </p>
+    <p>
+      <span className="text-text-primary">AAC</span> is a few kbps lower but plays everywhere, Apple's stock apps
+      included, which do not read Opus.
+    </p>
+    <p className="text-text-muted">Both carry full tags and artwork. Both are lossy at source.</p>
+  </div>
+);
+
 /**
  * The engine's spelling of a Deezer quality, in the interface's vocabulary.
  *
@@ -169,7 +210,7 @@ export function SettingsPage() {
       (data: {
         cookies?: {arl?: string; sp_dc?: string; spotifyClientId?: string; spotifyClientSecret?: string};
         qobuz?: {app_id?: string; secrets?: string; token?: string};
-        ytmusic?: {cookie?: string};
+        ytmusic?: {cookie?: string; preferAlbumAudio?: boolean; strictAlbumAudio?: boolean};
         concurrency?: number;
         paths?: {deezer?: string; qobuz?: string; ytmusic?: string};
         quality?: {deezer?: string; qobuz?: string; ytmusic?: string};
@@ -217,6 +258,8 @@ export function SettingsPage() {
           ...(data.quality?.deezer ? {deezerQuality: normaliseDeezerQuality(data.quality.deezer)} : {}),
           ...(data.quality?.qobuz ? {qobuzQuality: String(data.quality.qobuz) as Settings['qobuzQuality']} : {}),
           ...(data.quality?.ytmusic ? {ytmusicFormat: data.quality.ytmusic === 'opus' ? 'opus' : 'aac'} : {}),
+          ytmusicPreferAlbumAudio: data.ytmusic?.preferAlbumAudio !== false,
+          ytmusicStrictAlbumAudio: data.ytmusic?.strictAlbumAudio === true,
           ...(data.services
             ? {
                 enabledServices: {
@@ -260,7 +303,11 @@ export function SettingsPage() {
               secrets: settings.qobuzSecrets,
               token: settings.qobuzToken,
             },
-            ytmusic: {cookie: settings.ytmusicCookie},
+            ytmusic: {
+              cookie: settings.ytmusicCookie,
+              preferAlbumAudio: settings.ytmusicPreferAlbumAudio,
+              strictAlbumAudio: settings.ytmusicStrictAlbumAudio,
+            },
           }
         : {qobuz: {app_id: settings.qobuzAppId}}),
       paths: {
@@ -406,25 +453,53 @@ export function SettingsPage() {
           />
         </Field>
         {/*
-          Tags are not part of this choice any more, so they are not mentioned:
-          both formats carry them in full. Opus used to lose its metadata
-          because YouTube ships it inside WebM, which has no tag writer — it is
-          rewrapped into Ogg on the way to disk, leaving the audio identical.
-          What is left to weigh is quality against compatibility.
+          Kept as terse as the two above it. Both formats carry tags in full —
+          Opus used to lose them because YouTube ships it inside WebM, which has
+          no tag writer, and it is now rewrapped into Ogg on the way to disk —
+          so the only thing left to weigh is quality against compatibility, and
+          that lives behind the hint rather than under the label.
         */}
-        <Field
-          label="YouTube Music format"
-          description="Opus is the better codec and the higher bitrate. AAC plays on anything, Apple devices included."
-        >
+        <Field label="YouTube Music format" hint={FORMAT_HINT}>
           <Select
             value={settings.ytmusicFormat}
             onValueChange={(v) => update({ytmusicFormat: v as typeof settings.ytmusicFormat})}
             options={[
-              {value: 'aac', label: 'AAC · m4a — ~131 kbps'},
-              {value: 'opus', label: 'Opus · opus — ~147 kbps'},
+              {value: 'opus', label: 'Opus — 147 kbps'},
+              {value: 'aac', label: 'AAC — 131 kbps'},
             ]}
           />
         </Field>
+        <div className="border-t border-border" />
+        {/*
+          A music video's audio is not the record: it carries an intro, an
+          outro, applause and a different mix, and its length disagrees with
+          the release. YouTube marks which is which, so the album master can be
+          taken instead of guessed at.
+        */}
+        <Field
+          label="Prefer album audio over music videos"
+          description="A YouTube Music playlist is mostly music videos. This downloads the album version of each track instead."
+        >
+          <div className="flex sm:justify-end">
+            <Switch
+              checked={settings.ytmusicPreferAlbumAudio}
+              onCheckedChange={(v) => update({ytmusicPreferAlbumAudio: v})}
+            />
+          </div>
+        </Field>
+        {settings.ytmusicPreferAlbumAudio && (
+          <Field
+            label="Skip tracks with no album version"
+            description="Some songs only exist as a video — singles, live cuts, anything unreleased. Off keeps the video; on refuses it."
+          >
+            <div className="flex sm:justify-end">
+              <Switch
+                checked={settings.ytmusicStrictAlbumAudio}
+                onCheckedChange={(v) => update({ytmusicStrictAlbumAudio: v})}
+              />
+            </div>
+          </Field>
+        )}
         <Field label="Concurrency" description="Parallel downloads (1–10)">
           <div className="flex items-center gap-3">
             <input

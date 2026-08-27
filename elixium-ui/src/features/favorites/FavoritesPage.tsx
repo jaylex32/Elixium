@@ -7,6 +7,7 @@ import {cn, toSeconds} from '@/shared/lib/utils';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard} from '@/shared/components/AlbumCard';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {useNavigationStore} from '@/store/navigation-store';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Button} from '@/shared/components/ui/Button';
@@ -16,6 +17,49 @@ import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 import {EmptyState, ListSkeleton} from '@/shared/components/States';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
 import {serviceLabel} from '@/shared/lib/desktop';
+import {TrackByline} from '@/shared/components/RelationLinks';
+import type {Relations} from '@/shared/lib/relations';
+
+/**
+ * A favourite already is its own relations: the ids were stored beside the
+ * name when it was starred, so nothing has to be read back out of a payload.
+ * Anything starred before they were recorded has none, and renders as the
+ * plain text it always did.
+ */
+const relationsFor = (entry: FavoriteRecord): Relations => ({
+  artistId: entry.artistId,
+  artistName: entry.artist,
+  artistPicture: entry.cover,
+  albumId: entry.albumId,
+  albumTitle: entry.album,
+  albumCover: entry.cover,
+});
+
+/**
+ * The same ids in the shape the track's own service sends them, so a favourite
+ * played from here still names a clickable artist in the player and the queue.
+ * Each service is read differently — Deezer's private API uses ART_ID/ALB_ID,
+ * Qobuz nests them — so the shape has to follow the service, not the average.
+ */
+const relationsAsRaw = (entry: FavoriteRecord): Record<string, unknown> => {
+  if (entry.service === 'qobuz') {
+    return {
+      album: {id: entry.albumId, title: entry.album, artist: {id: entry.artistId, name: entry.artist}},
+      performer: {id: entry.artistId, name: entry.artist},
+    };
+  }
+  if (entry.service === 'ytmusic') {
+    return {
+      ytmusic: true,
+      artistId: entry.artistId,
+      albumId: entry.albumId,
+      artist: entry.artist,
+      album: entry.album,
+      cover: entry.cover,
+    };
+  }
+  return {ART_ID: entry.artistId, ALB_ID: entry.albumId, ART_NAME: entry.artist, ALB_TITLE: entry.album};
+};
 
 type Filter = 'all' | FavoriteRecord['type'];
 
@@ -38,6 +82,7 @@ export function FavoritesPage() {
   const {data: favorites = [], isLoading} = useFavorites();
   const clearAll = useClearFavorites();
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const setTrack = usePlayerStore((s) => s.setTrack);
 
   const visible = favorites.filter((entry) => filter === 'all' || entry.type === filter);
@@ -49,9 +94,11 @@ export function FavoritesPage() {
         id: t.id,
         title: t.title,
         artist: t.artist ?? '',
+        album: t.album,
         cover: t.cover,
         duration: toSeconds(t.duration ?? ''),
         service: t.service,
+        rawData: relationsAsRaw(t),
       }),
     );
     if (queue[startIndex]) setTrack(queue[startIndex], queue);
@@ -183,8 +230,15 @@ export function FavoritesPage() {
 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-text-primary">{entry.title}</p>
-                <p className="truncate text-xs text-text-muted">
-                  {entry.artist} · {serviceLabel(entry.service)}
+                <p className="flex min-w-0 items-center gap-1 truncate text-xs text-text-muted">
+                  <TrackByline
+                    artist={entry.artist}
+                    album={entry.album}
+                    relations={relationsFor(entry)}
+                    service={entry.service}
+                  />
+                  <span className="shrink-0 opacity-60">·</span>
+                  <span className="shrink-0">{serviceLabel(entry.service)}</span>
                 </p>
               </div>
 
@@ -232,6 +286,16 @@ export function FavoritesPage() {
                     cover: entry.cover,
                     type: entry.type,
                   }}
+                  onPlay={() =>
+                    playItem({
+                      id: entry.id,
+                      type: entry.type as 'album' | 'playlist',
+                      service: entry.service,
+                      title: entry.title,
+                      artist: entry.artist,
+                      cover: entry.cover,
+                    })
+                  }
                   selectable={{
                     id: entry.id,
                     type: entry.type as 'album' | 'playlist',

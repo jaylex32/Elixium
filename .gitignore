@@ -125,6 +125,7 @@ Playlist/
 # Elixium local state and release artifacts
 elixium.config.json
 elixium.watchlist.json
+elixium.favorites.json
 elixium.exe
 binaries/
 .pkg-cache/

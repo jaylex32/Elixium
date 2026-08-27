@@ -24,18 +24,21 @@ import {
   parseGenres,
   parseShelves,
   shelfContinuationOf,
+  isAlbumAudio,
   type YtMusicCollection,
   type YtMusicArtist,
   type YtMusicGenre,
   type YtMusicShelf,
 } from '../core/ytmusic/parse';
-import {matchTrack, type MatchOutcome} from './ytmusic-match';
+import {matchTrack, secondsOf, type MatchOutcome} from './ytmusic-match';
+import {lookupLyrics, toLrc, lrcPathFor} from '../lib/lyrics-embed';
 import {downloadTrack, type TrackMetadata, type DownloadedTrack} from '../core/ytmusic/download';
 import {getAudioStream} from '../core/ytmusic/player';
 import {cookieHeaderFromCookiesTxt, verifyYouTubeSession, type CookieImportSummary} from '../core/ytmusic/cookies-txt';
 import axios, {type AxiosInstance} from 'axios';
 import {mergeSetCookie} from '../core/ytmusic/cookie-jar';
 import path from 'path';
+import {existsSync, writeFileSync} from 'fs';
 import {sanitizeFilename, ytmusicSaveLayout} from '../lib/util';
 import type {SearchResult} from './interactive-types';
 
@@ -66,6 +69,27 @@ export interface YtMusicServiceDependencies {
   getNumberWidth?: () => number;
   /** Take Opus over AAC, accepting that WebM cannot carry tags. */
   preferOpus?: () => boolean;
+  /**
+   * Take the album master when the thing asked for is a music video.
+   *
+   * Read fresh, like the rest: it is a setting, and a download queued after it
+   * is changed should honour the new value.
+   */
+  preferAlbumAudio?: () => boolean;
+  /** Refuse a video outright rather than falling back to it. */
+  strictAlbumAudio?: () => boolean;
+  /** Write the words into the file's tags. */
+  embedLyrics?: () => boolean;
+  /** Write a synced .lrc beside the audio. */
+  saveLrcFile?: () => boolean;
+}
+
+/** What happened when a video was offered to the album-audio swap. */
+export interface AudioChoice {
+  videoId: string;
+  /** The album row that replaced a video, when one was found. */
+  replacement: SearchResult | null;
+  outcome: 'already-audio' | 'swapped' | 'kept-video' | 'no-audio-found' | 'unknown';
 }
 
 /** What a resolve attempt produced, per track. */
@@ -98,6 +122,10 @@ export const createYtMusicService = ({
   getLayout,
   getNumberWidth,
   preferOpus,
+  preferAlbumAudio,
+  strictAlbumAudio,
+  embedLyrics,
+  saveLrcFile,
 }: YtMusicServiceDependencies) => {
   /*
    * One HTTP client for everything that talks to YouTube, so that rotated
@@ -379,6 +407,137 @@ export const createYtMusicService = ({
   const withAlbum = (metadata: TrackMetadata): TrackMetadata =>
     metadata.album && metadata.album.trim() ? metadata : {...metadata, album: metadata.title};
 
+  /** Swap decisions already made, so a repeated download costs no requests. */
+  const swapCache = new Map<string, AudioChoice>();
+  const remember = (videoId: string, choice: AudioChoice): AudioChoice => {
+    swapCache.set(videoId, choice);
+    return choice;
+  };
+
+  /**
+   * What kind of upload a video id is, asked of YouTube itself.
+   *
+   * `player` answers for a bare id, which is what a pasted link amounts to.
+   * Returns an empty string when it cannot say, and the caller treats not
+   * knowing as "leave it alone" rather than guessing.
+   */
+  const videoKind = async (
+    videoId: string,
+  ): Promise<{kind: string; title: string; artist: string; durationSeconds: number | null}> => {
+    try {
+      const response = await yt.call('player', {videoId});
+      const details = response?.videoDetails ?? {};
+      const seconds = Number(details.lengthSeconds);
+      return {
+        kind: String(details.musicVideoType ?? ''),
+        title: String(details.title ?? ''),
+        /* A "- Topic" channel is YouTube's auto-generated artist channel; the
+           suffix is plumbing, not part of anybody's name. */
+        artist: String(details.author ?? '').replace(/ - Topic$/, ''),
+        durationSeconds: Number.isFinite(seconds) && seconds > 0 ? seconds : null,
+      };
+    } catch {
+      return {kind: '', title: '', artist: '', durationSeconds: null};
+    }
+  };
+
+  /**
+   * The album master for something that is a music video.
+   *
+   * A music video's audio is not the record. It carries label idents, crowd
+   * noise, an intro, a different mix, and a length that disagrees with the
+   * release — so a playlist with videos in it downloads as a set of files that
+   * do not match the album they claim to be from. YouTube marks every row with
+   * which it is, so this is read rather than inferred.
+   *
+   * The search it runs is YouTube Music's own Songs filter, which returns only
+   * album audio; candidates are checked against that marker anyway, because a
+   * filter is a request rather than a guarantee. The match is the same scorer
+   * that backs Spotify and Tidal conversion, so an unconfident guess is
+   * declined rather than silently downloading the wrong recording.
+   *
+   * Not every track has a master: singles, live cuts and anything unreleased
+   * exist only as a video. Those are kept as they are unless strict mode is
+   * on, because a missing file helps nobody.
+   */
+  const albumAudioFor = async (
+    videoId: string,
+    hint?: {title?: string; artist?: string; durationSeconds?: number | null; musicVideoType?: string},
+  ): Promise<AudioChoice> => {
+    if (!preferAlbumAudio?.()) return {videoId, replacement: null, outcome: 'already-audio'};
+
+    /*
+     * Answered once per id for as long as the engine is up.
+     *
+     * Downloading the same hundred-track playlist twice — because it grew, or
+     * because half of it failed — otherwise repeats every search, and a burst
+     * of them is how an account starts being rate limited.
+     */
+    const cached = swapCache.get(videoId);
+    if (cached) return cached;
+
+    let kind = String(hint?.musicVideoType ?? '');
+    let title = String(hint?.title ?? '');
+    let artist = String(hint?.artist ?? '');
+    let durationSeconds = hint?.durationSeconds ?? null;
+
+    /* Ask only when the row did not already say, so a playlist of twenty rows
+       does not become twenty extra requests. */
+    if (!kind || !title) {
+      const details = await videoKind(videoId);
+      kind = kind || details.kind;
+      title = title || details.title;
+      artist = artist || details.artist;
+      durationSeconds = durationSeconds ?? details.durationSeconds;
+    }
+
+    if (!kind) return remember(videoId, {videoId, replacement: null, outcome: 'unknown'});
+    if (isAlbumAudio(kind)) return remember(videoId, {videoId, replacement: null, outcome: 'already-audio'});
+    if (!title.trim()) return remember(videoId, {videoId, replacement: null, outcome: 'unknown'});
+
+    /*
+     * Duration is deliberately withheld from the scorer here, and only here.
+     *
+     * It is normally the strongest signal — a recording's length is a fact
+     * where its title is a matter of style — but a music video's length is not
+     * its song's: it carries an intro, an outro, dialogue, applause. Feeding it
+     * in made the master score *worse* the more video-like the video was, and
+     * "Take On Me" was declined against "Take On Me" because the video runs
+     * seventeen seconds longer than the record.
+     *
+     * What replaces it: candidates are album audio by YouTube's own marking, a
+     * version qualifier on one side and not the other is refused outright by
+     * the scorer, and a loose sanity bound drops anything so far adrift that it
+     * must be a different piece of music — an album-length upload sharing a
+     * title, not a master.
+     *
+     * The bound is deliberately wide. Measured across a real video-heavy
+     * playlist the gap runs a median of 18 seconds and a legitimate maximum of
+     * 130: the album cut of "Addicted to Love" is six minutes against the
+     * video's four. A tighter bound rejected exactly that track.
+     */
+    const outcome = await matchTrack({title, artist, durationSeconds: null}, async (query) => {
+      const results = await searchCatalog(query, 'track', CANDIDATE_LIMIT);
+      return results.filter((result) => {
+        if (!isAlbumAudio((result.rawData as {musicVideoType?: string})?.musicVideoType)) return false;
+        const candidateSeconds = secondsOf(result.duration);
+        if (!durationSeconds || !candidateSeconds) return true;
+        return Math.abs(candidateSeconds - durationSeconds) <= 300;
+      });
+    });
+
+    const replacement = outcome.match;
+    if (!replacement || replacement.id === videoId) {
+      /* Not cached under strict mode: the answer there is a refusal, and a
+         refusal should be reconsidered if the setting is turned off. */
+      const missing: AudioChoice = {videoId, replacement: null, outcome: 'kept-video'};
+      if (strictAlbumAudio?.()) return {...missing, outcome: 'no-audio-found'};
+      return remember(videoId, missing);
+    }
+
+    return remember(videoId, {videoId: replacement.id, replacement, outcome: 'swapped'});
+  };
+
   /**
    * Turn a pasted YouTube or YouTube Music link into tracks.
    *
@@ -635,8 +794,35 @@ export const createYtMusicService = ({
     videoId: string,
     raw: TrackMetadata,
     onProgress?: (received: number, total: number | null) => void,
-  ): Promise<{path: string; folder: string; tagged: boolean; bitrate: number}> => {
-    const metadata = withAlbum(raw);
+  ): Promise<{path: string; folder: string; tagged: boolean; bitrate: number; skipped: boolean}> => {
+    /*
+     * A music video's audio is not the record — so before anything is written,
+     * the album master is taken in its place where one exists. The names go
+     * with it: a file tagged "[Lyric Video]" from a row that was swapped would
+     * describe the upload rather than the song.
+     */
+    const choice = await albumAudioFor(videoId, {
+      title: raw.title,
+      artist: raw.artist,
+      musicVideoType: (raw as {musicVideoType?: string}).musicVideoType,
+    });
+
+    if (choice.outcome === 'no-audio-found') {
+      throw new Error(`No album audio exists for "${raw.title}" — only a music video, which strict mode refuses`);
+    }
+
+    const chosenId = choice.videoId;
+    const named: TrackMetadata = choice.replacement
+      ? {
+          ...raw,
+          title: choice.replacement.title || raw.title,
+          artist: choice.replacement.artist || raw.artist,
+          album: choice.replacement.album || raw.album,
+          coverUrl: ((choice.replacement.rawData as {cover?: string})?.cover ?? raw.coverUrl) || raw.coverUrl,
+        }
+      : raw;
+
+    const metadata = withAlbum(named);
     const root = getDownloadPath?.() || path.join('Music', 'YouTube Music');
 
     /*
@@ -657,7 +843,7 @@ export const createYtMusicService = ({
         year: metadata.year ?? null,
         trackNumber: metadata.trackNumber ?? null,
         trackTotal: metadata.trackTotal ?? null,
-        videoId,
+        videoId: chosenId,
       },
       path: template,
       minimumIntegerDigits: getNumberWidth?.() || 2,
@@ -666,13 +852,60 @@ export const createYtMusicService = ({
     const base = path.join(root, relative);
     const folder = path.dirname(base);
 
-    const result = await downloadTrack(videoId, metadata, base, {
+    /*
+     * Already on disk is already done — the same answer Deezer gives.
+     *
+     * Both extensions are checked because the format is a setting: a library
+     * built as AAC should not be downloaded again as Opus simply because the
+     * preference changed, and re-running a playlist that half failed should
+     * cost nothing for the half that succeeded.
+     */
+    for (const extension of ['.m4a', '.opus']) {
+      const existing = base + extension;
+      if (existsSync(existing)) {
+        return {path: existing, folder, tagged: true, bitrate: 0, skipped: true};
+      }
+    }
+
+    /*
+     * The words, from the same source the other two services use.
+     *
+     * Looked up before the download rather than after so they are written in
+     * the one tagging pass — a second pass would mean opening and rewriting a
+     * file that is already correct. A miss is not a failure: a track with no
+     * lyrics downloads exactly as it did before.
+     */
+    const wantsLyrics = Boolean(embedLyrics?.() || saveLrcFile?.());
+    const found = wantsLyrics
+      ? await lookupLyrics({
+          artist: metadata.artist,
+          title: metadata.title,
+          album: metadata.album,
+        }).catch(() => null)
+      : null;
+
+    const tagged: TrackMetadata = found?.text && embedLyrics?.() ? {...metadata, lyrics: found.text} : metadata;
+
+    const result = await downloadTrack(chosenId, tagged, base, {
       cookie: getCookie?.(),
       preferOpus: preferOpus?.(),
       onProgress,
       http,
     });
-    return {path: result.path, folder, tagged: result.tagged, bitrate: result.bitrate};
+    /* Only useful when it carries timings; plain words are already in the tag. */
+    if (found?.synced?.length && saveLrcFile?.()) {
+      try {
+        writeFileSync(
+          lrcPathFor(result.path),
+          toLrc(found, {artist: metadata.artist, title: metadata.title, album: metadata.album}),
+          'utf8',
+        );
+      } catch {
+        /* A sidecar that cannot be written must not fail a download. */
+      }
+    }
+
+    return {path: result.path, folder, tagged: result.tagged, bitrate: result.bitrate, skipped: false};
   };
 
   /**
@@ -732,6 +965,7 @@ export const createYtMusicService = ({
     resolveTracks,
     download,
     downloadToLibrary,
+    albumAudioFor,
     streamUrl,
     home,
     newReleases,

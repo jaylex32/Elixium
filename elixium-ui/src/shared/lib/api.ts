@@ -615,6 +615,15 @@ export interface FavoriteRecord {
   artist?: string;
   cover?: string;
   duration?: string;
+  /**
+   * Where this sits in the catalogue. A favourite outlives the page it was
+   * starred from, so the ids travel with it; without them its artist and album
+   * are names with nowhere to go. Absent on anything starred before they were
+   * recorded, which renders as plain text.
+   */
+  album?: string;
+  artistId?: string;
+  albumId?: string;
   addedAt: number;
 }
 

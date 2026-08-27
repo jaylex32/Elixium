@@ -57,6 +57,26 @@ const buildShuffleOrder = (length: number, first: number): number[] => {
   return first >= 0 && first < length ? [first, ...rest] : rest;
 };
 
+/**
+ * A track as it goes to storage: everything except the payload it came from.
+ *
+ * `rawData` is the whole upstream object — for Deezer it is nineteen times the
+ * size of the track itself — and this store is written to localStorage on every
+ * progress tick, four times a second, synchronously on the main thread. Keeping
+ * it there made a 76-track queue 179KB per write instead of 9KB, which froze
+ * the interface and grew worse with every track added; a long enough queue also
+ * ran past the storage quota, and the failed write took the audio with it.
+ *
+ * It stays in memory, where the artist and album links read it. Nothing needs
+ * it to survive a restart: it is re-fetched with the row it belongs to.
+ */
+const withoutPayload = (track: Track | null): Track | null => {
+  if (!track) return null;
+  const stored: Track = {...track};
+  delete stored.rawData;
+  return stored;
+};
+
 export const usePlayerStore = create<PlayerState>()(
   persist<PlayerState>(
     (set, get) => {
@@ -248,8 +268,8 @@ export const usePlayerStore = create<PlayerState>()(
           volume: s.volume,
           shuffle: s.shuffle,
           repeat: s.repeat,
-          currentTrack: s.currentTrack,
-          queue: s.queue,
+          currentTrack: withoutPayload(s.currentTrack),
+          queue: s.queue.map((track) => withoutPayload(track) as Track),
           queueIndex: s.queueIndex,
           currentTime: s.currentTime,
           duration: s.duration,
@@ -273,6 +293,7 @@ export function makeTrack(params: {
   trackNumber?: number;
   service: Service;
   previewUrl?: string;
+  rawData?: Record<string, unknown>;
 }): Track {
   return params;
 }

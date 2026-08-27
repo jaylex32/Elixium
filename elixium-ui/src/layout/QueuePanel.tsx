@@ -5,6 +5,8 @@ import {cn, formatDuration} from '@/shared/lib/utils';
 import {usePlayerStore} from '@/store/player-store';
 import {Button} from '@/shared/components/ui/Button';
 import {useDownload} from '@/shared/hooks/useDownload';
+import {TrackByline} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
 import {toast} from 'sonner';
 
 interface QueuePanelProps {
@@ -39,8 +41,24 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
     toast.success(`Queued ${queue.length} track${queue.length === 1 ? '' : 's'} for download`);
   };
 
-  const {queue, queueIndex, currentTrack, isPlaying, playAt, removeFromQueue, moveInQueue, clearQueue, pause, resume} =
-    usePlayerStore();
+  /*
+   * Selected field by field rather than taking the whole store.
+   *
+   * Reading it whole re-renders this panel on every change, and the playing
+   * position changes about four times a second — so a queue of seventy rows
+   * was rebuilt four times a second for a number this panel does not even
+   * show. None of the values below move while a track plays.
+   */
+  const queue = usePlayerStore((s) => s.queue);
+  const queueIndex = usePlayerStore((s) => s.queueIndex);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const playAt = usePlayerStore((s) => s.playAt);
+  const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
+  const moveInQueue = usePlayerStore((s) => s.moveInQueue);
+  const clearQueue = usePlayerStore((s) => s.clearQueue);
+  const pause = usePlayerStore((s) => s.pause);
+  const resume = usePlayerStore((s) => s.resume);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,7 +152,11 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
                           isPast && 'opacity-45',
                         )}
                       >
-                        <button
+                        {/* Not a button: the artist and album under the title
+                            are links, and a button cannot contain one. */}
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => {
                             if (isCurrent) {
                               if (isPlaying) pause();
@@ -143,7 +165,14 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
                               playAt(index);
                             }
                           }}
-                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            if (!isCurrent) playAt(index);
+                            else if (isPlaying) pause();
+                            else resume();
+                          }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
                           aria-label={isCurrent ? (isPlaying ? 'Pause' : 'Resume') : `Play ${track.title}`}
                         >
                           <span className="relative h-10 w-10 shrink-0">
@@ -174,7 +203,12 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
                             >
                               {track.title}
                             </span>
-                            <span className="block truncate text-xs text-text-muted">{track.artist}</span>
+                            <TrackByline
+                              artist={track.artist}
+                              album={track.album}
+                              relations={relationsOf(track.rawData, track.service)}
+                              service={track.service}
+                            />
                           </span>
 
                           {track.duration ? (
@@ -182,7 +216,7 @@ export function QueuePanel({open, onClose}: QueuePanelProps) {
                               {formatDuration(track.duration)}
                             </span>
                           ) : null}
-                        </button>
+                        </div>
 
                         {/* Reorder + remove. Always visible on touch, revealed on
                             hover with a pointer, since there is no hover on a phone. */}

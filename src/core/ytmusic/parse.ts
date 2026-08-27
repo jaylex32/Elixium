@@ -111,6 +111,35 @@ const videoIdOf = (item: any): string =>
       '',
   );
 
+/**
+ * What kind of upload a row plays.
+ *
+ * YouTube labels every row: ATV is the album audio — the master, the same one
+ * on the release — while OMV, OFFICIAL_SOURCE_MUSIC and UGC are videos, whose
+ * audio is the video's soundtrack rather than the record. That distinction is
+ * invisible in the title and audible in the file: a video carries label
+ * idents, crowd noise, a different mix and a different length.
+ *
+ * Read rather than guessed. The alternative is inferring it from a channel
+ * name ending in " - Topic", which is a convention rather than a rule.
+ */
+export const musicVideoTypeOf = (item: any): string => {
+  const endpoints = [
+    item?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint,
+    item?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint,
+    item?.navigationEndpoint,
+  ];
+  for (const endpoint of endpoints) {
+    const kind = endpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
+    if (kind) return String(kind);
+  }
+  return '';
+};
+
+/** Is this the album master rather than a video's soundtrack? */
+export const isAlbumAudio = (musicVideoType: string | undefined | null): boolean =>
+  String(musicVideoType ?? '') === 'MUSIC_VIDEO_TYPE_ATV';
+
 /** The browse id an album, artist or playlist row opens. */
 const browseIdOf = (item: any): string =>
   String(
@@ -222,6 +251,7 @@ export const parseSearchItem = (item: any, type: 'track' | 'album' | 'artist' | 
         durationSeconds: durationToSeconds(durationText),
         artists: withoutDuration.slice(0, Math.max(1, withoutDuration.length - 1)),
         explicit: isExplicitRow(item),
+        musicVideoType: musicVideoTypeOf(item),
         ...linkedIdsOf(item),
       },
     };
@@ -478,6 +508,9 @@ export const parseCollectionTrack = (item: any, album: string, cover: string): S
       /* An album row is badged the same way a search row is, so a track keeps
          its marking when the album it belongs to is opened. */
       explicit: isExplicitRow(item),
+      /* A playlist can hold anything the person who made it dropped in, videos
+         included, so each row says which it is. */
+      musicVideoType: musicVideoTypeOf(item),
       ...linkedIdsOf(item),
     },
   };

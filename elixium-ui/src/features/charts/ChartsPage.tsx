@@ -11,6 +11,7 @@ import {toast} from 'sonner';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {useNavigationStore} from '@/store/navigation-store';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {Button} from '@/shared/components/ui/Button';
@@ -22,7 +23,7 @@ import {Select} from '@/shared/components/ui/Select';
 import {GridSkeleton, ListSkeleton, EmptyState, ErrorState} from '@/shared/components/States';
 import {InfiniteSentinel} from '@/shared/components/InfiniteSentinel';
 import {TrackActions} from '@/shared/components/TrackActions';
-import {ArtistLink} from '@/shared/components/RelationLinks';
+import {TrackByline} from '@/shared/components/RelationLinks';
 import {relationsOf} from '@/shared/lib/relations';
 import {FavoriteButton} from '@/shared/components/FavoriteButton';
 
@@ -61,6 +62,7 @@ export function ChartsPage() {
   const openAlbum = useNavigationStore((s) => s.openAlbum);
 
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const setTrack = usePlayerStore((s) => s.setTrack);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
 
@@ -112,6 +114,7 @@ export function ChartsPage() {
         duration: toSeconds(r.duration),
         service,
         previewUrl: r.rawData?.preview as string | undefined,
+        rawData: r.rawData,
       }),
     );
     if (tracks[startIndex]) setTrack(tracks[startIndex], tracks);
@@ -227,9 +230,12 @@ export function ChartsPage() {
                       <span className="truncate">{r.title}</span>
                       {isExplicit(r.rawData) && <ExplicitBadge />}
                     </p>
-                    <p className="truncate text-xs text-text-muted">
-                      <ArtistLink name={r.artist} relations={relationsOf(r.rawData, service)} service={service} />
-                    </p>
+                    <TrackByline
+                      artist={r.artist}
+                      album={r.album}
+                      relations={relationsOf(r.rawData, service)}
+                      service={service}
+                    />
                   </div>
 
                   {toSeconds(r.duration) > 0 && (
@@ -239,7 +245,17 @@ export function ChartsPage() {
                   )}
 
                   <FavoriteButton
-                    item={{id: r.id, type: 'track', service, title: r.title, artist: r.artist, cover}}
+                    item={{
+                      id: r.id,
+                      type: 'track',
+                      service,
+                      title: r.title,
+                      artist: r.artist,
+                      cover,
+                      album: r.album,
+                      artistId: relationsOf(r.rawData, service).artistId,
+                      albumId: relationsOf(r.rawData, service).albumId,
+                    }}
                   />
 
                   <TrackActions
@@ -290,6 +306,18 @@ export function ChartsPage() {
                 key={r.id}
                 album={card}
                 onClick={() => openAlbum({...card, service})}
+                /* Playable from the card, the same as on the home rows. */
+                onPlay={() =>
+                  playItem({
+                    id: r.id,
+                    type: effectiveKind === 'albums' ? 'album' : 'playlist',
+                    service,
+                    title: r.title,
+                    artist: r.artist,
+                    cover: card.cover,
+                    rawData: r.rawData,
+                  })
+                }
                 relations={relationsOf(r.rawData, service)}
                 service={service}
                 onWatch={effectiveKind === 'playlists' ? () => watchPlaylist(r.id, r.title) : undefined}

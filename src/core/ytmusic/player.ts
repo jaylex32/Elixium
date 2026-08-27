@@ -331,19 +331,37 @@ export const clearStreamCache = (): void => {
 };
 
 /**
- * Space player requests out, however many callers there are.
+ * Space player requests out, however many callers there are — one at a time.
  *
- * Serialised through one promise chain so that parallel downloads queue behind
- * each other instead of each independently deciding it has waited long enough.
+ * This chained only the *waiting*: `pending` was set to the promise that
+ * resolves once the gap has elapsed, while the request itself ran outside the
+ * chain. So callers were spaced 150ms apart at the moment they started and
+ * then all ran at once.
+ *
+ * That is how a queue stalled. Playing a track fires two resolves — the
+ * client probes the stream and then loads it — and each resolve tries a list
+ * of clients. Four tracks in flight became dozens of simultaneous player
+ * requests; YouTube stopped answering them, and every one burned its full
+ * twenty-second timeout before the next client was tried. Measured: four
+ * parallel resolves took 70 to 202 seconds, against 2.5 seconds each when
+ * they went one at a time.
+ *
+ * The work now runs inside the chain, so the next request begins after the
+ * previous one has finished rather than beside it.
  */
 const paced = <T>(work: () => Promise<T>): Promise<T> => {
   const turn = pending.then(async () => {
     const wait = MINIMUM_REQUEST_GAP_MS - (Date.now() - lastRequestAt);
     if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
     lastRequestAt = Date.now();
+    return work();
   });
-  pending = turn.catch(() => undefined);
-  return turn.then(work);
+  /* Failures must not break the chain for everyone behind them. */
+  pending = turn.then(
+    () => undefined,
+    () => undefined,
+  );
+  return turn;
 };
 
 const YOUTUBE_ORIGIN = 'https://www.youtube.com';
@@ -386,14 +404,16 @@ const codecOf = (mimeType: string): AudioStream['codec'] => {
  * marginally higher bitrate — around 137kbps against 131 — and is the better
  * codec at equal rate, so on audio quality alone it would win.
  *
- * AAC is chosen anyway, because a WebM file cannot be tagged. There is no
- * writer for matroska, so an Opus download would arrive with no title, no
- * artist and no cover, and would stay that way in the library forever. Six
- * kilobits per second is a smaller loss than every tag on the file, and both
- * formats are lossy regardless.
+ * AAC is still the default, but no longer because of tags. Opus arrives inside
+ * WebM, which has no tag writer, so it used to reach the library with no title,
+ * artist or cover; it is now rewrapped into Ogg on the way to disk, which
+ * carries both tags and artwork and leaves every audio byte untouched. What is
+ * left to weigh is quality against compatibility — Apple's stock players do not
+ * read Opus.
  *
- * `preferOpus` exists for a caller that would rather have the bitrate and does
- * not care about tags.
+ * `preferOpus` is therefore the best-quality choice rather than a trade: it
+ * ranks purely by bitrate, so it takes whichever stream YouTube offers highest
+ * for that particular track, Opus or AAC.
  */
 export const bestAudioFormat = (
   formats: any[],
@@ -574,6 +594,31 @@ export const getAudioStream = async (videoId: string, options: PlayerOptions = {
   const cached = resolved.get(cacheKey);
   if (cached && Date.now() - cached.at < RESOLVED_TTL_MS) return cached.stream;
 
+  /*
+   * One resolve per track, however many callers ask at once.
+   *
+   * Pressing play asks twice at the same instant — the client probes whether
+   * the stream is real, then loads it — and neither had populated the cache
+   * when the other started, so both resolved the same track from scratch. That
+   * doubled every player request during playback, which is what turned a busy
+   * queue into a stalled one. Later askers now wait on the first one's answer.
+   */
+  const alreadyResolving = inFlight.get(cacheKey);
+  if (alreadyResolving) return alreadyResolving;
+
+  const attempt = resolveAudioStream(videoId, options, cacheKey);
+  inFlight.set(cacheKey, attempt);
+  try {
+    return await attempt;
+  } finally {
+    inFlight.delete(cacheKey);
+  }
+};
+
+/** In-flight resolves, so two callers for one track make one request set. */
+const inFlight = new Map<string, Promise<AudioStream>>();
+
+const resolveAudioStream = async (videoId: string, options: PlayerOptions, cacheKey: string): Promise<AudioStream> => {
   const http = options.http ?? newClient();
   const session = options.apiKey ? {apiKey: options.apiKey, visitorData: undefined} : await fetchPlayerSession(http);
   const apiKey = session.apiKey;

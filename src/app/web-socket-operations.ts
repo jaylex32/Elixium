@@ -61,6 +61,10 @@ export const registerOperationsSocketHandlers = ({
         },
         ytmusic: {
           cookie: configAny.get('ytmusic.cookie'),
+          /* Defaults live here as well as in the engine, so the interface
+             shows what is actually in force before anything is saved. */
+          preferAlbumAudio: configAny.get('ytmusic.preferAlbumAudio') !== false,
+          strictAlbumAudio: configAny.get('ytmusic.strictAlbumAudio') === true,
         },
         saveLayout: conf.get('saveLayout'),
         coverSize: conf.get('coverSize'),
@@ -190,6 +194,18 @@ export const registerOperationsSocketHandlers = ({
        */
       if (data.ytmusic && data.ytmusic.cookie !== undefined) {
         configAny.set('ytmusic.cookie', String(data.ytmusic.cookie || '').trim());
+      }
+
+      /*
+       * A music video's audio is not the record. Kept separate from the cookie
+       * above because these arrive whether or not a session was pasted, and a
+       * settings save that omitted the cookie must not reset them.
+       */
+      if (data.ytmusic && data.ytmusic.preferAlbumAudio !== undefined) {
+        configAny.set('ytmusic.preferAlbumAudio', data.ytmusic.preferAlbumAudio === true);
+      }
+      if (data.ytmusic && data.ytmusic.strictAlbumAudio !== undefined) {
+        configAny.set('ytmusic.strictAlbumAudio', data.ytmusic.strictAlbumAudio === true);
       }
 
       if (data.saveLayout) {

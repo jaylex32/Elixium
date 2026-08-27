@@ -6,6 +6,8 @@ import {formatDuration} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
 import {cn} from '@/shared/lib/utils';
 import {LyricsView} from './LyricsView';
+import {TrackByline} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
 
 interface PlayerFullscreenProps {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -113,8 +115,16 @@ export function PlayerFullscreen({audioRef}: PlayerFullscreenProps) {
         {/* Info */}
         <div className="text-center w-full">
           <p className="text-xl font-bold text-text-primary truncate">{currentTrack.title}</p>
-          <p className="text-base text-text-secondary mt-1 truncate">{currentTrack.artist}</p>
-          {currentTrack.album && <p className="text-sm text-text-muted mt-0.5 truncate">{currentTrack.album}</p>}
+          {/* Both names lead somewhere. The player closes on the way out —
+              the window it opens shares this one's layer. */}
+          <TrackByline
+            artist={currentTrack.artist}
+            album={currentTrack.album}
+            relations={relationsOf(currentTrack.rawData, currentTrack.service)}
+            service={currentTrack.service}
+            onNavigate={toggleFullscreen}
+            className="mt-1 justify-center text-base text-text-secondary"
+          />
         </div>
 
         {/* Progress */}

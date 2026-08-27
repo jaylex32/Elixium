@@ -31,6 +31,11 @@ type keysType =
   /* YouTube refuses stream URLs to signed-out callers for most music, so a
      session cookie is what makes YouTube Music downloads work at all. */
   | 'ytmusic.cookie'
+  /* Take the album master when what was asked for is a music video, whose
+     audio is the video's soundtrack rather than the record. */
+  | 'ytmusic.preferAlbumAudio'
+  /* Refuse a video outright rather than falling back to it. */
+  | 'ytmusic.strictAlbumAudio'
   | 'paths.ytmusic'
   | 'quality.ytmusic'
   | 'services'

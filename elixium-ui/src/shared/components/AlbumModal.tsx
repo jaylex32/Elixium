@@ -15,7 +15,7 @@ import {SelectCheckbox} from '@/shared/components/SelectCheckbox';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {isExplicit} from '@/shared/lib/explicit';
 import {relationsOf} from '@/shared/lib/relations';
-import {ArtistLink} from '@/shared/components/RelationLinks';
+import {ArtistLink, TrackByline} from '@/shared/components/RelationLinks';
 import {useSelectionStore} from '@/store/selection-store';
 import type {Service} from '@/types';
 import {extractCover} from '@/shared/lib/cover';
@@ -140,6 +140,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
         trackNumber: t.track_number,
         service: album.service,
         previewUrl: t.rawData?.preview as string | undefined,
+        rawData: t.rawData as Record<string, unknown> | undefined,
       }),
     );
     const track = allTracks[trackIndex];
@@ -211,6 +212,9 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                   title: album.title,
                   artist: album.artist,
                   cover: album.cover,
+                  // Starred now, opened later: the artist travels with it.
+                  artistId: relationsOf(tracks[0]?.rawData as Record<string, unknown>, album.service).artistId,
+                  albumId: album.id,
                 }}
               />
 
@@ -329,15 +333,18 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                           <span className="truncate">{t.title}</span>
                           {isExplicit(t.rawData as Record<string, unknown>) && <ExplicitBadge />}
                         </p>
-                        {t.artist && t.artist !== album.artist && (
-                          <p className="text-xs text-text-muted truncate">
-                            <ArtistLink
-                              name={t.artist}
-                              relations={relationsOf(t.rawData as Record<string, unknown>, album.service)}
-                              service={album.service}
-                            />
-                          </p>
-                        )}
+                        {/* Always named, even when it matches the header: a
+                            row that shows no artist reads as having none, and
+                            the link is the way to their page from here. */}
+                        <TrackByline
+                          artist={t.artist || album.artist}
+                          /* A playlist's rows come from all over, so each one
+                             names its own album; an album's rows would only
+                             repeat the title above them. */
+                          album={isPlaylist ? t.album : undefined}
+                          relations={relationsOf(t.rawData as Record<string, unknown>, album.service)}
+                          service={album.service}
+                        />
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
@@ -411,6 +418,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                         duration: toSeconds(t.duration),
                         trackNumber: t.track_number ?? i + 1,
                         service: album.service,
+                        rawData: t.rawData as Record<string, unknown> | undefined,
                       }),
                     );
                     if (allTracks[0]) {

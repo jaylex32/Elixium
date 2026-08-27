@@ -12,6 +12,7 @@ import {useAppStore} from '@/store/app-store';
 import {getSocket} from '@/shared/lib/socket';
 import {toast} from 'sonner';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {useSearchHistoryStore} from '@/store/search-history-store';
 import {TabsRoot, TabsList, TabsTrigger, TabsContent} from '@/shared/components/ui/Tabs';
@@ -218,6 +219,7 @@ export function SearchPage() {
   };
   const setTrack = usePlayerStore((s) => s.setTrack);
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
 
   const {
     data: pages,
@@ -293,6 +295,7 @@ export function SearchPage() {
         duration: toSeconds(r.duration),
         service,
         previewUrl: r.rawData?.preview as string | undefined,
+        rawData: r.rawData,
       }),
     );
     if (tracks[startIndex]) setTrack(tracks[startIndex], tracks);
@@ -521,6 +524,17 @@ export function SearchPage() {
                         key={r.id}
                         album={album}
                         onClick={() => openAlbum({...album, service})}
+                        onPlay={() =>
+                          playItem({
+                            id: r.id,
+                            type: 'album',
+                            service,
+                            title: r.title,
+                            artist: r.artist,
+                            cover: album.cover,
+                            rawData: r.rawData,
+                          })
+                        }
                         relations={relationsOf(r.rawData, service)}
                         service={service}
                         selectable={{id: r.id, type: 'album', service, title: r.title, artist: r.artist, cover: album.cover}}
@@ -577,6 +591,17 @@ export function SearchPage() {
                         key={r.id}
                         album={card}
                         onClick={() => openAlbum({...card, service})}
+                        onPlay={() =>
+                          playItem({
+                            id: r.id,
+                            type: 'playlist',
+                            service,
+                            title: r.title,
+                            artist: r.artist,
+                            cover: card.cover,
+                            rawData: r.rawData,
+                          })
+                        }
                         relations={relationsOf(r.rawData, service)}
                         service={service}
                         selectable={{id: r.id, type: 'playlist', service, title: r.title, artist: r.artist, cover: card.cover}}

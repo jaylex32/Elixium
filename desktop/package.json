@@ -1,6 +1,6 @@
 {
   "name": "elixium-desktop",
-  "version": "1.4.0-beta.2",
+  "version": "1.4.0-beta.3",
   "private": true,
   "description": "Desktop shell for Elixium",
   "main": "main.js",

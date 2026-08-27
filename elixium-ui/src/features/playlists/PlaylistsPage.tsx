@@ -7,6 +7,7 @@ import {useAppStore} from '@/store/app-store';
 import {useWatchlistStore} from '@/store/watchlist-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {useNavigationStore} from '@/store/navigation-store';
 import {CardSkeleton} from '@/shared/components/ui/Skeleton';
 import {Input} from '@/shared/components/ui/Input';
@@ -23,6 +24,7 @@ const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:g
 export function PlaylistsPage() {
   const service = useAppStore((s) => s.service);
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const watchedPlaylists = useWatchlistStore((s) => s.watchedPlaylists);
 
   const [query, setQuery] = useState('');
@@ -165,6 +167,21 @@ export function PlaylistsPage() {
                       openPlaylist(card);
                     }
                   }}
+                  /* A playlist from another service has to be converted
+                      before it can be played, so only its own service offers
+                      the button — the same rule the click already follows. */
+                  onPlay={
+                    foreign
+                      ? undefined
+                      : () =>
+                          playItem({
+                            id: p.id,
+                            type: 'playlist',
+                            service,
+                            title: p.name,
+                            cover: card.cover,
+                          })
+                  }
                   onDownload={startDownload}
                 />
               );
@@ -235,6 +252,20 @@ export function PlaylistsPage() {
                     <AlbumCard
                       album={card}
                       onClick={sameService ? () => openPlaylist(card) : undefined}
+                      onPlay={
+                        sameService
+                          ? () =>
+                              playItem({
+                                id: r.id,
+                                type: 'playlist',
+                                service,
+                                title: r.title,
+                                artist: r.artist,
+                                cover: card.cover,
+                                rawData: r.rawData,
+                              })
+                          : undefined
+                      }
                       selectable={{
                         id: r.id,
                         type: 'playlist',

@@ -46,7 +46,7 @@ export function useDownload() {
           title: string;
           artist: string;
           album?: string;
-          rawData?: {videoId?: string; trackNumber?: number; cover?: string};
+          rawData?: {videoId?: string; trackNumber?: number; cover?: string; musicVideoType?: string};
         };
 
         let tracks: YtTrack[] = [];
@@ -100,6 +100,9 @@ export function useDownload() {
             trackNumber: track.rawData?.trackNumber ?? null,
             trackTotal: tracks.length > 1 ? tracks.length : null,
             cover: track.rawData?.cover || cover,
+            /* Album audio or a music video — the row already knows, so the
+               engine does not have to ask YouTube again for every track. */
+            musicVideoType: track.rawData?.musicVideoType,
           });
         }
       } catch (error) {

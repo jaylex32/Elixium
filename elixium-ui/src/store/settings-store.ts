@@ -18,6 +18,10 @@ export interface Settings {
   qobuzDownloadPath: string;
   ytmusicDownloadPath: string;
   ytmusicFormat: 'aac' | 'opus';
+  /** Take the album master when what was asked for is a music video. */
+  ytmusicPreferAlbumAudio: boolean;
+  /** Refuse a video outright rather than falling back to it. */
+  ytmusicStrictAlbumAudio: boolean;
   enabledServices: {deezer: boolean; qobuz: boolean; ytmusic: boolean};
   trackNumbering: boolean;
   coverArt: boolean;
@@ -64,6 +68,8 @@ const defaults: Settings = {
   qobuzDownloadPath: '',
   ytmusicDownloadPath: '',
   ytmusicFormat: 'aac',
+  ytmusicPreferAlbumAudio: true,
+  ytmusicStrictAlbumAudio: false,
   enabledServices: {deezer: true, qobuz: true, ytmusic: true},
   trackNumbering: true,
   coverArt: true,

@@ -12,6 +12,8 @@ import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {PlayerFullscreen} from './PlayerFullscreen';
+import {TrackByline} from '@/shared/components/RelationLinks';
+import {relationsOf} from '@/shared/lib/relations';
 import {serviceLabel} from '@/shared/lib/desktop';
 
 /** Map stored quality preferences onto the ids the stream endpoint expects. */
@@ -119,6 +121,14 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
    */
   useEffect(() => {
     if (!currentTrack) return;
+    /*
+     * Only Deezer can answer with a preview. YouTube Music and Qobuz always
+     * serve the real track or fail outright, so probing them asked the engine
+     * to resolve every track a second time purely to be told what it already
+     * knew — and on YouTube Music resolving is the slow part, seconds per
+     * track, running beside the load it was duplicating.
+     */
+    if (currentTrack.service !== 'deezer') return;
     let cancelled = false;
 
     probeStreamKind(currentTrack.id, currentTrack.service, quality).then((kind) => {
@@ -228,10 +238,19 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         </div>
 
         <div className="flex h-full items-center gap-2 px-3 pt-1 sm:gap-4 sm:px-4">
-          <button
+          {/* The strip opens the full player, but the artist and album inside
+              it are their own links — so it cannot itself be a button. */}
+          <div
+            role="button"
+            tabIndex={0}
             onClick={toggleFullscreen}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              toggleFullscreen();
+            }}
             aria-label="Open full player"
-            className="group flex min-w-0 flex-1 items-center gap-3 text-left"
+            className="group flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
           >
             <div className="relative h-11 w-11 shrink-0">
               {currentTrack.cover ? (
@@ -254,10 +273,15 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-text-primary">{currentTrack.title}</p>
-              <p className="truncate text-xs text-text-muted">{currentTrack.artist}</p>
+              <TrackByline
+                artist={currentTrack.artist}
+                album={currentTrack.album}
+                relations={relationsOf(currentTrack.rawData, currentTrack.service)}
+                service={currentTrack.service}
+              />
             </div>
             <ChevronUp size={14} className="ml-1 hidden shrink-0 text-text-muted group-hover:text-text-primary sm:block" />
-          </button>
+          </div>
 
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
             {/* Previous/next are desktop-only on the bar: at phone widths the

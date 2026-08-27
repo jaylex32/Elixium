@@ -202,6 +202,7 @@ export const registerDirectDownloadSocketHandler = ({
               trackNumber: i + 1,
               trackTotal: found.length,
               coverUrl: track.rawData?.cover,
+              musicVideoType: track.rawData?.musicVideoType,
               comment: `Converted from ${data.url}`,
             });
             saved.push(result.path);
@@ -420,6 +421,7 @@ export const registerDirectDownloadSocketHandler = ({
                 trackNumber: i + 1,
                 trackTotal: resolved.tracks.length,
                 coverUrl: track.rawData?.cover,
+                musicVideoType: track.rawData?.musicVideoType,
                 comment: `YouTube Music · ${data.url}`,
               });
               saved.push(result.path);

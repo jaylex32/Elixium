@@ -13,6 +13,13 @@ export interface Track {
   service: Service;
   /** 30-second Deezer preview URL from rawData.preview (no auth needed) */
   previewUrl?: string;
+  /**
+   * The payload the track was built from, kept so the player, the queue and
+   * anywhere else holding a Track can still reach its artist and album. It was
+   * dropped at the point a row became playable, which is why the player bar
+   * named an artist it could not open.
+   */
+  rawData?: Record<string, unknown>;
 }
 
 export interface Album {

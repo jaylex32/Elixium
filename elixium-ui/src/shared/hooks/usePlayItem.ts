@@ -41,6 +41,7 @@ export function usePlayItem() {
           cover: item.cover,
           service: item.service,
           previewUrl: item.rawData?.preview as string | undefined,
+          rawData: item.rawData as Record<string, unknown> | undefined,
         });
         setTrack(track, [track]);
         return;
@@ -80,6 +81,7 @@ export function usePlayItem() {
                 cover: (raw2?.cover as string | undefined) || data?.cover || item.cover,
                 duration: toSeconds(raw.duration),
                 service: 'ytmusic',
+                rawData: (raw2 ?? raw) as unknown as Record<string, unknown>,
               });
             })
             .filter(Boolean) as Track[];
@@ -105,6 +107,7 @@ export function usePlayItem() {
             duration: toSeconds(raw.duration),
             service: item.service,
             previewUrl: (raw.rawData as Record<string, unknown> | undefined)?.preview as string | undefined,
+            rawData: raw.rawData as Record<string, unknown> | undefined,
           }),
         ) as Track[];
 

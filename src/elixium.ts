@@ -684,6 +684,26 @@ const ytmusicService = createYtMusicService({
    * somebody who would rather have the bitrate.
    */
   preferOpus: () => String(conf.get('quality.ytmusic') || 'aac') === 'opus',
+  /*
+   * Default on. A music video's audio is not the record it claims to be —
+   * label idents, crowd noise, a different mix and a length that disagrees
+   * with the release — and somebody downloading from a music service is asking
+   * for the song, not the upload that happens to carry it.
+   */
+  preferAlbumAudio: () => conf.get('ytmusic.preferAlbumAudio') !== false,
+  /*
+   * Default off. Some tracks exist only as a video — singles, live cuts,
+   * anything unreleased — and refusing those outright means a file that could
+   * have existed does not.
+   */
+  strictAlbumAudio: () => conf.get('ytmusic.strictAlbumAudio') === true,
+  /*
+   * The same two lyric settings the other services obey. They were global
+   * already; YouTube Music's tagger simply never read them, so turning them on
+   * did nothing to a YouTube Music download.
+   */
+  embedLyrics: () => conf.get('embedLyrics') !== false,
+  saveLrcFile: () => Boolean(conf.get('saveLrcFile')),
 });
 
 const searchCatalog = (

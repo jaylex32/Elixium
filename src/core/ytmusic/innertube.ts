@@ -41,6 +41,20 @@ export const USER_AGENT =
  * when a filter chip is clicked. Without one, a search returns a mixed shelf
  * of everything and the type asked for cannot be told apart reliably.
  */
+/**
+ * How many times a transient failure is worth re-asking.
+ *
+ * Three, deliberately: enough to ride out a dropped connection or a moment of
+ * 503, few enough that a service which is genuinely refusing is reported as
+ * refusing rather than kept waiting on.
+ */
+const TRANSIENT_ATTEMPTS = 3;
+
+/** First backoff; doubled per attempt, and overridden by any Retry-After. */
+const BASE_BACKOFF_MS = 700;
+
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export const SEARCH_FILTERS = {
   track: 'EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D',
   album: 'EgWKAQIYAWoKEAkQBRAKEAMQBA%3D%3D',
@@ -140,8 +154,42 @@ export class YtMusicClient {
    * the request was wrong, so it is retried once against a fresh one. Beyond
    * that it gives up rather than looping — an unbounded retry against a
    * service that is refusing is how a provider stops being optional.
+   *
+   * Transient failures are retried separately and briefly: a dropped
+   * connection, a 5xx, or a 429. None of those mean the request was wrong, and
+   * without this a single blip in the middle of a hundred-track playlist ends
+   * that track for good — the download reports a failure for something that
+   * would have worked a second later. A 429 waits longer, and honours the
+   * Retry-After it was given rather than guessing.
+   *
+   * Everything else — a 403, a 404 — fails immediately. Retrying a refusal
+   * only makes the refusal firmer.
    */
   async call(endpoint: string, body: Record<string, unknown>, retry = true): Promise<any> {
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < TRANSIENT_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.attempt(endpoint, body, retry);
+      } catch (error: any) {
+        lastError = error;
+        const status = Number(error?.ytStatus ?? 0);
+        const transient = status === 429 || status >= 500 || (!status && !(error instanceof YtMusicError));
+        if (!transient || attempt === TRANSIENT_ATTEMPTS - 1) throw error;
+
+        const suggested = Number(error?.retryAfterSeconds ?? 0);
+        const backoff = suggested > 0 ? Math.min(suggested * 1000, 30_000) : BASE_BACKOFF_MS * 2 ** attempt;
+        /* Jitter so a batch of parallel calls does not retry in lockstep and
+           reproduce the burst that caused the refusal. */
+        await pause(backoff + Math.floor(Math.random() * 250));
+      }
+    }
+
+    throw lastError;
+  }
+
+  /** One attempt, with the stale-session retry that has always been here. */
+  private async attempt(endpoint: string, body: Record<string, unknown>, retry: boolean): Promise<any> {
     const session = await this.ensureSession();
 
     const response = await this.http.post(
@@ -171,11 +219,17 @@ export class YtMusicClient {
 
     if (response.status === 400 && retry) {
       await this.ensureSession(true);
-      return this.call(endpoint, body, false);
+      return this.attempt(endpoint, body, false);
     }
 
     if (response.status !== 200) {
-      throw new YtMusicError('request', `YouTube Music answered ${response.status} for ${endpoint}`);
+      const failure = new YtMusicError('request', `YouTube Music answered ${response.status} for ${endpoint}`);
+      /* Carried on the error so the retry above can tell a rate limit from a
+         refusal without re-parsing a message. */
+      (failure as any).ytStatus = response.status;
+      const retryAfter = Number(response.headers?.['retry-after'] ?? 0);
+      if (Number.isFinite(retryAfter) && retryAfter > 0) (failure as any).retryAfterSeconds = retryAfter;
+      throw failure;
     }
 
     return response.data;

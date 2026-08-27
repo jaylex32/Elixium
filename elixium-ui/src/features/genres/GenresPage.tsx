@@ -10,9 +10,10 @@ import {useAppStore} from '@/store/app-store';
 import {useDownload} from '@/shared/hooks/useDownload';
 import {usePlayerStore, makeTrack} from '@/store/player-store';
 import {AlbumCard, type AlbumCardData} from '@/shared/components/AlbumCard';
+import {usePlayItem} from '@/shared/hooks/usePlayItem';
 import {ArtistCard} from '@/shared/components/ArtistCard';
 import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
-import {ArtistLink} from '@/shared/components/RelationLinks';
+import {TrackByline} from '@/shared/components/RelationLinks';
 import {TrackActions} from '@/shared/components/TrackActions';
 import {SelectionToggle} from '@/shared/components/SelectionToggle';
 import {GridSkeleton, ListSkeleton, EmptyState, ErrorState} from '@/shared/components/States';
@@ -63,6 +64,7 @@ function GenreContent({
     tab,
   );
   const {download} = useDownload();
+  const {playItem} = usePlayItem();
   const openAlbum = useNavigationStore((s) => s.openAlbum);
   const setTrack = usePlayerStore((s) => s.setTrack);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -93,6 +95,7 @@ function GenreContent({
         duration: toSeconds(r.duration),
         service,
         previewUrl: r.rawData?.preview as string | undefined,
+        rawData: r.rawData,
       }),
     );
     if (queue[index]) setTrack(queue[index], queue);
@@ -199,9 +202,7 @@ function GenreContent({
                     <span className="truncate">{r.title}</span>
                     {isExplicit(r.rawData) && <ExplicitBadge />}
                   </p>
-                  <p className="truncate text-xs text-text-muted">
-                    <ArtistLink name={r.artist} relations={relations} service={service} />
-                  </p>
+                  <TrackByline artist={r.artist} album={r.album} relations={relations} service={service} />
                 </div>
 
                 {seconds > 0 && (
@@ -261,6 +262,18 @@ function GenreContent({
                 key={r.id}
                 album={card}
                 onClick={() => openAlbum({...card, service})}
+                /* Play without opening it first, the way the home rows do. */
+                onPlay={() =>
+                  playItem({
+                    id: r.id,
+                    type: tab === 'albums' ? 'album' : 'playlist',
+                    service,
+                    title: r.title,
+                    artist: r.artist,
+                    cover: card.cover,
+                    rawData: r.rawData,
+                  })
+                }
                 relations={relationsOf(r.rawData, service)}
                 service={service}
                 selectable={{
