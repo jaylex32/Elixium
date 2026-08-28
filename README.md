@@ -77,7 +77,7 @@ The web interface adds a full browser workflow on top of the downloader core:
 
 ### Web UI
 
-![Elixium WebUI Home](Screenshots/Ellixium%20WebUI.png)
+![Elixium WebUI Home](https://github.com/user-attachments/assets/a26a88fa-096d-4291-afe3-7ee7c450aa75)
 ![Elixium WebUI Search](Screenshots/Elixium%20WebUI_Search.png)
 ![Elixium WebUI Watchlist](Screenshots/Elixium%20WebUI_Watchlist.png)
 
