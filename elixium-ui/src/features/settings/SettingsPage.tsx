@@ -78,7 +78,12 @@ function Field({
         <p className="flex items-center gap-1.5 text-sm font-medium text-text-primary">
           {label}
           {hint && (
-            <Tooltip side="right" wide delayDuration={150} content={hint}>
+            /* Its own provider: a Field is used all over this page, and only
+               one corner of it happened to sit inside the provider that the
+               YouTube session block brings with it. A tooltip without one
+               throws, and took the whole page down with it. */
+            <TooltipProvider>
+              <Tooltip side="right" wide delayDuration={150} content={hint}>
               <button
                 type="button"
                 aria-label={`About ${label}`}
@@ -86,10 +91,11 @@ function Field({
                   'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-[9px] font-semibold',
                   'text-text-muted transition-colors hover:border-accent/50 hover:text-text-primary',
                 )}
-              >
-                i
-              </button>
-            </Tooltip>
+                >
+                  i
+                </button>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </p>
         {description && <p className="mt-0.5 text-xs text-text-muted">{description}</p>}

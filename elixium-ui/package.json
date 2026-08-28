@@ -8,7 +8,8 @@
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "render-check": "node render-check.cjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
