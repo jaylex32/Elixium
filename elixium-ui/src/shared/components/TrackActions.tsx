@@ -7,6 +7,7 @@ import {useNavigationStore} from '@/store/navigation-store';
 import {buildServiceUrl} from '@/shared/lib/events';
 import type {Relations} from '@/shared/lib/relations';
 import type {Track} from '@/types';
+import {DownloadQualityItems} from '@/shared/components/DownloadQuality';
 
 interface TrackActionsProps {
   track: Track;
@@ -17,7 +18,8 @@ interface TrackActionsProps {
    * omits the two jump entries rather than offering links that go nowhere.
    */
   relations?: Relations;
-  onDownload?: () => void;
+  /** Given a quality, download at that instead of the configured default. */
+  onDownload?: (quality?: string) => void;
   onPlay?: () => void;
   className?: string;
 }
@@ -167,10 +169,20 @@ export function TrackActions({track, relations, onDownload, onPlay, className}: 
           </DropdownMenu.Item>
 
           {onDownload && (
-            <DropdownMenu.Item className={itemClass} onSelect={onDownload}>
+            <DropdownMenu.Item className={itemClass} onSelect={() => onDownload()}>
               <Download size={14} />
               Download
             </DropdownMenu.Item>
+          )}
+
+          {/* The qualities sit under the plain Download rather than behind a
+              submenu: the list is three or four lines, and a submenu would add
+              a hover step to reach them. */}
+          {onDownload && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DownloadQualityItems service={track.service} onPick={(quality) => onDownload(quality)} />
+            </>
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

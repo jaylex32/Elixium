@@ -28,7 +28,38 @@ export class GeoBlocked extends Error {
 
 let user_data: userData | null = null;
 
+/**
+ * The session the cached licence describes.
+ *
+ * The licence was read once per process and kept forever, which is wrong in
+ * both directions. The first read can land before the ARL session exists —
+ * playing a track moments after launch resolves a URL while the login is still
+ * in flight — and an anonymous session reports no HQ and no lossless. Every
+ * later request for MP3_320 then threw WrongLicense, the downloader stepped
+ * down its ladder, and a premium account received 128kbps files for the rest of
+ * the process, labelled 320 because that is what had been asked for. Pasting a
+ * fresh ARL did not help either: the stale answer outlived the new session.
+ *
+ * Holding the session alongside the answer keeps the caching — the licence is
+ * still read once per session, not once per track — while making it follow the
+ * account it actually belongs to.
+ */
+let user_data_session: string | null = null;
+
+const currentSession = (): string => String((instance.defaults.params as Record<string, unknown>)?.sid ?? '');
+
 const dzAuthenticate = async (): Promise<userData> => {
+  /*
+   * Read before the request, not after.
+   *
+   * Login can complete while this is in flight — that is the whole reason this
+   * cache goes stale — and stamping the answer with the session in force when
+   * it returns would file a free account's licence under the premium session
+   * that replaced it. Recording the session it was actually read under means a
+   * change part-way through simply misses the cache next time and is read
+   * again, which is the safe direction to be wrong in.
+   */
+  const readUnder = currentSession();
   const {data} = await instance.get<any>('https://www.deezer.com/ajax/gw-light.php', {
     params: {
       method: 'deezer.getUserData',
@@ -42,11 +73,18 @@ const dzAuthenticate = async (): Promise<userData> => {
     can_stream_hq: data.results.USER.OPTIONS.web_hq || data.results.USER.OPTIONS.mobile_hq,
     country: data.results.COUNTRY,
   };
+  user_data_session = readUnder;
   return user_data;
 };
 
+/** The licence for the session in force, read once per session. */
+const licenceForSession = async (): Promise<userData> => {
+  if (user_data && user_data_session === currentSession()) return user_data;
+  return dzAuthenticate();
+};
+
 const getTrackUrlFromServer = async (track_token: string, format: string): Promise<string | null> => {
-  const user = user_data ? user_data : await dzAuthenticate();
+  const user = await licenceForSession();
   if ((format === 'FLAC' && !user.can_stream_lossless) || (format === 'MP3_320' && !user.can_stream_hq)) {
     throw new WrongLicense(format);
   }

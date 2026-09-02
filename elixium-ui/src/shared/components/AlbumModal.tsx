@@ -16,6 +16,7 @@ import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {isExplicit} from '@/shared/lib/explicit';
 import {relationsOf} from '@/shared/lib/relations';
 import {ArtistLink, TrackByline} from '@/shared/components/RelationLinks';
+import {DownloadQualityCaret} from '@/shared/components/DownloadQuality';
 import {useSelectionStore} from '@/store/selection-store';
 import type {Service} from '@/types';
 import {extractCover} from '@/shared/lib/cover';
@@ -114,7 +115,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
   const albumTitleFor = (track: (typeof tracks)[number]) =>
     itemType === 'album' ? album.title : (track.album ?? album.title);
 
-  const handleDownloadAlbum = () => {
+  const handleDownloadAlbum = (quality?: string) => {
     download({
       id: album.id,
       // Sending 'album' for a playlist makes the backend resolve the wrong
@@ -124,6 +125,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
       artist: album.artist,
       cover: album.cover,
       service: album.service,
+      quality,
     });
     onClose();
   };
@@ -252,10 +254,16 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                 </Button>
               )}
 
-              <Button size="sm" onClick={handleDownloadAlbum} className="hidden sm:inline-flex">
-                <Download size={14} />
-                Download
-              </Button>
+              {/* A labelled button has room for a second affordance; a card
+                  does not, which is why this is a caret here and a right-click
+                  there. */}
+              <span className="hidden items-center gap-1 sm:inline-flex">
+                <Button size="sm" onClick={() => handleDownloadAlbum()}>
+                  <Download size={14} />
+                  Download
+                </Button>
+                <DownloadQualityCaret service={album.service} onPick={handleDownloadAlbum} />
+              </span>
               <DialogPrimitive.Close asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="Close">
                   <X size={16} />
@@ -364,7 +372,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                             service: album.service,
                           }}
                           onPlay={() => handlePlayTrack(t.id, i)}
-                          onDownload={() =>
+                          onDownload={(quality) =>
                             download({
                               id: t.id,
                               type: 'track',
@@ -372,6 +380,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                               artist: t.artist ?? album.artist,
                               cover: coverFor(t),
                               service: album.service,
+                              quality,
                             })
                           }
                           className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
@@ -430,7 +439,7 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
                   <Play size={14} />
                   Play all
                 </Button>
-                <Button size="sm" onClick={handleDownloadAlbum}>
+                <Button size="sm" onClick={() => handleDownloadAlbum()}>
                   <Download size={14} />
                   Download all
                 </Button>

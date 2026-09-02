@@ -262,7 +262,9 @@ export function ChartsPage() {
                     track={{id: r.id, title: r.title, artist: r.artist, album: r.album, cover, duration: toSeconds(r.duration), service}}
                     relations={relationsOf(r.rawData, service)}
                     onPlay={() => playAll(i)}
-                    onDownload={() => download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service})}
+                    onDownload={(quality) =>
+                      download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service, quality})
+                    }
                     className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
                   />
                 </div>
@@ -329,15 +331,14 @@ export function ChartsPage() {
                   artist: r.artist,
                   cover: card.cover,
                 }}
-                onDownload={() =>
+                onDownload={(quality) =>
                   download({
                     id: r.id,
                     type: effectiveKind === 'albums' ? 'album' : 'playlist',
                     title: r.title,
                     artist: r.artist,
                     cover: card.cover,
-                    service,
-                  })
+                    service, quality})
                 }
               />
             );

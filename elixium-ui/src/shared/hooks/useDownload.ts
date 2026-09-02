@@ -18,6 +18,15 @@ export interface DownloadTarget {
   url?: string;
   /** YouTube Music only: the length, which is the matcher's strongest signal. */
   durationSeconds?: number | null;
+  /**
+   * Take this one at a different quality, just this once.
+   *
+   * Wanting a lossless copy of one album without moving the whole library to
+   * lossless is an ordinary thing to want, and the alternative was a trip to
+   * Settings before and after. Omitted, the configured default applies, so
+   * every existing caller is unchanged.
+   */
+  quality?: string;
 }
 
 /** Distinguishes downloads started within the same millisecond. */
@@ -103,6 +112,8 @@ export function useDownload() {
             /* Album audio or a music video — the row already knows, so the
                engine does not have to ask YouTube again for every track. */
             musicVideoType: track.rawData?.musicVideoType,
+            /* A format for this download only; omitted, the setting applies. */
+            format: target.quality === 'opus' || target.quality === 'aac' ? target.quality : undefined,
           });
         }
       } catch (error) {
@@ -148,7 +159,7 @@ export function useDownload() {
         service: target.service,
         itemId,
         settings: {
-          quality: target.service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality,
+          quality: target.quality ?? (target.service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality),
           concurrency: settings.concurrency,
           trackNumber: settings.trackNumbering,
           fallbackTrack: settings.fallbackTrack,
@@ -166,7 +177,7 @@ export function useDownload() {
   );
 
   const downloadUrl = useCallback(
-    (url: string, meta: {title: string; artist?: string; cover?: string; service: Service}) => {
+    (url: string, meta: {title: string; artist?: string; cover?: string; service: Service; quality?: string}) => {
       /*
        * A counter, not just the clock.
        *
@@ -185,7 +196,7 @@ export function useDownload() {
         service: meta.service,
         itemId,
         settings: {
-          quality: meta.service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality,
+          quality: meta.quality ?? (meta.service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality),
           concurrency: settings.concurrency,
           trackNumber: settings.trackNumbering,
           fallbackTrack: settings.fallbackTrack,

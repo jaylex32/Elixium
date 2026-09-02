@@ -47,9 +47,27 @@ export const deezerFormatCode = (quality: string): number => {
     case 'flac':
     case 'lossless':
       return 9;
+    case '128':
+    case '128kbps':
+    case 'mp3_128':
+      return 1;
     case '320':
     case '320kbps':
+    case 'mp3_320':
       return 3;
+    /*
+     * An unrecognised quality stays at 128, as it always has.
+     *
+     * The bug here was the missing names above, not this default: MP3_320 —
+     * what the interface stores and the documented API accepts — was not
+     * listed, so a request for the higher tier quietly produced the lower one
+     * under a .mp3 name that gave nothing away.
+     *
+     * Raising this default was tempting and wrong. Two of the routes that call
+     * it resolve a single format with no ladder beneath them, and 128 is the
+     * one tier Deezer never licence-gates — so guessing upward would turn a
+     * working download into a refusal for anybody without an HQ licence.
+     */
     default:
       return 1;
   }

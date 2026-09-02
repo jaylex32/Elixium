@@ -348,6 +348,8 @@ export const registerWebRestRoutes = ({
         (received, total) => {
           if (total) emit({itemStatus: 'downloading', percentage: Math.round((received / total) * 100)});
         },
+        /* A format chosen for this download alone; absent, the setting applies. */
+        body.format === 'opus' || body.format === 'aac' ? body.format : undefined,
       );
 
       if (!result.tagged) console.log('ytmusic: saved without tags — ' + result.path);

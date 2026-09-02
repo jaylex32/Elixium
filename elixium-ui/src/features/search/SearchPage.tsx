@@ -91,7 +91,7 @@ function ResultRow({
   index: number;
   service: Service;
   onPlay: () => void;
-  onDownload: () => void;
+  onDownload: (quality?: string) => void;
   selectionActive: boolean;
   selected: boolean;
   onToggleSelect: () => void;
@@ -478,7 +478,7 @@ export function SearchPage() {
                       index={i + 1}
                       service={service}
                       onPlay={() => playAll(i)}
-                      onDownload={() =>
+                      onDownload={(quality) =>
                         download({
                           id: r.id,
                           type: 'track',
@@ -486,6 +486,7 @@ export function SearchPage() {
                           artist: r.artist,
                           cover: extractCover(r.rawData, service),
                           service,
+                          quality,
                         })
                       }
                       selectionActive={selectionActive}
@@ -538,8 +539,8 @@ export function SearchPage() {
                         relations={relationsOf(r.rawData, service)}
                         service={service}
                         selectable={{id: r.id, type: 'album', service, title: r.title, artist: r.artist, cover: album.cover}}
-                        onDownload={() =>
-                          download({id: r.id, type: 'album', title: r.title, artist: r.artist, cover: album.cover, service})
+                        onDownload={(quality) =>
+                          download({id: r.id, type: 'album', title: r.title, artist: r.artist, cover: album.cover, service, quality})
                         }
                       />
                     );
@@ -605,8 +606,8 @@ export function SearchPage() {
                         relations={relationsOf(r.rawData, service)}
                         service={service}
                         selectable={{id: r.id, type: 'playlist', service, title: r.title, artist: r.artist, cover: card.cover}}
-                        onDownload={() =>
-                          download({id: r.id, type: 'playlist', title: r.title, artist: r.artist, cover: card.cover, service})
+                        onDownload={(quality) =>
+                          download({id: r.id, type: 'playlist', title: r.title, artist: r.artist, cover: card.cover, service, quality})
                         }
                         onWatch={() => watchPlaylist(r.id, r.title)}
                       />

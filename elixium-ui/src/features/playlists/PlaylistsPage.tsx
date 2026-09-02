@@ -141,7 +141,7 @@ export function PlaylistsPage() {
                */
               const foreign = Boolean(p.service && p.service !== service);
 
-              const startDownload = () =>
+              const startDownload = (quality?: string) =>
                 download({
                   id: p.id,
                   url: p.url,
@@ -150,6 +150,7 @@ export function PlaylistsPage() {
                   artist: p.owner ?? 'Playlist',
                   cover: p.image,
                   service,
+                  quality,
                 });
 
               return (
@@ -275,7 +276,7 @@ export function PlaylistsPage() {
                         cover: card.cover,
                         url: r.url,
                       }}
-                      onDownload={() =>
+                      onDownload={(quality) =>
                         download({
                           id: r.id,
                           url: r.url,
@@ -283,8 +284,7 @@ export function PlaylistsPage() {
                           title: r.title,
                           artist: r.artist,
                           cover: card.cover,
-                          service,
-                        })
+                          service, quality})
                       }
                     />
                     {/* Watching takes the URL — the only identifier that

@@ -310,15 +310,14 @@ function DiscoverySection({
           artist: album.artist,
           cover: album.cover,
         }}
-        onDownload={() =>
+        onDownload={(quality) =>
           download({
             id: album.id,
             type: isTrackRow ? 'track' : album.type === 'playlist' ? 'playlist' : 'album',
             title: album.title,
             artist: album.artist,
             cover: album.cover,
-            service,
-          })
+            service, quality})
         }
       />
     );

@@ -223,8 +223,8 @@ function GenreContent({
                   }}
                   relations={relations}
                   onPlay={() => playFrom(i)}
-                  onDownload={() =>
-                    download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service})
+                  onDownload={(quality) =>
+                    download({id: r.id, type: 'track', title: r.title, artist: r.artist, cover, service, quality})
                   }
                   className="lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
                 />
@@ -284,15 +284,14 @@ function GenreContent({
                   artist: r.artist,
                   cover: card.cover,
                 }}
-                onDownload={() =>
+                onDownload={(quality) =>
                   download({
                     id: r.id,
                     type: tab === 'albums' ? 'album' : 'playlist',
                     title: r.title,
                     artist: r.artist,
                     cover: card.cover,
-                    service,
-                  })
+                    service, quality})
                 }
               />
             );

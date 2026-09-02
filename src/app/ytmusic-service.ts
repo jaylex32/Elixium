@@ -794,6 +794,13 @@ export const createYtMusicService = ({
     videoId: string,
     raw: TrackMetadata,
     onProgress?: (received: number, total: number | null) => void,
+    /**
+     * Take this one in a different format, just this once.
+     *
+     * Undefined means the configured default, so nothing that does not ask for
+     * something else changes behaviour.
+     */
+    formatOverride?: 'aac' | 'opus',
   ): Promise<{path: string; folder: string; tagged: boolean; bitrate: number; skipped: boolean}> => {
     /*
      * A music video's audio is not the record — so before anything is written,
@@ -888,7 +895,7 @@ export const createYtMusicService = ({
 
     const result = await downloadTrack(chosenId, tagged, base, {
       cookie: getCookie?.(),
-      preferOpus: preferOpus?.(),
+      preferOpus: formatOverride ? formatOverride === 'opus' : preferOpus?.(),
       onProgress,
       http,
     });

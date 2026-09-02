@@ -1,3 +1,4 @@
+import PQueue from 'p-queue';
 import {EOL} from 'os';
 import {writeFileSync, mkdirSync} from 'fs';
 import {dirname, join, resolve, sep} from 'path';
@@ -139,6 +140,41 @@ export const createWebDownloads = ({
     return result;
   };
 
+  /**
+   * The quality the request actually asked for.
+   *
+   * The interface sends it inside `settings`, beside the paths and the
+   * fallback switches — this read `data.quality` at the top level, which is
+   * only ever set by the queue. Every download started from a button therefore
+   * arrived with no quality at all and fell through to the downloader's
+   * default: choosing FLAC produced a 320kbps MP3, and on a session without an
+   * HQ licence the ladder stepped that down again to 128.
+   *
+   * Both are read, preferring what the interface sends, so any other caller
+   * setting it at the top level keeps working.
+   */
+  const requestedQuality = (data: any): string | number | undefined => data?.settings?.quality ?? data?.quality;
+
+  /**
+   * The ceiling on tracks fetched at once.
+   *
+   * Four, which is what the command line has always defaulted to. Downloads
+   * here ran strictly one at a time — the concurrency setting was sent by the
+   * interface and read by nobody — so an album took as long as the sum of its
+   * tracks, most of that spent resolving and tagging rather than moving bytes.
+   *
+   * Capped rather than obeyed outright: a dozen parallel streams is how an
+   * account starts being throttled, and a slow download is a better problem
+   * than a refused one.
+   */
+  const MAX_CONCURRENT_DOWNLOADS = 4;
+
+  const downloadConcurrency = (data: any): number => {
+    const asked = Number(data?.settings?.concurrency ?? conf.get('concurrency', 1));
+    if (!Number.isFinite(asked) || asked < 1) return 1;
+    return Math.min(Math.round(asked), MAX_CONCURRENT_DOWNLOADS);
+  };
+
   const downloadQobuzTracks = async (parsedData: any, data: any, socket: any) => {
     socket.emit('directUrlDownloadStart', {
       tracks: parsedData.tracks,
@@ -189,7 +225,7 @@ export const createWebDownloads = ({
 
         const savedPath = await qobuzDownloadTrack({
           track,
-          quality: data.quality,
+          quality: requestedQuality(data),
           info: parsedData.info,
           coverSizes,
           path: fullPath,
@@ -251,50 +287,83 @@ export const createWebDownloads = ({
     const m3u8: string[] = [];
     const coverSizes = conf.get('coverSize') as any;
 
-    for (let i = 0; i < parsedData.tracks.length; i++) {
-      const track = parsedData.tracks[i];
+    /*
+     * Tracks run a few at a time rather than strictly one after another.
+     *
+     * Results are filed by position, not by the order they finish in: the
+     * playlist written afterwards lists them in album order, and collecting
+     * them as they land would shuffle it.
+     */
+    const total = parsedData.tracks.length;
+    const landed: Array<{savedPath: string; listed: string} | null> = new Array(total).fill(null);
+    let finished = 0;
 
-      socket.emit('downloadProgress', {
-        percentage: ((i + 1) / parsedData.tracks.length) * 100,
-        currentTrack: track.SNG_TITLE,
-        current: i + 1,
-        total: parsedData.tracks.length,
-        itemId: data.itemId ?? 'url-download',
-        itemStatus: 'downloading',
-        itemProgress: Math.round(((i + 1) / parsedData.tracks.length) * 100),
-      });
+    const queue = new PQueue({concurrency: downloadConcurrency(data)});
 
-      try {
-        const basePath = data.settings.deezerPath || (conf as any).get('paths.deezer') || './Music/Deezer';
-        const deezerKey = layoutKeyFor(parsedData.linktype, 'deezer');
-        const layoutPath =
-          deezerKey === 'playlist'
-            ? (conf.get('saveLayout') as any)['playlist'] || 'Playlist/{TITLE}/{SNG_TITLE}'
-            : (conf.get('saveLayout') as any)[deezerKey] || '{ALB_TITLE}/{SNG_TITLE}';
-
-        const fullPath = join(basePath, layoutPath);
-
-        const savedPath = await deezerDownloadTrack({
-          track,
-          quality: data.quality,
-          info: parsedData.linkinfo || {},
-          coverSizes,
-          path: fullPath,
-          totalTracks: parsedData.tracks.length,
-          trackNumber: conf.get('trackNumber', true) as boolean,
-          fallbackTrack: conf.get('fallbackTrack', true) as boolean,
-          fallbackQuality: conf.get('fallbackQuality', true) as boolean,
-          message: `(${i + 1}/${parsedData.tracks.length})`,
+    await queue.addAll(
+      parsedData.tracks.map((track: any, i: number) => async () => {
+        socket.emit('downloadProgress', {
+          percentage: (finished / total) * 100,
+          currentTrack: track.SNG_TITLE,
+          current: Math.min(finished + 1, total),
+          total,
+          itemId: data.itemId ?? 'url-download',
+          itemStatus: 'downloading',
+          itemProgress: Math.round((finished / total) * 100),
         });
 
-        if (savedPath) {
-          savedFiles.push(savedPath);
-          m3u8.push(resolve(process.env.SIMULATE ? savedPath : trueCasePathSync(savedPath)));
-          console.log(`✅ Downloaded: ${track.SNG_TITLE}`);
+        try {
+          const basePath = data.settings.deezerPath || (conf as any).get('paths.deezer') || './Music/Deezer';
+          const deezerKey = layoutKeyFor(parsedData.linktype, 'deezer');
+          const layoutPath =
+            deezerKey === 'playlist'
+              ? (conf.get('saveLayout') as any)['playlist'] || 'Playlist/{TITLE}/{SNG_TITLE}'
+              : (conf.get('saveLayout') as any)[deezerKey] || '{ALB_TITLE}/{SNG_TITLE}';
+
+          const fullPath = join(basePath, layoutPath);
+
+          const savedPath = await deezerDownloadTrack({
+            track,
+            quality: requestedQuality(data),
+            info: parsedData.linkinfo || {},
+            coverSizes,
+            path: fullPath,
+            totalTracks: parsedData.tracks.length,
+            trackNumber: conf.get('trackNumber', true) as boolean,
+            fallbackTrack: conf.get('fallbackTrack', true) as boolean,
+            fallbackQuality: conf.get('fallbackQuality', true) as boolean,
+            message: `(${i + 1}/${total})`,
+          });
+
+          if (savedPath) {
+            landed[i] = {
+              savedPath,
+              listed: resolve(process.env.SIMULATE ? savedPath : trueCasePathSync(savedPath)),
+            };
+            console.log(`✅ Downloaded: ${track.SNG_TITLE}`);
+          }
+        } catch (trackError: any) {
+          console.error(`❌ Error downloading ${track.SNG_TITLE}: ${trackError.message}`);
+        } finally {
+          /* Counted however it ended, so a failure cannot stall the bar. */
+          finished += 1;
+          socket.emit('downloadProgress', {
+            percentage: (finished / total) * 100,
+            currentTrack: track.SNG_TITLE,
+            current: finished,
+            total,
+            itemId: data.itemId ?? 'url-download',
+            itemStatus: 'downloading',
+            itemProgress: Math.round((finished / total) * 100),
+          });
         }
-      } catch (trackError: any) {
-        console.error(`❌ Error downloading ${track.SNG_TITLE}: ${trackError.message}`);
-      }
+      }),
+    );
+
+    for (const entry of landed) {
+      if (!entry) continue;
+      savedFiles.push(entry.savedPath);
+      m3u8.push(entry.listed);
     }
 
     await createPlaylistFile(savedFiles, m3u8, parsedData, data, socket);

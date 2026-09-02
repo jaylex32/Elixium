@@ -173,15 +173,14 @@ export function Recommendations({service}: {service: Service}) {
                     artist: album.artist,
                     cover: album.cover,
                   }}
-                  onDownload={() =>
+                  onDownload={(quality) =>
                     download({
                       id: album.id,
                       type: 'album',
                       title: album.title,
                       artist: album.artist,
                       cover: album.cover,
-                      service,
-                    })
+                      service, quality})
                   }
                 />
               </div>

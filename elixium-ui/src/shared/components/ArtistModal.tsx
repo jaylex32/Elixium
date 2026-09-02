@@ -430,15 +430,14 @@ export function ArtistModal({artist, open, onClose, canGoBack}: ArtistModalProps
                           artist: card.artist,
                           cover: card.cover,
                         }}
-                        onDownload={() =>
+                        onDownload={(quality) =>
                           download({
                             id: item.id,
                             type: tab === 'albums' ? 'album' : 'playlist',
                             title: item.title,
                             artist: card.artist,
                             cover: card.cover,
-                            service: artist.service,
-                          })
+                            service: artist.service, quality})
                         }
                       />
                     );

@@ -314,15 +314,14 @@ export function FavoritesPage() {
                       service: entry.service,
                     })
                   }
-                  onDownload={() =>
+                  onDownload={(quality) =>
                     download({
                       id: entry.id,
                       type: entry.type as 'album' | 'playlist',
                       title: entry.title,
                       artist: entry.artist,
                       cover: entry.cover,
-                      service: entry.service,
-                    })
+                      service: entry.service, quality})
                   }
                 />
               ),

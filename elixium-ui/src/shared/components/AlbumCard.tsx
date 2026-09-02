@@ -8,6 +8,7 @@ import {useSelectionStore, type SelectableItem} from '@/store/selection-store';
 import {ArtistLink, AlbumLink} from '@/shared/components/RelationLinks';
 import type {Relations} from '@/shared/lib/relations';
 import type {Service} from '@/types';
+import {DownloadQualityContext} from '@/shared/components/DownloadQuality';
 
 export interface AlbumCardData {
   id: string;
@@ -23,7 +24,8 @@ export interface AlbumCardData {
 
 interface AlbumCardProps {
   album: AlbumCardData;
-  onDownload?: () => void;
+  /** Given a quality, download at that instead of the configured default. */
+  onDownload?: (quality?: string) => void;
   /** Playlist only: follow it for new tracks. Omitted for albums. */
   onWatch?: () => void;
   onPlay?: () => void;
@@ -66,7 +68,7 @@ export function AlbumCard({
     }
     onClick?.();
   };
-  return (
+  const card = (
     <div
       className={cn(
         'group relative flex cursor-pointer flex-col gap-2.5 rounded-md border border-border bg-card-bg p-3',
@@ -132,7 +134,9 @@ export function AlbumCard({
               size="icon"
               variant="secondary"
               aria-label={`Download ${album.title}`}
-              title="Download"
+              /* Says the choice exists without putting a control on the
+                 artwork to advertise it. */
+              title={service ? 'Download — right-click for other qualities' : 'Download'}
               onClick={(e) => {
                 e.stopPropagation();
                 onDownload();
@@ -189,5 +193,19 @@ export function AlbumCard({
         )}
       </div>
     </div>
+  );
+
+  /*
+   * The qualities hang off a right-click rather than a fourth button.
+   *
+   * This grid is artwork first; play, download and sometimes watch already
+   * share the hover overlay, and another control there would crowd the cover
+   * it sits on. The download button's tooltip is what makes this findable.
+   */
+  if (!onDownload || !service) return card;
+  return (
+    <DownloadQualityContext service={service} onPick={(quality) => onDownload(quality)}>
+      {card}
+    </DownloadQualityContext>
   );
 }
