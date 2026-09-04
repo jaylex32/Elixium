@@ -112,6 +112,10 @@ add(path.join(repoRoot, 'dist', 'src'), 'server');
 zip.addFile('package.json', fs.readFileSync(path.join(repoRoot, 'package.json')));
 fileCount += 1;
 
+/* Starts the engine with its output routed somewhere the phone can show it. */
+zip.addFile('bootstrap.js', fs.readFileSync(path.join(androidDir, 'bootstrap.js')));
+fileCount += 1;
+
 const modulesRoot = path.join(repoRoot, 'node_modules');
 for (const entry of fs.readdirSync(modulesRoot)) {
   if (entry.startsWith('.')) continue;

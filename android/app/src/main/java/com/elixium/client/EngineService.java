@@ -44,9 +44,6 @@ public class EngineService extends Service {
   /** Node runs for the life of the process, so starting it twice is a crash. */
   private static boolean started = false;
 
-  /** Temporary: runs a trivial script instead of the engine, to isolate the wiring. */
-  private static final boolean PROBE_RUNTIME = false;
-
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
     enterForeground(NOTIFICATION_ID, notification());
@@ -61,17 +58,19 @@ public class EngineService extends Service {
   private void runEngine() {
     try {
       File engineDir = unpackEngine();
-      File entry = new File(engineDir, "server/elixium.js");
+      File entry = new File(engineDir, "bootstrap.js");
       File config = new File(getFilesDir(), "elixium.config.json");
 
       /*
        * The same arguments the desktop shell passes, plus the OpenSSL flag.
        *
        * Deezer streams are Blowfish-CBC, which OpenSSL 3 moved into its legacy
-       * provider — without the flag every Deezer download fails on a cipher
-       * error while Qobuz keeps working and hides the cause. The desktop build
-       * does not need it because Electron links BoringSSL, where the cipher is
-       * simply present.
+       * provider. The flag is not optional here: without it the engine finds
+       * bf-cbc missing and relaunches itself to add the flag, and on Android
+       * process.execPath is app_process64 rather than node — so the relaunch
+       * aborts with "Error changing dalvik-cache ownership" and the service
+       * restarts in a loop. The desktop build never needs it, because Electron
+       * links BoringSSL, where the cipher is simply present.
        */
       String[] arguments = {
         "node",
@@ -87,21 +86,6 @@ public class EngineService extends Service {
       };
 
       Log.i(TAG, "starting engine from " + entry.getAbsolutePath());
-      if (PROBE_RUNTIME) {
-        String[] probe = {
-          "node",
-          "-e",
-          "console.log('probe: node ' + process.version + ' cwd ' + process.cwd());"
-              + "console.log('probe: bf-cbc ' + (function(){try{require('crypto')"
-              + ".createDecipheriv('bf-cbc', Buffer.alloc(16), Buffer.alloc(8));return 'ok';}"
-              + "catch(e){return String(e.code || e.message);}})());"
-              + "require('http').createServer(function(q,s){s.end('ok');})"
-              + ".listen(9977,'127.0.0.1',function(){console.log('probe: listening');});",
-        };
-        NodeRuntime.nativeStart(probe, getFilesDir().getAbsolutePath());
-        Log.w(TAG, "probe exited");
-        return;
-      }
       NodeRuntime.nativeStart(arguments, getFilesDir().getAbsolutePath());
       Log.w(TAG, "engine exited");
     } catch (Exception e) {
