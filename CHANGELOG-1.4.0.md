@@ -91,8 +91,10 @@ Everything from the 1.4.0 betas is included.
   shipped that nothing ever loaded: the entire development toolchain — the
   TypeScript compiler, prettier, eslint — and a complete copy of the repository
   itself, which the build had been packing in since long before this release.
-  The Windows download drops from 191 MB to about 82, and the installed app
-  from roughly 710 MB to 286. macOS and Linux shrink by about the same.
+  The Windows download drops from 191 MB to 82, and the installed app from
+  roughly 710 MB to 286 — the copy of the repository only ever affected
+  Windows. macOS and Linux shrink by about 18%: the macOS download goes from
+  127 MB to 104.
 
 ## Notes
 
