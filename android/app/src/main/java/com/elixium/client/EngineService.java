@@ -60,6 +60,8 @@ public class EngineService extends Service {
       File engineDir = unpackEngine();
       File entry = new File(engineDir, "bootstrap.js");
       File config = new File(getFilesDir(), "elixium.config.json");
+      /* First run only: point downloads at the phone's Music folder. */
+      Storage.seedConfig(config);
 
       /*
        * The same arguments the desktop shell passes, plus the OpenSSL flag.
@@ -103,7 +105,17 @@ public class EngineService extends Service {
   private File unpackEngine() throws IOException {
     File engineDir = new File(getFilesDir(), "engine");
     File marker = new File(engineDir, ".version");
-    String version = BuildConfig.VERSION_NAME;
+
+    /*
+     * Identify the payload, not just the release.
+     *
+     * Keying this on the version alone means a rebuilt engine under an
+     * unchanged version is never unpacked, so the app keeps running the
+     * previous copy — which during development looks exactly like a change
+     * having no effect, and in a hotfix would ship the bug it fixed. The
+     * asset's own length moves whenever the engine is rebuilt.
+     */
+    String version = BuildConfig.VERSION_NAME + ":" + BuildConfig.ENGINE_ID;
 
     if (marker.exists() && version.equals(readText(marker))) {
       Log.i(TAG, "engine already unpacked");

@@ -32,6 +32,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -58,6 +60,8 @@ public class MainActivity extends AppCompatActivity {
   private final Handler ui = new Handler(Looper.getMainLooper());
   private boolean loaded = false;
 
+  private FolderBridge folders;
+  private ActivityResultLauncher<Uri> folderPicker;
   private ValueCallback<Uri[]> pendingFileChooser;
   private ActivityResultLauncher<Intent> fileChooser;
   private ActivityResultLauncher<String> notificationPermission;
@@ -74,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
     registerLaunchers();
     configureWebView();
     askForNotificationPermission();
+    askForStorageAccess();
     handleBackPresses();
 
     EngineService.start(this);
@@ -148,6 +153,14 @@ public class MainActivity extends AppCompatActivity {
               pendingFileChooser = null;
             });
 
+    folderPicker =
+        registerForActivityResult(
+            new ActivityResultContracts.OpenDocumentTree(),
+            tree -> {
+              if (tree != null) FolderBridge.remember(this, tree);
+              if (folders != null) folders.deliver(tree);
+            });
+
     notificationPermission =
         registerForActivityResult(
             new ActivityResultContracts.RequestPermission(),
@@ -163,6 +176,34 @@ public class MainActivity extends AppCompatActivity {
       return;
     }
     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+  }
+
+  /**
+   * Ask once for the access that lets downloads land in the Music folder.
+   *
+   * Android 11 moved this out of dialogs and into a Settings screen, so the
+   * most an app can do is open it. Declining costs the user nothing they can
+   * see immediately — the engine still downloads, into its own folder — so this
+   * neither blocks nor repeats.
+   */
+  private void askForStorageAccess() {
+    if (Storage.canWriteMusic()) return;
+
+    Intent request = Storage.accessRequest(this);
+    if (request == null) return;
+
+    new androidx.appcompat.app.AlertDialog.Builder(this)
+        .setTitle(R.string.storage_title)
+        .setMessage(R.string.storage_detail)
+        .setPositiveButton(R.string.storage_open, (dialog, which) -> {
+          try {
+            startActivity(request);
+          } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, R.string.storage_unavailable, Toast.LENGTH_LONG).show();
+          }
+        })
+        .setNegativeButton(R.string.storage_later, null)
+        .show();
   }
 
   @SuppressLint("SetJavaScriptEnabled")
@@ -183,10 +224,30 @@ public class MainActivity extends AppCompatActivity {
     CookieManager.getInstance().setAcceptCookie(true);
     CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
+    folders = new FolderBridge(this, folderPicker);
+    webView.addJavascriptInterface(folders, "ElixiumHost");
+
+    /*
+     * Define window.elixium before the interface's own scripts run.
+     *
+     * Settings reads it while it renders to decide whether to show a Browse
+     * button, so injecting after the page has loaded is a race the interface
+     * usually wins — and the button silently never appears.
+     */
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+      WebViewCompat.addDocumentStartJavaScript(
+          webView, FolderBridge.SHIM, java.util.Collections.singleton("*"));
+    }
+
     webView.setBackgroundColor(ContextCompat.getColor(this, R.color.ground));
     webView.setWebChromeClient(new ElixiumChromeClient());
     webView.setWebViewClient(new ElixiumWebViewClient());
     webView.setDownloadListener(this::saveDownload);
+  }
+
+  /** The view the folder bridge settles its promises in. */
+  WebView webView() {
+    return webView;
   }
 
   private void showWeb() {
@@ -222,6 +283,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onPageFinished(WebView view, String url) {
+      // A phone whose WebView is too old for document-start scripts still gets
+      // the bridge, just later; Settings is reached well after this.
+      if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        view.evaluateJavascript(FolderBridge.SHIM, null);
+      }
       showWeb();
     }
 

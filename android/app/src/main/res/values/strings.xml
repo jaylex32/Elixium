@@ -10,4 +10,9 @@
   <string name="engine_running">Elixium is running</string>
   <string name="starting_engine">Starting Elixium…</string>
   <string name="engine_failed">Elixium could not start. Reopen the app to try again.</string>
+  <string name="storage_title">Where should downloads go?</string>
+  <string name="storage_detail">Elixium can save music to the Music folder on your phone, where other apps can find it. Android grants this on its own settings screen. Without it, downloads still work, but they stay inside the app where nothing else can see them.</string>
+  <string name="storage_open">Open settings</string>
+  <string name="storage_later">Not now</string>
+  <string name="storage_unavailable">This phone has no screen for that permission.</string>
 </resources>

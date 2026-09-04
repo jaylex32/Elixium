@@ -123,6 +123,17 @@ android {
     }
   }
 
+  /*
+   * The engine's identity, so a rebuilt payload is always unpacked.
+   *
+   * Keyed on the archive's own size rather than the version: an engine rebuilt
+   * under an unchanged version would otherwise never replace the copy already
+   * on the phone, which looks exactly like a change having no effect.
+   */
+  defaultConfig.buildConfigField(
+      'String', 'ENGINE_ID',
+      "\"" + file('src/main/assets/engine.zip').length() + "\"")
+
   // EngineService reads VERSION_NAME to decide whether to unpack again.
   buildFeatures {
     buildConfig true
@@ -153,4 +164,10 @@ configurations.configureEach {
 dependencies {
   implementation 'androidx.appcompat:appcompat:1.7.0'
   implementation 'androidx.core:core:1.13.1'
+  /*
+   * For addDocumentStartJavaScript: the interface reads window.elixium while it
+   * renders, so the bridge has to exist before the page's own scripts run.
+   * Injecting after the load finishes is a race the interface usually wins.
+   */
+  implementation 'androidx.webkit:webkit:1.11.0'
 }

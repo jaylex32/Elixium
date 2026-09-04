@@ -12,6 +12,17 @@
        from Android 10 the download manager writes on the app's behalf. -->
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
       android:maxSdkVersion="28" />
+  <!--
+    The engine writes music where the user asks it to, with plain file writes.
+
+    Scoped storage would confine that to a folder inside Android/data that no
+    music player scans and no file manager shows by default, which for a
+    downloader is the same as losing the files. All-files access is what lets a
+    download land in /storage/emulated/0/Music like every other music app. It is
+    requested, never assumed: without it the app still runs and still downloads,
+    into its own folder.
+  -->
+  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
   <application
       android:allowBackup="true"
