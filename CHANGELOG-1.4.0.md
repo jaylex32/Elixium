@@ -87,10 +87,12 @@ Everything from the 1.4.0 betas is included.
 - **The portable build opens in about two seconds** after the first run, instead
   of around 50. It now unpacks once into an `Elixium-app` folder beside the
   `.exe` and reuses it. Delete that folder and it is rebuilt on the next launch.
-- **Smaller download and install on every platform.** The build was shipping the
-  entire development toolchain — the TypeScript compiler, prettier, eslint —
-  which nothing ever loaded. That is 97 MB of every install, now gone. The
-  installer is 82 MB instead of 102, and takes 286 MB on disk instead of 414.
+- **Smaller download and install on every platform.** Two things were being
+  shipped that nothing ever loaded: the entire development toolchain — the
+  TypeScript compiler, prettier, eslint — and a complete copy of the repository
+  itself, which the build had been packing in since long before this release.
+  The Windows download drops from 191 MB to about 82, and the installed app
+  from roughly 710 MB to 286. macOS and Linux shrink by about the same.
 
 ## Notes
 

@@ -174,6 +174,20 @@ module.exports = {
     'readiness.js',
     'package.json',
     'assets/icon.png',
+    /*
+     * The shell carries no dependencies, so nothing from node_modules belongs
+     * in the asar. main.js, preload.js, engine-log.js and readiness.js require
+     * Node built-ins and electron, and electron comes from the runtime rather
+     * than from here.
+     *
+     * Stated explicitly because CI installs desktop's dependencies as
+     * `npm install --prefix desktop` from the repository root, which makes npm
+     * install the repository itself as a dependency of the shell. electron-
+     * builder then packed the whole checkout — changelogs, dist, public — into
+     * app.asar: 296 MB on the runner against 48 KB locally, which is why every
+     * release so far has been roughly twice the size it needed to be.
+     */
+    '!node_modules/**/*',
     '!**/elixium.config.json',
     '!**/elixium.watchlist.json',
     '!**/.env',
