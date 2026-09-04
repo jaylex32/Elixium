@@ -1,0 +1,12 @@
+# Local Android SDK location, machine specific.
+local.properties
+# Build output and Gradle's own caches.
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+# Signing material never belongs in the repository.
+*.jks
+*.keystore
+keystore.properties

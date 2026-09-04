@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Matches the web interface so the app does not flash a white frame. -->
+  <color name="ground">#0f1116</color>
+  <color name="text">#e8eaed</color>
+  <color name="muted">#8b93a1</color>
+  <color name="accent">#1db8a8</color>
+</resources>

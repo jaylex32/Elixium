@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Elixium</string>
+  <string name="server_prompt">Where is your Elixium server?</string>
+  <string name="server_hint">https://music.example.com</string>
+  <string name="connect">Connect</string>
+  <string name="playback_channel">Playback</string>
+  <string name="playing">Playing</string>
+  <string name="playing_detail">Elixium is playing in the background</string>
+  <string name="cannot_reach">Could not reach that address. Check it and try again.</string>
+  <string name="change_server">Change server</string>
+</resources>
