@@ -4,7 +4,7 @@ import {dirname, join, resolve, sep} from 'path';
 import prompts from 'prompts';
 import PQueue from 'p-queue';
 import chalk from 'chalk';
-import {trueCasePathSync} from 'true-case-path';
+import {safeTrueCasePath} from '../lib/util';
 import {parseInfo} from '../core';
 import type {trackType} from '../core/deezer/types';
 import type {trackType as QobuzTrackType} from '../core/qobuz/types';
@@ -219,7 +219,7 @@ export const createCliDownloads = ({
                   terminalProgress.log(chalk.green('✔ Path:') + ` ${absolutePath}`);
                 }
 
-                m3u8.push(resolve(process.env.SIMULATE ? savedPath : trueCasePathSync(savedPath)));
+                m3u8.push(resolve(process.env.SIMULATE ? savedPath : safeTrueCasePath(savedPath)));
                 savedFiles.push(savedPath);
               }
             };
@@ -428,7 +428,7 @@ export const createCliDownloads = ({
                       terminalProgress.log(chalk.green('✔ Path:') + ` ${absolutePath}`);
                     }
 
-                    m3u8Local.push(resolve(process.env.SIMULATE ? savedPath : trueCasePathSync(savedPath)));
+                    m3u8Local.push(resolve(process.env.SIMULATE ? savedPath : safeTrueCasePath(savedPath)));
                     savedFiles.push(savedPath);
                   }
                 } catch (err) {

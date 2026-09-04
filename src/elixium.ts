@@ -7,7 +7,7 @@ import {parseInfo, parseQobuzUrl} from './core';
 import qdlt from './lib/download-qobuz-track';
 import {parseToQobuz} from './lib/to-qobuz-parser';
 import PQueue from 'p-queue';
-import {trueCasePathSync} from 'true-case-path';
+import {safeTrueCasePath} from './lib/util';
 import signale from './lib/signale';
 import downloadTrack from './lib/download-track';
 import Config from './lib/config';
@@ -787,7 +787,7 @@ const {downloadQobuzTracks, downloadDeezerTracks, createPlaylistFile} = createWe
   deezerDownloadTrack: downloadTrack,
   commonPath,
   sanitizeFilename,
-  trueCasePathSync,
+  trueCasePathSync: safeTrueCasePath,
 });
 
 const {getDiscoveryContentRest, getItemTracksRest, makeHttpRequest} = createWebData({
@@ -865,7 +865,7 @@ const {startDownloadProcess} = createDownloadQueueRuntime({
   shouldUseVariousArtists,
   commonPath,
   sanitizeFilename,
-  trueCasePathSync,
+  trueCasePathSync: safeTrueCasePath,
   activeDownloads,
   getIsDeezerDownloadReady: () => isDeezerDownloadReady,
   getIsQobuzDownloadReady: () => isQobuzDownloadReady,

@@ -1,6 +1,34 @@
 import dotProp from 'dot-prop';
 import chalk from 'chalk';
 import {dirname, basename, join} from 'path';
+import {trueCasePathSync} from 'true-case-path';
+
+/**
+ * A path in the casing the filesystem actually uses, or the path itself.
+ *
+ * This exists for the playlist file. Windows and macOS accept a path in any
+ * casing but store one, so a `.m3u8` written from what we typed can name a file
+ * the player then fails to open. Reading the real casing back avoids that.
+ *
+ * It must never be able to fail a download, and it was: the lookup walks the
+ * directory tree with scandir and throws when a segment cannot be listed. On
+ * Android that happens routinely — external storage is a FUSE mount that
+ * refuses listing even where writing is allowed — and because the call sat
+ * after the file had been written but inside the same try, a completed download
+ * was reported as a failure. Every track arrived and every track said it had
+ * not.
+ *
+ * Falling back to the path we already hold is exactly right when the lookup
+ * fails: on Linux and Android the filesystem is case-sensitive, so what we
+ * wrote is already the true case and there was nothing to correct.
+ */
+export const safeTrueCasePath = (target: string): string => {
+  try {
+    return trueCasePathSync(target);
+  } catch {
+    return target;
+  }
+};
 
 type saveLayoutProps = {
   track: {[key: string]: any};

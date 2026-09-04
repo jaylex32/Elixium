@@ -144,6 +144,9 @@ release/
 # Electron desktop shell build output and dependencies.
 desktop/node_modules/
 desktop/out/
+# Any build output directory, however it is named: electron-builder can be
+# pointed elsewhere when the usual one is locked, and that output is not source.
+desktop/out-*/
 desktop/launch.log
 
 # pkg's Node base binaries, kept in the workspace so the icon stamped onto the
