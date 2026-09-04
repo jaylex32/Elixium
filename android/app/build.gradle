@@ -53,6 +53,26 @@ tasks.named('preBuild') {
   dependsOn 'fetchNodeRuntime', 'buildEnginePayload'
 }
 
+/*
+ * Release signing, when the key is present.
+ *
+ * The keystore and its passwords live outside the repository and are read from
+ * android/keystore.properties, which is gitignored — a signing key in version
+ * control is a signing key everyone has. A checkout without it still builds:
+ * assembleDebug is unaffected, and assembleRelease falls back to unsigned
+ * rather than failing, so nobody needs the key to work on the app.
+ *
+ * The signature matters beyond secrecy. Android will not install an update
+ * whose signature differs from what is already on the phone, so once a build
+ * is published with this key, every later build must use the same one — or
+ * users have to uninstall and lose their settings first.
+ */
+def signingProps = new Properties()
+def signingFile = rootProject.file('keystore.properties')
+if (signingFile.exists()) {
+  signingFile.withInputStream { signingProps.load(it) }
+}
+
 android {
   namespace 'com.elixium.client'
   compileSdk 34
@@ -139,9 +159,23 @@ android {
     buildConfig true
   }
 
+  signingConfigs {
+    if (signingProps['storeFile']) {
+      release {
+        storeFile file(signingProps['storeFile'])
+        storePassword signingProps['storePassword']
+        keyAlias signingProps['keyAlias']
+        keyPassword signingProps['keyPassword']
+      }
+    }
+  }
+
   buildTypes {
     release {
       minifyEnabled false
+      if (signingProps['storeFile']) {
+        signingConfig signingConfigs.release
+      }
     }
   }
 
