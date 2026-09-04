@@ -61,3 +61,42 @@ export const cleanVersion = (version: unknown): string | null => {
 
 /** Written as ENCODEDBY / TENC so a file's origin is traceable later. */
 export const ENCODED_BY = 'Elixium';
+
+/**
+ * The most accurate release date available, as `YYYY-MM-DD`.
+ *
+ * Deezer's public album endpoint reports `release_date`, and for anything
+ * reissued that is the date of the reissue: a 1973 record that arrived on
+ * streaming in 2011 is tagged 2011, so a library sorted by year files it
+ * beside music made four decades later. The private track payload carries the
+ * physical and original dates alongside it, and either is the date a listener
+ * means when they ask what year something is from.
+ *
+ * Preference order is oldest-known-first for that reason, and every candidate
+ * has to look like a real date before it is used — Deezer returns `0000-00-00`
+ * for a release it has no date for, which would otherwise tag the file year 0.
+ *
+ * Falls back to exactly what was used before, so a track whose payload carries
+ * none of the richer fields is tagged as it always was.
+ */
+export const bestReleaseDate = (track: unknown, album: unknown): string | null => {
+  const looksLikeADate = (value: unknown): value is string =>
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !value.startsWith('0000');
+
+  const from = (source: unknown, key: string): unknown =>
+    source && typeof source === 'object' ? (source as Record<string, unknown>)[key] : undefined;
+
+  const candidates = [
+    from(track, 'ORIGINAL_RELEASE_DATE'),
+    from(track, 'PHYSICAL_RELEASE_DATE'),
+    from(album, 'ORIGINAL_RELEASE_DATE'),
+    from(album, 'PHYSICAL_RELEASE_DATE'),
+    from(track, 'DIGITAL_RELEASE_DATE'),
+    from(album, 'release_date'),
+  ];
+
+  for (const candidate of candidates) {
+    if (looksLikeADate(candidate)) return candidate;
+  }
+  return null;
+};

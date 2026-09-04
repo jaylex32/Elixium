@@ -1,7 +1,7 @@
 // @ts-ignore
 import id3Writer from 'browser-id3-writer';
 import type {albumTypePublicApi, trackType} from '../types';
-import {formatGain, cleanVersion, isCompilation, ENCODED_BY} from '../../../lib/metadata-extra';
+import {formatGain, cleanVersion, isCompilation, ENCODED_BY, bestReleaseDate} from '../../../lib/metadata-extra';
 import {DEFAULT_METADATA_OPTIONS, type MetadataOptions} from '../../../lib/metadata-options';
 
 export const writeMetadataMp3 = (
@@ -13,7 +13,9 @@ export const writeMetadataMp3 = (
   options: MetadataOptions = DEFAULT_METADATA_OPTIONS,
 ): Buffer => {
   const writer = new id3Writer(buffer);
-  const RELEASE_DATES = album && album.release_date.split('-');
+  /* The oldest known release date, so reissues keep the year they were made. */
+  const RELEASE_DATE = bestReleaseDate(track, album);
+  const RELEASE_DATES = RELEASE_DATE ? RELEASE_DATE.split('-') : null;
 
   writer
     .setFrame('TIT2', track.SNG_TITLE)

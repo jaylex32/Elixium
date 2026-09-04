@@ -1,6 +1,6 @@
 import Metaflac from '../../lib/metaflac-js';
 import type {albumTypePublicApi, trackType} from '../types';
-import {formatGain, cleanVersion, isCompilation, ENCODED_BY} from '../../../lib/metadata-extra';
+import {formatGain, cleanVersion, isCompilation, ENCODED_BY, bestReleaseDate} from '../../../lib/metadata-extra';
 import {DEFAULT_METADATA_OPTIONS, type MetadataOptions} from '../../../lib/metadata-options';
 
 export const writeMetadataFlac = (
@@ -13,7 +13,9 @@ export const writeMetadataFlac = (
   options: MetadataOptions = DEFAULT_METADATA_OPTIONS,
 ): Buffer => {
   const flac = new Metaflac(buffer);
-  const RELEASE_YEAR = album ? album.release_date.split('-')[0] : null;
+  /* The oldest known release date, so reissues keep the year they were made. */
+  const RELEASE_DATE = bestReleaseDate(track, album);
+  const RELEASE_YEAR = RELEASE_DATE ? RELEASE_DATE.split('-')[0] : null;
 
   flac.setTag('TITLE=' + track.SNG_TITLE);
   flac.setTag('ALBUM=' + track.ALB_TITLE);
@@ -33,8 +35,11 @@ export const writeMetadataFlac = (
     flac.setTag('ALBUMARTIST=' + album.artist.name);
     if (options.barcode && album.upc) flac.setTag('BARCODE=' + album.upc);
     if (options.label && album.label) flac.setTag('LABEL=' + album.label);
-    flac.setTag('DATE=' + album.release_date);
-    flac.setTag('YEAR=' + RELEASE_YEAR);
+    /* No date at all is better than a tag reading "null". */
+    if (RELEASE_DATE) {
+      flac.setTag('DATE=' + RELEASE_DATE);
+      flac.setTag('YEAR=' + RELEASE_YEAR);
+    }
     if (options.compilation) flac.setTag(`COMPILATION=${isCompilation(album.artist.name) ? '1' : '0'}`);
   }
 

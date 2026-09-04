@@ -12,7 +12,7 @@ import chalk from 'chalk';
 import signale from '../lib/signale';
 import {saveLayout} from './util';
 import type {trackType} from '../core/deezer/types';
-import {GeoBlocked, WrongLicense} from '../core/deezer/lib/get-url';
+import {GeoBlocked} from '../core/deezer/lib/get-url';
 import Config from './config';
 import {terminalProgress} from './terminal-progress';
 
@@ -222,10 +222,24 @@ const downloadTrack = async ({
        * Leaving trackData undefined lets the existing fallback take over; it
        * already knows how to walk 9 -> 3 -> 1.
        */
-      const licenceRefused = err instanceof WrongLicense;
-      if (licenceRefused && fallbackQuality && quality !== 1) {
-        // Fall through with no data so the ladder below retries lower.
-      } else if (!(err instanceof GeoBlocked) || !track.FALLBACK) {
+      /*
+       * Any failure to resolve a URL steps down, not only a licence refusal.
+       *
+       * This tested for WrongLicense specifically, which is too narrow in a
+       * way that is easy to miss: Deezer refuses an unlicensed format with a
+       * plain API error as often as with the licence error, and a request that
+       * simply times out is indistinguishable from here. All of those used to
+       * be rethrown, ending a track that a lower tier would have delivered.
+       *
+       * The cost of being wrong this way is one wasted attempt at a tier the
+       * account can stream; the cost of the old behaviour was the track.
+       */
+      const geoBlockedWithAlternate = err instanceof GeoBlocked && Boolean(track.FALLBACK);
+      if (geoBlockedWithAlternate) {
+        // Leave trackData undefined; the alternate-track branch below takes it.
+      } else if (fallbackQuality && quality !== 1) {
+        // Leave trackData undefined; the quality ladder below retries lower.
+      } else {
         throw err;
       }
     }

@@ -48,6 +48,27 @@ let user_data_session: string | null = null;
 
 const currentSession = (): string => String((instance.defaults.params as Record<string, unknown>)?.sid ?? '');
 
+/**
+ * Read a Deezer capability flag as a boolean.
+ *
+ * These arrive inconsistently — `true`, `"true"`, `"1"`, `1`, and sometimes
+ * null — and a bare `||` reads the string `"0"` as true, because every
+ * non-empty string is truthy in JavaScript. That is the wrong direction to be
+ * wrong in: believing an account can stream lossless skips the licence check
+ * below, so instead of a `WrongLicense` the request comes back as a generic
+ * API error, and the downloader — which decides whether to step down a quality
+ * by testing for `WrongLicense` — rethrows it and loses the track entirely.
+ *
+ * A flag whose shape is not recognised counts as false, which costs at most a
+ * needless step down to a tier that always works.
+ */
+const licenceFlag = (value: unknown): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') return value === 'true' || value === '1';
+  return false;
+};
+
 const dzAuthenticate = async (): Promise<userData> => {
   /*
    * Read before the request, not after.
@@ -69,8 +90,9 @@ const dzAuthenticate = async (): Promise<userData> => {
   });
   user_data = {
     license_token: data.results.USER.OPTIONS.license_token,
-    can_stream_lossless: data.results.USER.OPTIONS.web_lossless || data.results.USER.OPTIONS.mobile_loseless,
-    can_stream_hq: data.results.USER.OPTIONS.web_hq || data.results.USER.OPTIONS.mobile_hq,
+    can_stream_lossless:
+      licenceFlag(data.results.USER.OPTIONS.web_lossless) || licenceFlag(data.results.USER.OPTIONS.mobile_loseless),
+    can_stream_hq: licenceFlag(data.results.USER.OPTIONS.web_hq) || licenceFlag(data.results.USER.OPTIONS.mobile_hq),
     country: data.results.COUNTRY,
   };
   user_data_session = readUnder;

@@ -55,6 +55,8 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   /** Consecutive tracks that would not play, so a dead queue stops rather than spins. */
   const failuresInARow = useRef(0);
+  /** The track already reloaded once, so a dropped connection costs a retry, not a track. */
+  const retriedTrack = useRef<string | null>(null);
 
   /*
    * Where the restored track should resume, captured once on mount.
@@ -90,10 +92,42 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
 
+    /*
+     * Each track owns its play attempt, and abandons it when the next arrives.
+     *
+     * Loading a new source rejects the previous `play()` with AbortError —
+     * "interrupted by a new load request" — and that rejection lands here,
+     * after the queue has already moved on. Unguarded, the previous track's
+     * handler then stopped playback, or worse, swapped in *its* 30-second
+     * preview over the track now playing.
+     *
+     * On a desktop the gap between load and play is milliseconds and this
+     * almost never fired. On a phone it is however long the network takes,
+     * which is why a queue there died after a few songs for no visible reason.
+     */
+    let superseded = false;
+
     setIsBuffering(true);
     audio.src = getStreamUrl(currentTrack.id, currentTrack.service, quality);
     audio.load();
-    audio.play().catch(() => {
+    audio.play().catch((error: unknown) => {
+      if (superseded) return;
+
+      const failure = (error as {name?: string} | null)?.name;
+
+      /*
+       * A locked phone refuses to start playback without a gesture. Nothing is
+       * broken and the queue is intact — the lock-screen controls resume it —
+       * so this must not be treated as a track that will not play.
+       */
+      if (failure === 'NotAllowedError') {
+        setPlaying(false);
+        return;
+      }
+
+      /* Superseded by a newer load; that attempt reports for itself. */
+      if (failure === 'AbortError') return;
+
       if (currentTrack.previewUrl && audio.src !== currentTrack.previewUrl) {
         audio.src = currentTrack.previewUrl;
         audio.play().catch(() => setPlaying(false));
@@ -101,6 +135,10 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         setPlaying(false);
       }
     });
+
+    return () => {
+      superseded = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?.id, currentTrack?.service]);
 
@@ -191,6 +229,7 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         onLoadedMetadata={(e) => {
           /* Something played, so the run of failures is over. */
           failuresInARow.current = 0;
+          retriedTrack.current = null;
           setDuration(e.currentTarget.duration);
         }}
         onEnded={() => {
@@ -203,6 +242,36 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         }}
         onError={() => {
           setIsBuffering(false);
+
+          /*
+           * Reload the same track once before giving up on it.
+           *
+           * A phone whose Wi-Fi sleeps when the screen goes off fails every
+           * request until it wakes, and skipping on the first failure burned
+           * through the queue three tracks at a time until playback stopped
+           * altogether. A connection that drops for a moment should cost a
+           * reload, not a song.
+           */
+          const trackId = currentTrack?.id ?? null;
+          if (trackId && retriedTrack.current !== trackId) {
+            retriedTrack.current = trackId;
+            /*
+             * The retry belongs to the track that failed, and to nothing else.
+             *
+             * Skipping during the wait leaves the element holding the next
+             * track, and reloading it then would restart the song the listener
+             * had just chosen. Comparing the source it was scheduled against
+             * is what keeps the retry attached to the failure that caused it.
+             */
+            const failedSource = audioRef.current?.src ?? '';
+            window.setTimeout(() => {
+              const element = audioRef.current;
+              if (!element || !element.src || element.src !== failedSource) return;
+              element.load();
+              void element.play().catch(() => undefined);
+            }, 1500);
+            return;
+          }
 
           /*
            * A track that will not load moves the queue on rather than ending it.
