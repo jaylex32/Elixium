@@ -47,7 +47,7 @@ export function PlayerFullscreen({audioRef}: PlayerFullscreenProps) {
       animate={{opacity: 1, y: 0}}
       exit={{opacity: 0, y: 40}}
       transition={{duration: 0.25, ease: [0.4, 0, 0.2, 1]}}
-      className="fixed inset-0 z-modal flex flex-col items-center justify-center overflow-y-auto glass px-safe py-safe"
+      className="no-scrollbar fixed inset-0 z-modal flex flex-col items-center justify-center overflow-y-auto glass px-safe py-safe"
     >
       {/* Blurred background art */}
       {currentTrack.cover && (
@@ -106,7 +106,7 @@ export function PlayerFullscreen({audioRef}: PlayerFullscreenProps) {
               </div>
             )
           ) : (
-            <div className="max-h-[46dvh] w-full overflow-y-auto rounded-md border border-border bg-secondary-bg/60">
+            <div className="no-scrollbar max-h-[46dvh] w-full overflow-y-auto rounded-md border border-border bg-secondary-bg/60">
               <LyricsView />
             </div>
           )}

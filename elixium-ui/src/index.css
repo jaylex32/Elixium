@@ -407,6 +407,24 @@
     scroll-snap-align: start;
   }
 
+  /*
+   * Scrolls, but shows no bar.
+   *
+   * For surfaces that are the whole screen rather than a panel within one —
+   * the fullscreen player is the case this exists for. A scrollbar there is
+   * drawn over the artwork and reads as part of the design rather than as a
+   * control, and on a phone the gutter it reserves is wasted next to a cover
+   * that already fills the width. The content still scrolls by touch, wheel
+   * and keyboard.
+   */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Clamp helpers — long track and artist names are the norm, not the edge. */
   .line-clamp-1 {
     display: -webkit-box;
