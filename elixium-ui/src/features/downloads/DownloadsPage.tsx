@@ -1,4 +1,18 @@
-import {Download, CheckCircle2, AlertCircle, Loader2, X, Trash2, Music2, Ban, Search, FolderOpen} from 'lucide-react';
+import {
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  X,
+  Trash2,
+  Music2,
+  Ban,
+  Search,
+  FolderOpen,
+  Pause,
+  PauseCircle,
+  Play,
+} from 'lucide-react';
 import {socketSend} from '@/shared/lib/socket-client';
 import {cn} from '@/shared/lib/utils';
 import {Button} from '@/shared/components/ui/Button';
@@ -36,6 +50,42 @@ const STATUS_CONFIG = {
   downloading: {label: 'Downloading', color: 'text-accent', icon: Loader2, spin: true},
   done: {label: 'Done', color: 'text-success', icon: CheckCircle2, spin: false},
   error: {label: 'Error', color: 'text-danger', icon: AlertCircle, spin: false},
+  /* Stopped on purpose, so neither a success nor a failure. */
+  cancelled: {label: 'Cancelled', color: 'text-text-muted', icon: Ban, spin: false},
+  /* Waiting for the user rather than for the network — no spinner. */
+  paused: {label: 'Paused', color: 'text-warning', icon: PauseCircle, spin: false},
+};
+
+/**
+ * What a row is actually fetching, in a few characters.
+ *
+ * A progress bar says how far along a download is and nothing about what it
+ * will produce — so a lossless album and a 128kbps one looked identical while
+ * they ran, and the only way to find out was to open the file afterwards.
+ */
+const qualityBadge = (quality?: string, service?: string): string | null => {
+  if (!quality) return null;
+  const key = quality.toLowerCase();
+
+  if (service === 'ytmusic') {
+    if (key === 'opus') return 'Opus · 147k';
+    if (key === 'aac') return 'AAC · 131k';
+    return null;
+  }
+
+  /* Qobuz names its tiers by number. */
+  const qobuz: Record<string, string> = {
+    '27': 'FLAC · 24/192',
+    '7': 'FLAC · 24/96',
+    '6': 'FLAC · 16/44',
+    '5': 'MP3 · 320k',
+  };
+  if (service === 'qobuz' && qobuz[key]) return qobuz[key];
+
+  if (key === 'flac' || key === 'lossless') return 'FLAC · 1411k';
+  if (key === 'mp3_320' || key === '320' || key === '320kbps') return 'MP3 · 320k';
+  if (key === 'mp3_128' || key === '128' || key === '128kbps') return 'MP3 · 128k';
+  return null;
 };
 
 function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
@@ -106,6 +156,15 @@ function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
             </div>
           )}
 
+          {qualityBadge(d.quality, d.service) && (
+            <span
+              className="mt-1.5 inline-flex items-center rounded-xs border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-muted"
+              title="The quality this download was started at"
+            >
+              {qualityBadge(d.quality, d.service)}
+            </span>
+          )}
+
           {d.status === 'error' && d.error && <p className="mt-1.5 text-xs text-danger">{d.error}</p>}
 
           {d.status === 'done' && (
@@ -118,16 +177,54 @@ function DownloadCard({d, onClear}: {d: ActiveDownload; onClear: () => void}) {
         {/* A running download previously had no stop control at all, even
             though the server has handled cancelDownload all along. */}
         {isActive ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Cancel ${d.title}`}
-            title="Cancel download"
-            onClick={() => socketSend('cancelDownload', {id: d.itemId})}
-            className="shrink-0 text-text-muted hover:text-danger"
-          >
-            <Ban size={14} />
-          </Button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {/* Pause keeps what has downloaded; cancel throws it away. Both
+                stop the transfer the same way — the difference is only what
+                happens to the half-written file afterwards. */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Pause ${d.title}`}
+              title="Pause — keeps what has downloaded so far"
+              onClick={() => socketSend('pauseDownload', {id: d.itemId})}
+              className="text-text-muted hover:text-warning"
+            >
+              <Pause size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Cancel ${d.title}`}
+              title="Cancel — discards the partly downloaded files"
+              onClick={() => socketSend('cancelDownload', {id: d.itemId})}
+              className="text-text-muted hover:text-danger"
+            >
+              <Ban size={14} />
+            </Button>
+          </div>
+        ) : d.status === 'paused' ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Resume ${d.title}`}
+              title="Resume — continues from where it stopped"
+              onClick={() => socketSend('resumeDownload', {id: d.itemId})}
+              className="text-text-muted hover:text-accent"
+            >
+              <Play size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Cancel ${d.title}`}
+              title="Cancel — discards the partly downloaded files"
+              onClick={() => socketSend('cancelDownload', {id: d.itemId})}
+              className="text-text-muted hover:text-danger"
+            >
+              <Ban size={14} />
+            </Button>
+          </div>
         ) : (
           <Button
             variant="ghost"
@@ -162,18 +259,27 @@ export function DownloadsPage() {
   const [query, setQuery] = useState('');
 
   const downloads = Object.values(active).sort((a, b) => {
-    const order = {downloading: 0, converting: 1, starting: 2, error: 3, done: 4};
+    const order = {downloading: 0, converting: 1, starting: 2, paused: 3, error: 4, cancelled: 5, done: 6};
     return (order[a.status] ?? 5) - (order[b.status] ?? 5) || b.startedAt - a.startedAt;
   });
 
   const doneCount = downloads.filter((d) => d.status === 'done').length;
   const errorCount = downloads.filter((d) => d.status === 'error').length;
-  const activeCount = downloads.filter((d) => d.status !== 'done' && d.status !== 'error').length;
+  const cancelledCount = downloads.filter((d) => d.status === 'cancelled').length;
+  /* Cancelled counts as finished. Left out of this test it would sit in the
+     Active tab for good, which is the same trap a completed item once fell
+     into — visibly done, still listed as running. */
+  const activeCount = downloads.filter(
+    (d) => d.status !== 'done' && d.status !== 'error' && d.status !== 'cancelled',
+  ).length;
+  /* Paused counts as active: it is unfinished work waiting to be picked up,
+     and burying it under Finished is where it would never be found again. */
 
   const matches = (text: string) => text.toLowerCase().includes(query.trim().toLowerCase());
 
   const visible = downloads.filter((d) => {
-    if (filter === 'active' && (d.status === 'done' || d.status === 'error')) return false;
+    if (filter === 'active' && (d.status === 'done' || d.status === 'error' || d.status === 'cancelled'))
+      return false;
     if (filter === 'done' && d.status !== 'done') return false;
     if (filter === 'failed' && d.status !== 'error') return false;
     if (!query.trim()) return true;
@@ -237,7 +343,7 @@ export function DownloadsPage() {
         )}
 
         <div className="ml-auto flex gap-1">
-          {doneCount + errorCount > 0 && (
+          {doneCount + errorCount + cancelledCount > 0 && (
             <Button variant="ghost" size="sm" onClick={clearDone} className="text-text-muted">
               <Trash2 size={13} />
               Clear finished

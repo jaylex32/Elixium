@@ -2,6 +2,7 @@ import got from 'got';
 import stream from 'stream';
 import {existsSync, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync, unlinkSync} from 'fs';
 import {applyLyrics, type LyricsOptions} from './lyrics-embed';
+import {metadataOptionsFrom, DEFAULT_METADATA_OPTIONS, type MetadataOptions} from './metadata-options';
 import {resolveCoverSize, qobuzCoverUrl} from './cover-art';
 import {promisify} from 'util';
 import {dirname, isAbsolute, join, resolve} from 'path';
@@ -44,6 +45,15 @@ interface downloadTrackProps {
   qobuzDownloadCover: boolean;
   listTitle?: string; // Make sure this is included
   progressKey?: string;
+  /**
+   * Which tags to write.
+   *
+   * Passed in for the same reason as on the Deezer side: this module builds
+   * its own Config when it loads, so a setting changed while the engine runs
+   * is invisible to it. The command line passes nothing and reads its own,
+   * which is correct there because each run is a fresh process.
+   */
+  metadata?: MetadataOptions;
 }
 
 const downloadedQobuzCovers = new Set<string>();
@@ -102,6 +112,7 @@ const downloadTrack = async ({
   qobuzDownloadCover,
   listTitle,
   progressKey = `qobuz-${track.id}-${++progressSequence}`,
+  metadata,
 }: downloadTrackProps): Promise<string | undefined> => {
   const richProgress = terminalProgress.isEnabled();
   const artistName = track.performer?.name || track.album?.artist?.name || 'Unknown Artist';
@@ -276,7 +287,15 @@ const downloadTrack = async ({
       getLyricsOptions(),
     );
 
-    const trackWithMetadata = await qobuz.addTrackTags(outFile, track, coverSize);
+    const trackWithMetadata = await qobuz.addTrackTags(
+      outFile,
+      track,
+      coverSize,
+      metadata ??
+        (config.get('metadataCustom' as never) === true
+          ? metadataOptionsFrom((config.get('metadata' as never) as {qobuz?: unknown})?.qobuz)
+          : DEFAULT_METADATA_OPTIONS),
+    );
 
     // Delete temporary file now
     unlinkSync(tmpfile);

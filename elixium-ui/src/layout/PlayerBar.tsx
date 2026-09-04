@@ -48,10 +48,13 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
     toggleShuffle,
     cycleRepeat,
     queue,
+    queueIndex,
   } = usePlayerStore();
   const {settings} = useSettingsStore();
   const {download} = useDownload();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** Consecutive tracks that would not play, so a dead queue stops rather than spins. */
+  const failuresInARow = useRef(0);
 
   /*
    * Where the restored track should resume, captured once on mount.
@@ -185,7 +188,11 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          /* Something played, so the run of failures is over. */
+          failuresInARow.current = 0;
+          setDuration(e.currentTarget.duration);
+        }}
         onEnded={() => {
           if (repeat === 'one' && audioRef.current) {
             audioRef.current.currentTime = 0;
@@ -196,7 +203,35 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
         }}
         onError={() => {
           setIsBuffering(false);
+
+          /*
+           * A track that will not load moves the queue on rather than ending it.
+           *
+           * This used to stop playback outright, so a single unavailable video
+           * — YouTube has plenty, and a stream URL can be refused for reasons
+           * that have nothing to do with the next track — ended the listening
+           * session with no explanation. A queue of fifty would die at
+           * whichever one happened to fail.
+           *
+           * Bounded, because a queue where nothing plays must not spin through
+           * itself forever: after three in a row it stops and says so.
+           */
+          const remaining = queue.length - queueIndex - 1;
+          if (failuresInARow.current < 3 && remaining > 0) {
+            failuresInARow.current += 1;
+            toast.error('Skipped a track that would not play', {
+              description: currentTrack?.title,
+              duration: 2500,
+            });
+            next();
+            return;
+          }
+
+          failuresInARow.current = 0;
           setPlaying(false);
+          toast.error('Playback stopped', {
+            description: remaining > 0 ? 'Several tracks in a row would not play' : currentTrack?.title,
+          });
         }}
       />
 

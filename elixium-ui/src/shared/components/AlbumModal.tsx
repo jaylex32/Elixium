@@ -16,7 +16,7 @@ import {ExplicitBadge} from '@/shared/components/ExplicitBadge';
 import {isExplicit} from '@/shared/lib/explicit';
 import {relationsOf} from '@/shared/lib/relations';
 import {ArtistLink, TrackByline} from '@/shared/components/RelationLinks';
-import {DownloadQualityCaret} from '@/shared/components/DownloadQuality';
+import {DownloadSplitButton} from '@/shared/components/DownloadQuality';
 import {useSelectionStore} from '@/store/selection-store';
 import type {Service} from '@/types';
 import {extractCover} from '@/shared/lib/cover';
@@ -257,13 +257,11 @@ export function AlbumModal({album, open, onClose, canGoBack}: AlbumModalProps) {
               {/* A labelled button has room for a second affordance; a card
                   does not, which is why this is a caret here and a right-click
                   there. */}
-              <span className="hidden items-center gap-1 sm:inline-flex">
-                <Button size="sm" onClick={() => handleDownloadAlbum()}>
-                  <Download size={14} />
-                  Download
-                </Button>
-                <DownloadQualityCaret service={album.service} onPick={handleDownloadAlbum} />
-              </span>
+              <DownloadSplitButton
+                service={album.service}
+                onDownload={handleDownloadAlbum}
+                className="hidden sm:inline-flex"
+              />
               <DialogPrimitive.Close asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="Close">
                   <X size={16} />

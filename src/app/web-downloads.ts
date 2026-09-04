@@ -1,4 +1,6 @@
 import PQueue from 'p-queue';
+import {beginJob, endJob, discardPartials} from './download-cancellation';
+import {metadataSettingsFrom, DEFAULT_METADATA_OPTIONS} from '../lib/metadata-options';
 import {EOL} from 'os';
 import {writeFileSync, mkdirSync} from 'fs';
 import {dirname, join, resolve, sep} from 'path';
@@ -189,7 +191,23 @@ export const createWebDownloads = ({
     const coverSizes = conf.get('coverSize') as any;
     const qobuzDownloadCover = conf.get('qobuzDownloadCover', false) as boolean;
 
+    /*
+     * Registered so a cancel finds it here too.
+     *
+     * Without this the handler would find nothing, and — because it now
+     * answers whether or not it found something — the row would be marked
+     * cancelled while the download carried on. Wrong in a worse way than the
+     * silence it replaced.
+     *
+     * This stops between tracks rather than mid-track: reaching into a
+     * transfer already running needs the same parameter Deezer's downloader
+     * took, and that could not be exercised against a live Qobuz account.
+     */
+    const qobuzJobId = String(data.itemId ?? 'url-download');
+    const qobuzJob = beginJob(qobuzJobId);
+
     for (let i = 0; i < parsedData.tracks.length; i++) {
+      if (qobuzJob.cancelled) break;
       const track = parsedData.tracks[i];
 
       // The client keys its rows by the itemId it sent with the request.
@@ -226,6 +244,11 @@ export const createWebDownloads = ({
         const savedPath = await qobuzDownloadTrack({
           track,
           quality: requestedQuality(data),
+          /* Qobuz's own slice of the metadata switches, read live. */
+          metadata:
+            conf.get('metadataCustom') === true
+              ? metadataSettingsFrom(conf.get('metadata')).qobuz
+              : DEFAULT_METADATA_OPTIONS,
           info: parsedData.info,
           coverSizes,
           path: fullPath,
@@ -245,6 +268,20 @@ export const createWebDownloads = ({
       } catch (trackError: any) {
         console.error(`❌ Error downloading ${track.title}: ${trackError.message}`);
       }
+    }
+
+    endJob(qobuzJobId);
+
+    if (qobuzJob.cancelled) {
+      console.log(`🚫 Cancelled: kept ${savedFiles.length} finished track(s)`);
+      socket.emit('downloadProgress', {
+        itemId: qobuzJobId,
+        itemStatus: 'cancelled',
+        current: savedFiles.length,
+        total: parsedData.tracks.length,
+        savedCount: savedFiles.length,
+      });
+      return;
     }
 
     await createPlaylistFile(savedFiles, m3u8, parsedData, data, socket);
@@ -298,10 +335,29 @@ export const createWebDownloads = ({
     const landed: Array<{savedPath: string; listed: string} | null> = new Array(total).fill(null);
     let finished = 0;
 
+    /*
+     * Registered so a cancel can find it.
+     *
+     * Cancelling looked this job up in a map it was never added to, so the
+     * button marked nothing and stopped nothing while the album carried on to
+     * the end. The abort controller is what reaches a transfer already in
+     * flight; the flag is what stops the tracks that have not started.
+     */
+    const jobId = String(data.itemId ?? 'url-download');
+    /* The request is kept so a paused job can be started again from it. */
+    const job = beginJob(jobId, data);
+    const stopper = new AbortController();
+    job.abort = () => stopper.abort();
+
     const queue = new PQueue({concurrency: downloadConcurrency(data)});
 
     await queue.addAll(
       parsedData.tracks.map((track: any, i: number) => async () => {
+        /* Queued but not yet started: a cancel or a pause means this one does
+           not run. The difference between them is what happens afterwards to
+           the files already half-written. */
+        if (job.cancelled || job.paused) return;
+
         socket.emit('downloadProgress', {
           percentage: (finished / total) * 100,
           currentTrack: track.SNG_TITLE,
@@ -333,6 +389,20 @@ export const createWebDownloads = ({
             fallbackTrack: conf.get('fallbackTrack', true) as boolean,
             fallbackQuality: conf.get('fallbackQuality', true) as boolean,
             message: `(${i + 1}/${total})`,
+            /* Only the web interface passes these; the command line does not,
+               and behaves exactly as it always has. */
+            /*
+             * Read from the live config, not the downloader's own stale copy —
+             * and only when the switches are actually in force. Off means the
+             * standard set, so a customisation left behind from an experiment
+             * cannot keep applying invisibly.
+             */
+            metadata:
+              conf.get('metadataCustom') === true
+                ? metadataSettingsFrom(conf.get('metadata')).deezer
+                : DEFAULT_METADATA_OPTIONS,
+            abortSignal: stopper.signal,
+            onPartialFile: (file: string) => job.partials.add(file),
           });
 
           if (savedPath) {
@@ -359,6 +429,49 @@ export const createWebDownloads = ({
         }
       }),
     );
+
+    if (job.paused) {
+      /*
+       * Everything is left exactly as it is — the partial files especially,
+       * since resuming continues them from the byte they reached. The job
+       * stays in the registry because it holds the request needed to restart.
+       */
+      const done = landed.filter(Boolean).length;
+      console.log(`⏸ Paused: ${done} of ${total} track(s) finished, ${job.partials.size} part-file(s) kept`);
+      socket.emit('downloadProgress', {
+        itemId: jobId,
+        itemStatus: 'paused',
+        current: done,
+        total,
+        savedCount: done,
+      });
+      return;
+    }
+
+    endJob(jobId);
+
+    if (job.cancelled) {
+      /*
+       * A cancelled download leaves nothing half-written behind.
+       *
+       * Partial files are not playable and the next attempt would resume into
+       * them, which is not what cancelling means — that is what pausing will
+       * mean. Whole tracks that finished before the cancel are kept: they are
+       * complete files, and throwing them away would discard work already done.
+       */
+      const removed = discardPartials(job);
+      const kept = landed.filter(Boolean).length;
+      console.log(`🚫 Cancelled: kept ${kept} finished track(s), removed ${removed} partial file(s)`);
+
+      socket.emit('downloadProgress', {
+        itemId: jobId,
+        itemStatus: 'cancelled',
+        current: kept,
+        total,
+        savedCount: kept,
+      });
+      return;
+    }
 
     for (const entry of landed) {
       if (!entry) continue;

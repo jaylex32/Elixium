@@ -1,6 +1,23 @@
 import {create} from 'zustand';
 import {persist} from 'zustand/middleware';
 
+/** What the engine writes when nothing has been customised. */
+const METADATA_DEFAULTS: Record<string, boolean> = {
+  replayGain: false,
+  isrc: true,
+  barcode: true,
+  label: true,
+  copyright: true,
+  explicit: true,
+  credits: true,
+  extraCredits: false,
+  bpm: false,
+  provenance: true,
+  releaseType: true,
+  compilation: true,
+  media: true,
+};
+
 export interface Settings {
   deezerArl: string;
   spotifySpDc: string;
@@ -19,6 +36,22 @@ export interface Settings {
   ytmusicDownloadPath: string;
   ytmusicFormat: 'aac' | 'opus';
   /** Take the album master when what was asked for is a music video. */
+  /**
+   * Which tags are written into a downloaded file.
+   *
+   * Kept as a map rather than named fields so a tag added later needs no
+   * change here; the engine merges it against its own defaults, so an unknown
+   * key is dropped and a missing one keeps its default.
+   */
+  /**
+   * Whether the metadata switches are in play at all.
+   *
+   * Off by default, and off means the defaults are used whatever is stored —
+   * so the section can be opened, looked at, and closed again without having
+   * quietly changed how files are tagged.
+   */
+  metadataCustom: boolean;
+  metadata: Record<string, Record<string, boolean>>;
   ytmusicPreferAlbumAudio: boolean;
   /** Refuse a video outright rather than falling back to it. */
   ytmusicStrictAlbumAudio: boolean;
@@ -68,6 +101,13 @@ const defaults: Settings = {
   qobuzDownloadPath: '',
   ytmusicDownloadPath: '',
   ytmusicFormat: 'aac',
+  metadataCustom: false,
+  metadata: {
+    /* Per service: the three do not carry the same tags. */
+    deezer: {...METADATA_DEFAULTS},
+    qobuz: {...METADATA_DEFAULTS},
+    ytmusic: {...METADATA_DEFAULTS},
+  },
   ytmusicPreferAlbumAudio: true,
   ytmusicStrictAlbumAudio: false,
   enabledServices: {deezer: true, qobuz: true, ytmusic: true},
@@ -99,6 +139,7 @@ interface SettingsState {
   reset: () => void;
   markClean: () => void;
 }
+
 
 export const useSettingsStore = create<SettingsState>()(
   persist(

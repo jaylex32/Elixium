@@ -96,6 +96,8 @@ export function useDownload() {
             title: track.title,
             artist: track.artist || albumArtist,
             cover: track.rawData?.cover || cover,
+            quality: target.quality ?? settings.ytmusicFormat,
+            service: 'ytmusic',
           });
 
           await http.post('/ytmusic/download', {
@@ -122,7 +124,7 @@ export function useDownload() {
         });
       }
     },
-    [trackDownload],
+    [trackDownload, settings.ytmusicFormat],
   );
 
   const download = useCallback(
@@ -148,10 +150,16 @@ export function useDownload() {
       const socket = getSocket();
 
       // Register in store immediately so UI shows it
+      const chosenQuality =
+        target.quality ?? (target.service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality);
+
       trackDownload(itemId, {
         title: target.title,
         artist: target.artist,
         cover: target.cover,
+        /* So the row can say what it is fetching, not just that it is. */
+        quality: chosenQuality,
+        service: target.service,
       });
 
       socket.emit(EMIT.DIRECT_DOWNLOAD, {
@@ -189,7 +197,10 @@ export function useDownload() {
       const itemId = `url-${Date.now()}-${nextUrlDownloadId()}`;
       const socket = getSocket();
 
-      trackDownload(itemId, meta);
+      trackDownload(itemId, {
+        ...meta,
+        quality: meta.quality ?? (meta.service === 'deezer' ? settings.deezerQuality : settings.qobuzQuality),
+      });
 
       socket.emit(EMIT.DIRECT_DOWNLOAD, {
         url,

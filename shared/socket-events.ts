@@ -42,7 +42,7 @@ type Unspecified = any;
  * was comparing two types with no overlap and the compiler could not say so
  * while the payload was being restated inline in two other files.
  */
-export type DownloadItemStatus = 'queued' | 'downloading' | 'completed' | 'error' | 'cancelled';
+export type DownloadItemStatus = 'queued' | 'downloading' | 'completed' | 'error' | 'cancelled' | 'paused';
 
 /**
  * Progress for one queue item.
@@ -214,6 +214,11 @@ export interface ClientToServerEvents {
   // Downloads
   startDownload: (payload: Unspecified) => void;
   cancelDownload: (payload: Unspecified) => void;
+  /* Stops the transfer but keeps what has downloaded, so it can be picked up
+     later; resuming replays the original request, which skips the tracks
+     already on disk and continues the one that was part-way through. */
+  pauseDownload: (payload: Unspecified) => void;
+  resumeDownload: (payload: Unspecified) => void;
   directUrlDownload: (payload: Unspecified) => void;
   getDownloadStatus: (payload?: Unspecified) => void;
   getActiveDownloads: (payload?: Unspecified) => void;

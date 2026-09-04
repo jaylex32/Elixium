@@ -1,4 +1,5 @@
 import {resolve} from 'path';
+import {pauseJob, resumableRequest} from './download-cancellation';
 import type {Socket} from 'socket.io';
 
 interface WebSocketDirectDownloadDependencies {
@@ -52,7 +53,14 @@ export const registerDirectDownloadSocketHandler = ({
   matchIntoYtMusic,
   createPlaylistFile,
 }: WebSocketDirectDownloadDependencies) => {
-  socket.on('directUrlDownload', async (data) => {
+  /*
+   * Named rather than inline so a resume can call it again.
+   *
+   * Resuming is re-running the original request: tracks already on disk are
+   * skipped because the file is there, and the one that was mid-transfer
+   * continues from the byte it reached. Nothing has to remember progress.
+   */
+  const runDirectDownload = async (data: any) => {
     try {
       let parsedData: any;
       const emitConversionProgress = (progress: {
@@ -476,5 +484,25 @@ export const registerDirectDownloadSocketHandler = ({
       console.error('❌ Direct URL download error:', error);
       socket.emit('directUrlDownloadError', {message: error.message});
     }
+  };
+
+  socket.on('directUrlDownload', runDirectDownload);
+
+  socket.on('pauseDownload', (data) => {
+    const id = String(data?.id ?? '');
+    if (pauseJob(id)) return;
+    /* Nothing running under that id — say so rather than leaving the button
+       looking as though it did something. */
+    socket.emit('directUrlDownloadError', {itemId: id, message: 'That download is not running'});
+  });
+
+  socket.on('resumeDownload', (data) => {
+    const id = String(data?.id ?? '');
+    const request = resumableRequest(id);
+    if (!request) {
+      socket.emit('directUrlDownloadError', {itemId: id, message: 'That download cannot be resumed'});
+      return;
+    }
+    void runDirectDownload(request);
   });
 };

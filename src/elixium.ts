@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {readFileSync, existsSync} from 'fs';
+import {metadataSettingsFrom} from './lib/metadata-options';
 import {deezer, qobuz, spotify} from './core';
 import {parseInfo, parseQobuzUrl} from './core';
 import qdlt from './lib/download-qobuz-track';
@@ -704,6 +705,9 @@ const ytmusicService = createYtMusicService({
    */
   embedLyrics: () => conf.get('embedLyrics') !== false,
   saveLrcFile: () => Boolean(conf.get('saveLrcFile')),
+  /* The one metadata switch that applies to YouTube Music. */
+  writeProvenance: () =>
+    conf.get('metadataCustom') === true ? metadataSettingsFrom(conf.get('metadata')).ytmusic.provenance : true,
 });
 
 const searchCatalog = (

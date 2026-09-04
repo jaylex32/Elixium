@@ -56,6 +56,8 @@ export interface TrackMetadata {
    * hundred-track playlist that is a hundred requests saved.
    */
   musicVideoType?: string;
+  /** Write the line saying where this came from. Absent means yes, as before. */
+  provenance?: boolean;
 }
 
 export interface DownloadOptions {
@@ -121,7 +123,12 @@ export const tagFile = (filePath: string, metadata: TrackMetadata, cover: Buffer
       if (metadata.year) file.tag.year = metadata.year;
       if (metadata.trackNumber) file.tag.track = metadata.trackNumber;
       if (metadata.trackTotal) file.tag.trackCount = metadata.trackTotal;
-      if (metadata.comment) file.tag.comment = metadata.comment;
+      /*
+       * The provenance line — where the file came from — is the only tag here
+       * the metadata switches apply to. YouTube Music sends no ISRC, barcode,
+       * label or loudness figure, so there is nothing else to turn off.
+       */
+      if (metadata.comment && metadata.provenance !== false) file.tag.comment = metadata.comment;
       if (metadata.lyrics) file.tag.lyrics = metadata.lyrics;
 
       if (cover && cover.length > 0) {

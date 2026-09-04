@@ -7,13 +7,22 @@ export interface ActiveDownload {
   title: string;
   artist?: string;
   cover?: string;
-  status: 'starting' | 'converting' | 'downloading' | 'done' | 'error';
+  status: 'starting' | 'converting' | 'downloading' | 'done' | 'error' | 'cancelled' | 'paused';
   percentage: number;
   currentTrack?: string;
   current: number;
   total: number;
   startedAt: number;
   error?: string;
+  /**
+   * The quality this was asked for, and from where.
+   *
+   * Recorded when the download starts rather than reported by the engine: the
+   * client is the one that chose it, and a row that does not say what it is
+   * fetching leaves you guessing whether the FLAC you picked actually applied.
+   */
+  quality?: string;
+  service?: string;
   /** Where this item's files landed, sent with its own terminal event. */
   folder?: string;
 }
@@ -78,7 +87,10 @@ interface DownloadState {
   isRunning: boolean;
 
   // Called when directUrlDownload is emitted — creates a placeholder
-  trackDownload: (itemId: string, meta: {title: string; artist?: string; cover?: string}) => void;
+  trackDownload: (
+    itemId: string,
+    meta: {title: string; artist?: string; cover?: string; quality?: string; service?: string},
+  ) => void;
   /**
    * Called on downloadProgress events from the backend.
    *
@@ -152,8 +164,12 @@ export const useDownloadStore = create<DownloadState>()(
         : data.itemStatus === 'error'
           ? 'error'
           : data.itemStatus === 'cancelled'
-            ? 'error'
-            : 'downloading';
+            ? /* Stopping something on purpose is not a failure, and reporting
+                 it as one puts a red alert beside a deliberate act. */
+              'cancelled'
+            : data.itemStatus === 'paused'
+              ? 'paused'
+              : 'downloading';
 
     set((s) => {
       const existing = s.active[id];
@@ -261,7 +277,7 @@ export const useDownloadStore = create<DownloadState>()(
         // Named completions settle only their own row. Without this, whichever
         // download finished first retired everything else still in flight.
         if (itemId && id !== itemId) continue;
-        if (entry.status !== 'done' && entry.status !== 'error') {
+        if (entry.status !== 'done' && entry.status !== 'error' && entry.status !== 'cancelled') {
           updated[id] = {
             ...entry,
             status: settled,
@@ -416,7 +432,9 @@ export const useDownloadStore = create<DownloadState>()(
   clearDone: () =>
     set((s) => ({
       active: Object.fromEntries(
-        Object.entries(s.active).filter(([, d]) => d.status !== 'done' && d.status !== 'error'),
+        Object.entries(s.active).filter(
+          ([, d]) => d.status !== 'done' && d.status !== 'error' && d.status !== 'cancelled',
+        ),
       ),
     })),
 
@@ -479,7 +497,7 @@ export const useDownloadStore = create<DownloadState>()(
       onRehydrateStorage: () => (state?: DownloadState) => {
         if (!state?.active) return;
         for (const [id, entry] of Object.entries(state.active)) {
-          if (entry.status !== 'done' && entry.status !== 'error') {
+          if (entry.status !== 'done' && entry.status !== 'error' && entry.status !== 'cancelled') {
             state.active[id] = {
               ...entry,
               status: 'error',

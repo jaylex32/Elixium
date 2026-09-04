@@ -82,6 +82,14 @@ export interface YtMusicServiceDependencies {
   embedLyrics?: () => boolean;
   /** Write a synced .lrc beside the audio. */
   saveLrcFile?: () => boolean;
+  /**
+   * Write the line saying where the file came from.
+   *
+   * The only one of the metadata switches YouTube Music has anything to apply
+   * to — it sends no ISRC, barcode, label or loudness figure, so the rest have
+   * nothing to act on here.
+   */
+  writeProvenance?: () => boolean;
 }
 
 /** What happened when a video was offered to the album-audio swap. */
@@ -126,6 +134,7 @@ export const createYtMusicService = ({
   strictAlbumAudio,
   embedLyrics,
   saveLrcFile,
+  writeProvenance,
 }: YtMusicServiceDependencies) => {
   /*
    * One HTTP client for everything that talks to YouTube, so that rotated
@@ -893,7 +902,9 @@ export const createYtMusicService = ({
 
     const tagged: TrackMetadata = found?.text && embedLyrics?.() ? {...metadata, lyrics: found.text} : metadata;
 
-    const result = await downloadTrack(chosenId, tagged, base, {
+    const withProvenance: TrackMetadata = writeProvenance?.() === false ? {...tagged, comment: undefined} : tagged;
+
+    const result = await downloadTrack(chosenId, withProvenance, base, {
       cookie: getCookie?.(),
       preferOpus: formatOverride ? formatOverride === 'opus' : preferOpus?.(),
       onProgress,

@@ -1,4 +1,5 @@
 import got from 'got';
+import {metadataOptionsFrom, DEFAULT_METADATA_OPTIONS, type MetadataOptions} from './metadata-options';
 import stream from 'stream';
 import {existsSync, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync, unlinkSync} from 'fs';
 import {applyLyrics, type LyricsOptions} from './lyrics-embed';
@@ -47,6 +48,33 @@ interface downloadTrackProps {
   message?: string;
   deezerDownloadCover?: boolean;
   progressKey?: string;
+  /**
+   * Stops a transfer that is already running.
+   *
+   * Optional, and passed only by the web interface's cancel button. The
+   * command line passes nothing, so every check below is a no-op there and its
+   * behaviour is unchanged.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Told where the half-finished file is being written.
+   *
+   * The caller cannot work this out for itself — the path is built here from
+   * the quality and the track's own ids — and a cancel needs it to clear up
+   * after itself rather than leave a partial file behind for good.
+   */
+  onPartialFile?: (path: string) => void;
+  /**
+   * Which tags to write.
+   *
+   * Passed in rather than read here: this module builds its own Config when it
+   * loads, so a setting changed while the engine is running is invisible to
+   * it — the file on disk is current and this copy is not. The web interface
+   * passes the live values; the command line passes nothing and this falls
+   * back to reading them itself, which is correct there because each run is a
+   * fresh process.
+   */
+  metadata?: MetadataOptions;
 }
 
 const downloadedAlbumCovers = new Set<string>();
@@ -101,6 +129,9 @@ const downloadTrack = async ({
   message = '',
   deezerDownloadCover,
   progressKey = `deezer-${track.SNG_ID}-${++progressSequence}`,
+  abortSignal,
+  onPartialFile,
+  metadata,
 }: downloadTrackProps): Promise<string | undefined> => {
   const richProgress = terminalProgress.isEnabled();
   const progressLabel = track.SNG_TITLE;
@@ -288,27 +319,46 @@ const downloadTrack = async ({
     }
     let transferredLast = downloaded;
     let transferredClock = Date.now();
-    await pipeline(
-      got.stream(trackData.trackUrl, {responseType: 'buffer', headers}).on('downloadProgress', ({transferred}) => {
-        // Report download progress
-        transferred += downloaded;
-        if (transferred - transferredLast > 50000) {
-          const now = Date.now();
-          const deltaBytes = transferred - transferredLast;
-          const deltaTime = Math.max(1, now - transferredClock);
-          const bytesPerSecond = (deltaBytes / deltaTime) * 1000;
-          const etaSeconds = bytesPerSecond > 0 ? (fileSize - transferred) / bytesPerSecond : 0;
-          transferredLast = transferred;
-          transferredClock = now;
-          if (richProgress) {
-            terminalProgress.update(progressKey, transferred, {stage: 'DOWN'});
-          } else {
-            logUpdate(signale.info(`Downloading ${track.SNG_TITLE} ${message}`));
+
+    /*
+     * Nothing below runs unless a caller asked to be able to stop this.
+     *
+     * got 11 takes no abort signal of its own, but the stream it returns is an
+     * ordinary Node stream, so destroying it ends the request — the pipeline
+     * then rejects and the existing error handling takes over.
+     */
+    onPartialFile?.(tmpfile);
+    if (abortSignal?.aborted) throw new Error('Download cancelled');
+
+    const transfer = got.stream(trackData.trackUrl, {responseType: 'buffer', headers});
+    const stopTransfer = () => transfer.destroy(new Error('Download cancelled'));
+    abortSignal?.addEventListener('abort', stopTransfer, {once: true});
+
+    try {
+      await pipeline(
+        transfer.on('downloadProgress', ({transferred}) => {
+          // Report download progress
+          transferred += downloaded;
+          if (transferred - transferredLast > 50000) {
+            const now = Date.now();
+            const deltaBytes = transferred - transferredLast;
+            const deltaTime = Math.max(1, now - transferredClock);
+            const bytesPerSecond = (deltaBytes / deltaTime) * 1000;
+            const etaSeconds = bytesPerSecond > 0 ? (fileSize - transferred) / bytesPerSecond : 0;
+            transferredLast = transferred;
+            transferredClock = now;
+            if (richProgress) {
+              terminalProgress.update(progressKey, transferred, {stage: 'DOWN'});
+            } else {
+              logUpdate(signale.info(`Downloading ${track.SNG_TITLE} ${message}`));
+            }
           }
-        }
-      }),
-      createWriteStream(tmpfile, {flags: 'a', autoClose: true}),
-    );
+        }),
+        createWriteStream(tmpfile, {flags: 'a', autoClose: true}),
+      );
+    } finally {
+      abortSignal?.removeEventListener('abort', stopTransfer);
+    }
 
     let outFile;
     if (trackData.isEncrypted) {
@@ -341,7 +391,21 @@ const downloadTrack = async ({
       getLyricsOptions(),
     );
 
-    const trackWithMetadata = await deezer.addTrackTags(outFile, track, coverSize);
+    /*
+     * Which tags to write, as configured.
+     *
+     * Read here rather than inside the writers so the core stays free of the
+     * config, and so the command line and the interface get the same answer.
+     */
+    const trackWithMetadata = await deezer.addTrackTags(
+      outFile,
+      track,
+      coverSize,
+      metadata ??
+        (config.get('metadataCustom' as never) === true
+          ? metadataOptionsFrom((config.get('metadata' as never) as {deezer?: unknown})?.deezer)
+          : DEFAULT_METADATA_OPTIONS),
+    );
 
     // Delete temporary file now
     unlinkSync(tmpfile);

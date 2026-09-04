@@ -2,12 +2,15 @@
 import id3Writer from 'browser-id3-writer';
 import type {albumTypePublicApi, trackType} from '../types';
 import {formatGain, cleanVersion, isCompilation, ENCODED_BY} from '../../../lib/metadata-extra';
+import {DEFAULT_METADATA_OPTIONS, type MetadataOptions} from '../../../lib/metadata-options';
 
 export const writeMetadataMp3 = (
   buffer: Buffer,
   track: trackType,
   album: albumTypePublicApi | null,
   cover?: Buffer | null,
+  /* Absent means the defaults, so nothing that does not pass options changes. */
+  options: MetadataOptions = DEFAULT_METADATA_OPTIONS,
 ): Buffer => {
   const writer = new id3Writer(buffer);
   const RELEASE_DATES = album && album.release_date.split('-');
@@ -19,8 +22,9 @@ export const writeMetadataMp3 = (
       'TPE1',
       track.ARTISTS.map((a) => a.ART_NAME),
     )
-    .setFrame('TLEN', Number(track.DURATION) * 1000)
-    .setFrame('TSRC', track.ISRC);
+    .setFrame('TLEN', Number(track.DURATION) * 1000);
+
+  if (options.isrc && track.ISRC) writer.setFrame('TSRC', track.ISRC);
 
   if (album) {
     if (album.genres.data.length > 0) {
@@ -32,36 +36,30 @@ export const writeMetadataMp3 = (
     if (RELEASE_DATES) {
       writer.setFrame('TYER', RELEASE_DATES[0]).setFrame('TDAT', RELEASE_DATES[2] + RELEASE_DATES[1]);
     }
-    writer
-      .setFrame('TPE2', album.artist.name)
-      .setFrame('TXXX', {
-        description: 'RELEASETYPE',
-        value: album.record_type,
-      })
-      .setFrame('TXXX', {
-        description: 'BARCODE',
-        value: album.upc,
-      })
-      .setFrame('TXXX', {
-        description: 'LABEL',
-        value: album.label,
-      })
-      .setFrame('TXXX', {
+    writer.setFrame('TPE2', album.artist.name);
+    if (options.releaseType && album.record_type) {
+      writer.setFrame('TXXX', {description: 'RELEASETYPE', value: album.record_type});
+    }
+    if (options.barcode && album.upc) {
+      writer.setFrame('TXXX', {description: 'BARCODE', value: album.upc});
+    }
+    if (options.label && album.label) {
+      writer.setFrame('TXXX', {description: 'LABEL', value: album.label});
+    }
+    if (options.compilation) {
+      writer.setFrame('TXXX', {
         description: 'COMPILATION',
         value: isCompilation(album.artist.name) ? '1' : '0',
       });
+    }
   }
 
-  writer
-    .setFrame('TMED', 'Digital Media')
-    .setFrame('TXXX', {
-      description: 'SOURCE',
-      value: 'Deezer',
-    })
-    .setFrame('TXXX', {
-      description: 'SOURCEID',
-      value: track.SNG_ID,
-    });
+  if (options.media) writer.setFrame('TMED', 'Digital Media');
+  if (options.provenance) {
+    writer
+      .setFrame('TXXX', {description: 'SOURCE', value: 'Deezer'})
+      .setFrame('TXXX', {description: 'SOURCEID', value: track.SNG_ID});
+  }
 
   if (track.DISK_NUMBER) {
     const TRACK_NUMBER = track.TRACK_NUMBER.toLocaleString('en-US', {minimumIntegerDigits: 2});
@@ -76,39 +74,68 @@ export const writeMetadataMp3 = (
   }
 
   if (track.SNG_CONTRIBUTORS && !Array.isArray(track.SNG_CONTRIBUTORS)) {
-    if (track.SNG_CONTRIBUTORS.main_artist) {
+    if (options.copyright && track.SNG_CONTRIBUTORS.main_artist) {
       writer.setFrame('TCOP', `${RELEASE_DATES ? RELEASE_DATES[0] + ' ' : ''}${track.SNG_CONTRIBUTORS.main_artist[0]}`);
     }
-    if (track.SNG_CONTRIBUTORS.publisher) {
+    if (options.credits && track.SNG_CONTRIBUTORS.publisher) {
       writer.setFrame('TPUB', track.SNG_CONTRIBUTORS.publisher.join(', '));
     }
-    if (track.SNG_CONTRIBUTORS.composer) {
+    if (options.credits && track.SNG_CONTRIBUTORS.composer) {
       writer.setFrame('TCOM', track.SNG_CONTRIBUTORS.composer);
     }
 
-    if (track.SNG_CONTRIBUTORS.writer) {
+    if (options.credits && track.SNG_CONTRIBUTORS.writer) {
       writer.setFrame('TXXX', {
         description: 'LYRICIST',
         value: track.SNG_CONTRIBUTORS.writer.join(', '),
       });
     }
-    if (track.SNG_CONTRIBUTORS.author) {
+    if (options.credits && track.SNG_CONTRIBUTORS.author) {
       writer.setFrame('TXXX', {
         description: 'AUTHOR',
         value: track.SNG_CONTRIBUTORS.author.join(', '),
       });
     }
-    if (track.SNG_CONTRIBUTORS.mixer) {
+    if (options.credits && track.SNG_CONTRIBUTORS.mixer) {
       writer.setFrame('TXXX', {
         description: 'MIXARTIST',
         value: track.SNG_CONTRIBUTORS.mixer.join(', '),
       });
     }
-    if (track.SNG_CONTRIBUTORS.producer && track.SNG_CONTRIBUTORS.engineer) {
+    if (options.credits && track.SNG_CONTRIBUTORS.producer && track.SNG_CONTRIBUTORS.engineer) {
       writer.setFrame('TXXX', {
         description: 'INVOLVEDPEOPLE',
         value: track.SNG_CONTRIBUTORS.producer.concat(track.SNG_CONTRIBUTORS.engineer).join(', '),
       });
+    }
+
+    /*
+     * Everything else Deezer credits.
+     *
+     * Its contributor list is deeper than the handful read above — a given
+     * release may credit a mixing engineer, a recording engineer, an
+     * additional producer, a drum programmer. Those were all being discarded;
+     * each becomes a TXXX under its own name, which is where Picard and
+     * foobar2000 look for a role they do not have a dedicated frame for.
+     */
+    if (options.extraCredits) {
+      const alreadyWritten = [
+        'main_artist',
+        'publisher',
+        'composer',
+        'writer',
+        'author',
+        'mixer',
+        'producer',
+        'engineer',
+      ];
+      for (const [role, people] of Object.entries(track.SNG_CONTRIBUTORS as Record<string, string[]>)) {
+        if (alreadyWritten.includes(role) || !Array.isArray(people) || people.length === 0) continue;
+        writer.setFrame('TXXX', {
+          description: role.toUpperCase(),
+          value: people.join(', '),
+        });
+      }
     }
   }
 
@@ -118,7 +145,7 @@ export const writeMetadataMp3 = (
       lyrics: track.LYRICS.LYRICS_TEXT,
     });
   }
-  if (track.EXPLICIT_LYRICS) {
+  if (options.explicit && track.EXPLICIT_LYRICS) {
     writer.setFrame('TXXX', {
       description: 'EXPLICIT',
       value: track.EXPLICIT_LYRICS,
@@ -130,9 +157,21 @@ export const writeMetadataMp3 = (
    * foobar2000, mpd and most Android players match them case-sensitively, so
    * "REPLAYGAIN_TRACK_GAIN" here would simply not be read.
    */
-  const gain = formatGain(track.GAIN);
+  const gain = options.replayGain ? formatGain(track.GAIN) : null;
   if (gain) {
     writer.setFrame('TXXX', {description: 'replaygain_track_gain', value: gain});
+  }
+
+  /*
+   * Tempo, where Deezer knows it.
+   *
+   * It reports 0 for a good part of the catalogue, and a tag claiming 0 BPM is
+   * worse than no tag — a library sorting by tempo would file the track at the
+   * very bottom rather than leaving it unsorted. Only a real figure is written.
+   */
+  const bpm = Number((track as trackType & {BPM?: number}).BPM ?? 0);
+  if (options.bpm && Number.isFinite(bpm) && bpm > 0) {
+    writer.setFrame('TBPM', Math.round(bpm));
   }
 
   // Keeps a remix distinct from the original it would otherwise duplicate.
@@ -149,8 +188,8 @@ export const writeMetadataMp3 = (
    */
 
   // Matches MEDIA=Digital Media on the FLAC side, which MP3 was missing.
-  writer.setFrame('TMED', 'Digital Media');
-  writer.setFrame('TXXX', {description: 'ENCODEDBY', value: ENCODED_BY});
+  if (options.media) writer.setFrame('TMED', 'Digital Media');
+  if (options.provenance) writer.setFrame('TXXX', {description: 'ENCODEDBY', value: ENCODED_BY});
 
   if (cover) {
     writer.setFrame('APIC', {

@@ -17,8 +17,15 @@ const fs = require('fs');
 const path = require('path');
 
 const here = __dirname;
-const pkg = JSON.parse(fs.readFileSync(path.join(here, 'package.json'), 'utf8'));
-const listed = (pkg.build && pkg.build.files) || [];
+/*
+ * The build configuration lives in electron-builder.js, not
+ * package.json, because it computes which of node_modules to ship rather than
+ * listing it. This check reads it from there so it keeps checking the list
+ * that is actually used — reading a `build` block that no longer exists would
+ * have left it silently passing on an empty list.
+ */
+const config = require('./electron-builder.js');
+const listed = config.files || [];
 
 /** The entry points electron actually loads, and anything they pull in. */
 const ROOTS = ['main.js', 'preload.js'];
@@ -66,4 +73,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`packaging check: ${seen.size} shell modules, all listed in build.files`);
+console.log(`packaging check: ${seen.size} shell modules, all listed in the build config`);

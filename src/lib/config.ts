@@ -1,4 +1,5 @@
 import {existsSync, readFileSync, writeFileSync} from 'fs';
+import {DEFAULT_METADATA_SETTINGS} from './metadata-options';
 import dotProp from 'dot-prop';
 import signale from './signale';
 import {DEFAULT_CONFIG_FILE} from '../app/brand';
@@ -46,6 +47,12 @@ type keysType =
   | 'auth.enabled'
   | 'auth.token'
   | 'auth.allowedOrigins'
+  /* Which tags get written into a file. ReplayGain is off by default: it makes
+     a track play quieter in any player that honours it, which is heard as a
+     quality difference and is not one. */
+  | 'metadata'
+  /* Whether those switches are in force. Off means the standard set. */
+  | 'metadataCustom'
   | 'qualityProfile'
   | 'qualityProfile.cutoff'
   | 'qualityProfile.upgradeExisting'
@@ -110,6 +117,8 @@ type configType = {
    * override it.
    */
   port: number;
+  metadata: Record<string, Record<string, boolean>>;
+  metadataCustom: boolean;
   qualityProfile: {
     /** Tier at which a release counts as done. */
     cutoff: 'mp3' | 'lossless' | 'hires';
@@ -165,6 +174,9 @@ const defaultConfig: configType = {
   },
   tempDirectory: 'temp',
   port: 3000,
+  /* Everything as it was, except ReplayGain. */
+  metadata: {...DEFAULT_METADATA_SETTINGS} as unknown as Record<string, Record<string, boolean>>,
+  metadataCustom: false,
   qualityProfile: {
     // Lossless rather than hi-res: a hi-res default would flag most existing
     // libraries as needing an upgrade the first time a scan runs.

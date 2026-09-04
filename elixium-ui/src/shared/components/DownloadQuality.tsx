@@ -1,6 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {useState} from 'react';
-import {Check} from 'lucide-react';
+import {Check, Download, ChevronDown} from 'lucide-react';
 import {cn} from '@/shared/lib/utils';
 import {useSettingsStore} from '@/store/settings-store';
 import type {Service} from '@/types';
@@ -73,48 +73,69 @@ const contentClass =
   'z-modal min-w-[13rem] rounded-lg border border-border bg-card-bg p-1 shadow-xl animate-fade-in';
 
 /**
- * A caret beside a labelled Download button, for headers that have the room.
+ * Download, with the qualities behind a caret on its right edge.
  *
- * Used where the button carries a word rather than an icon — an album or
- * artist window — because a second affordance is legible there and invisible
- * on a card.
+ * One control rather than two: a separate bordered square beside the button
+ * read as a stray piece of furniture, because it did not belong to anything.
+ * Joined to the button by a divider it reads as what it is — the same action,
+ * with a choice attached.
+ *
+ * The left side keeps doing exactly what it did: one click, configured
+ * quality, no menu.
  */
-export function DownloadQualityCaret({
+export function DownloadSplitButton({
   service,
-  onPick,
+  onDownload,
+  label = 'Download',
   className,
-  label = 'Choose a download quality',
 }: {
   service: Service;
-  onPick: (quality: string) => void;
-  className?: string;
+  onDownload: (quality?: string) => void;
   label?: string;
+  className?: string;
 }) {
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          title={label}
-          onClick={(event) => event.stopPropagation()}
-          className={cn(
-            'flex h-8 w-6 shrink-0 items-center justify-center rounded-sm border border-border text-text-muted',
-            'transition-colors hover:border-accent/50 hover:text-text-primary',
-            className,
-          )}
-        >
-          <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden className="fill-current">
-            <path d="M1 3l4 4 4-4z" />
-          </svg>
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={6} className={contentClass}>
-          <DownloadQualityItems service={service} onPick={onPick} />
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+    <span
+      className={cn(
+        'inline-flex shrink-0 overflow-hidden rounded-md bg-accent text-white shadow-sm',
+        'transition-colors hover:bg-accent/90',
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDownload();
+        }}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium"
+      >
+        <Download size={14} />
+        {label}
+      </button>
+
+      {/* The divider is what makes the two halves read as one control. */}
+      <span aria-hidden className="my-1.5 w-px bg-white/25" />
+
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Choose a download quality"
+            title="Choose a download quality"
+            onClick={(event) => event.stopPropagation()}
+            className="flex items-center px-2 transition-colors hover:bg-black/10"
+          >
+            <ChevronDown size={14} />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content align="end" sideOffset={6} className={contentClass}>
+            <DownloadQualityItems service={service} onPick={(quality) => onDownload(quality)} />
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </span>
   );
 }
 

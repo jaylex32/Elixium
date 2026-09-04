@@ -1,6 +1,6 @@
 {
   "name": "elixium-desktop",
-  "version": "1.4.0-beta.5",
+  "version": "1.4.0",
   "private": true,
   "description": "Desktop shell for Elixium",
   "main": "main.js",
@@ -8,132 +8,15 @@
     "start": "electron .",
     "icons": "node make-icons.js",
     "prestart": "node make-icons.js",
-    "predist": "node check-packaged-files.js && node make-icons.js",
+    "predist": "node check-packaged-files.js && node patch-portable-template.js && node make-icons.js",
     "check:packaging": "node check-packaged-files.js",
     "dist": "electron-builder && node check-no-secrets.js",
     "check:secrets": "node check-no-secrets.js",
-    "smoke": "electron smoke-render.js"
+    "smoke": "electron smoke-render.js",
+    "patch:portable": "node patch-portable-template.js"
   },
   "devDependencies": {
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8"
-  },
-  "build": {
-    "appId": "com.elixium.desktop",
-    "productName": "Elixium",
-    "files": [
-      "main.js",
-      "preload.js",
-      "engine-log.js",
-      "readiness.js",
-      "package.json",
-      "assets/icon.png",
-      "!**/elixium.config.json",
-      "!**/elixium.watchlist.json",
-      "!**/.env",
-      "!**/*.log"
-    ],
-    "extraResources": [
-      {
-        "from": "../dist/src",
-        "to": "server",
-        "filter": [
-          "**/*",
-          "!**/elixium.config.json",
-          "!**/elixium.watchlist.json",
-          "!**/.env",
-          "!**/*.log"
-        ]
-      },
-      {
-        "from": "../node_modules",
-        "to": "server/node_modules",
-        "filter": [
-          "**/*",
-          "!**/elixium.config.json",
-          "!**/elixium.watchlist.json",
-          "!**/.env",
-          "!**/*.log"
-        ]
-      },
-      {
-        "from": "../package.json",
-        "to": "package.json"
-      }
-    ],
-    "directories": {
-      "output": "out"
-    },
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "perMachine": false,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "mac": {
-      "icon": "build/icon.icns",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "category": "public.app-category.music"
-    },
-    "dmg": {
-      "icon": "build/icon.icns"
-    },
-    "linux": {
-      "icon": "build/icons",
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "tar.gz",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "category": "Audio"
-    },
-    "portable": {
-      "artifactName": "Elixium-Portable-${version}.${ext}"
-    }
   }
 }

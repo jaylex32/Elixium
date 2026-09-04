@@ -1,4 +1,5 @@
 import axios from 'axios';
+import {DEFAULT_METADATA_OPTIONS, type MetadataOptions} from '../../lib/metadata-options';
 import Metaflac from '../lib/metaflac-js';
 import FastLRU from '../lib/fast-lru';
 import {trackType, albumType} from './types';
@@ -137,6 +138,9 @@ export const addTrackTags = async (
   trackBuffer: Buffer,
   og_track: trackType,
   albumCoverSize = 1000,
+  /* Which tags to write. Absent means the defaults, so any caller that does
+     not pass them is tagged exactly as before. */
+  options: MetadataOptions = DEFAULT_METADATA_OPTIONS,
 ): Promise<Buffer> => {
   const track = og_track;
   if (!track.album) {
@@ -152,7 +156,7 @@ export const addTrackTags = async (
 
   const isFlac = trackBuffer.slice(0, 4).toString('ascii') === 'fLaC';
   if (isFlac) {
-    return writeMetadataFlac(trackBuffer, track, albumCoverSize, cover);
+    return writeMetadataFlac(trackBuffer, track, albumCoverSize, cover, options);
   } else {
     return writeMetadataMp3(trackBuffer, track, cover);
   }
@@ -193,6 +197,7 @@ export const writeMetadataFlac = (
   track: trackType,
   dimension: number,
   cover?: Buffer | null,
+  options: MetadataOptions = DEFAULT_METADATA_OPTIONS,
 ): Buffer => {
   const flac = new Metaflac(buffer);
   const albumArtistName = track.album?.artist?.name || track.performer?.name || 'Unknown Artist';
@@ -214,11 +219,11 @@ export const writeMetadataFlac = (
     }
     flac.setTag('TRACKTOTAL=' + TOTALTRACKS);
     flac.setTag('TOTALTRACKS=' + TOTALTRACKS);
-    flac.setTag('RELEASETYPE=' + track.album.release_type);
+    if (options.releaseType) flac.setTag('RELEASETYPE=' + track.album.release_type);
     flac.setTag('ALBUMARTIST=' + albumArtistName);
-    flac.setTag('BARCODE=' + track.album.upc);
+    if (options.barcode) flac.setTag('BARCODE=' + track.album.upc);
     if (labelName) {
-      flac.setTag('LABEL=' + labelName);
+      if (options.label) flac.setTag('LABEL=' + labelName);
     }
     if (track.album.release_date_original) {
       flac.setTag('DATE=' + track.album.release_date_original);
@@ -235,9 +240,9 @@ export const writeMetadataFlac = (
     flac.setTag('DISCNUMBER=' + track.media_number);
   }
 
-  flac.setTag('ISRC=' + track.isrc);
+  if (options.isrc) flac.setTag('ISRC=' + track.isrc);
   flac.setTag('LENGTH=' + track.duration);
-  flac.setTag('MEDIA=Digital Media');
+  if (options.media) flac.setTag('MEDIA=Digital Media');
 
   /*
    * ReplayGain. Qobuz returns both a gain and a peak per track and neither was
@@ -245,16 +250,16 @@ export const writeMetadataFlac = (
    */
   const gain = formatGain(track.audio_info?.replaygain_track_gain);
   if (gain) {
-    flac.setTag('REPLAYGAIN_TRACK_GAIN=' + gain);
+    if (options.replayGain) flac.setTag('REPLAYGAIN_TRACK_GAIN=' + gain);
   }
   const peak = formatPeak(track.audio_info?.replaygain_track_peak);
   if (peak) {
-    flac.setTag('REPLAYGAIN_TRACK_PEAK=' + peak);
+    if (options.replayGain) flac.setTag('REPLAYGAIN_TRACK_PEAK=' + peak);
   }
 
   // The real copyright line, which Qobuz provides per track and was unused.
   if (track.copyright) {
-    flac.setTag('COPYRIGHT=' + track.copyright);
+    if (options.copyright) flac.setTag('COPYRIGHT=' + track.copyright);
   }
 
   // Keeps a remix or edit distinct from the original recording.
@@ -272,11 +277,11 @@ export const writeMetadataFlac = (
   }
 
   if (track.parental_warning) {
-    flac.setTag('EXPLICIT=1');
+    if (options.explicit) flac.setTag('EXPLICIT=1');
   }
 
   if (composerName) {
-    flac.setTag('COMPOSER=' + composerName);
+    if (options.credits) flac.setTag('COMPOSER=' + composerName);
   }
 
   if (track.performers) {
@@ -314,9 +319,11 @@ export const writeMetadataFlac = (
     flac.importPicture(cover, dimension, 'image/jpeg');
   }
 
-  flac.setTag('SOURCE=Qobuz');
-  flac.setTag('SOURCEID=' + track.id);
-  flac.setTag('ENCODEDBY=' + ENCODED_BY);
+  if (options.provenance) {
+    flac.setTag('SOURCE=Qobuz');
+    flac.setTag('SOURCEID=' + track.id);
+    flac.setTag('ENCODEDBY=' + ENCODED_BY);
+  }
 
   return flac.getBuffer();
 };

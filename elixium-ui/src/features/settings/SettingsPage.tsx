@@ -14,6 +14,7 @@ import {
   FolderTree,
   FolderSearch,
   FolderOpen,
+  Tags,
 } from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/shared/components/ui/Button';
@@ -33,6 +34,116 @@ import {QualityProfile} from './QualityProfile';
 import {PathTemplates} from './PathTemplates';
 import {useSettingsStore as useSettingsStoreRaw} from '@/store/settings-store';
 import {cn} from '@/shared/lib/utils';
+
+/**
+ * The tags a file can carry, in the order they matter to most people.
+ *
+ * Named for what they are rather than for the frame that holds them: nobody
+ * looking for the barcode is searching for "TXXX:BARCODE". Everything here is
+ * written by default except the three marked, which are off — see the notes.
+ */
+/**
+ * Which switches do anything for which service.
+ *
+ * The three do not carry the same information. Deezer sends a loudness figure,
+ * a barcode and a deep credit list; Qobuz sends most of the same; YouTube Music
+ * sends almost none of it, so only the provenance line applies there. Showing
+ * a service switches it will ignore is worse than not offering them.
+ */
+const SERVICE_TAGS: {id: 'deezer' | 'qobuz' | 'ytmusic'; label: string; note: string; tags: string[]}[] = [
+  {
+    id: 'deezer',
+    label: 'Deezer',
+    note: 'The fullest set — Deezer sends the most about a track.',
+    tags: ['replayGain', 'isrc', 'barcode', 'label', 'copyright', 'explicit', 'credits', 'extraCredits', 'bpm', 'releaseType', 'compilation', 'media', 'provenance'],
+  },
+  {
+    id: 'qobuz',
+    label: 'Qobuz',
+    note: 'Writes its own loudness figure as well, so the same caveat applies.',
+    tags: ['replayGain', 'isrc', 'barcode', 'label', 'copyright', 'explicit', 'credits', 'releaseType', 'media', 'provenance'],
+  },
+  {
+    id: 'ytmusic',
+    label: 'YouTube Music',
+    note: 'Sends no ISRC, barcode, label or loudness, so only this one applies.',
+    tags: ['provenance'],
+  },
+];
+
+/** What the engine writes when nothing has been customised. */
+const DEFAULT_TAGS: Record<string, boolean> = {
+  replayGain: false,
+  isrc: true,
+  barcode: true,
+  label: true,
+  copyright: true,
+  explicit: true,
+  credits: true,
+  extraCredits: false,
+  bpm: false,
+  provenance: true,
+  releaseType: true,
+  compilation: true,
+  media: true,
+};
+
+const METADATA_TAGS: {
+  key: string;
+  label: string;
+  note: string;
+  /** Wording for a particular service, where the general note would misname it. */
+  perService?: Partial<Record<'deezer' | 'qobuz' | 'ytmusic', string>>;
+}[] = [
+  {
+    key: 'replayGain',
+    label: 'ReplayGain',
+    note: 'The service’s loudness figure. Players that use it play the track quieter — often much quieter',
+  },
+  {key: 'isrc', label: 'ISRC', note: 'The recording’s unique code'},
+  {key: 'barcode', label: 'Barcode', note: 'The release’s UPC'},
+  {key: 'label', label: 'Label and publisher', note: 'Who released it'},
+  {key: 'copyright', label: 'Copyright', note: 'The copyright line'},
+  {key: 'explicit', label: 'Explicit marker', note: 'Whether the lyrics are flagged explicit'},
+  {key: 'credits', label: 'Credits', note: 'Composer, producer, engineer, writer, author, mixer'},
+  {key: 'extraCredits', label: 'Every credited role', note: 'The rest of what Deezer lists — mixing engineer, additional producer, and so on'},
+  {key: 'bpm', label: 'BPM', note: 'Deezer reports no tempo for much of its catalogue, so this is often absent'},
+  {key: 'releaseType', label: 'Release type', note: 'Album, EP or Single'},
+  {key: 'compilation', label: 'Compilation flag', note: 'Groups various-artists releases correctly'},
+  {key: 'media', label: 'Media type', note: '“Digital Media”'},
+  {
+    key: 'provenance',
+    label: 'Source',
+    note: 'Where the file came from and that Elixium wrote the tags',
+    /* The wording differs per service: naming the wrong one is worse than
+       saying nothing, and this section is read by people checking exactly
+       which service a switch belongs to. */
+    perService: {
+      deezer: 'That it came from Deezer, its track id, and that Elixium wrote the tags',
+      qobuz: 'That it came from Qobuz, its track id, and that Elixium wrote the tags',
+      ytmusic: 'The YouTube Music link the file came from, written as a comment',
+    },
+  },
+];
+
+/**
+ * One service's switches, defaulting where nothing has been chosen.
+ *
+ * Also reads the older shape, where a single flat set applied to Deezer alone,
+ * so a config written before this was split still shows the right values.
+ */
+const metadataFor = (
+  settings: {metadata?: Record<string, unknown>},
+  service: 'deezer' | 'qobuz' | 'ytmusic',
+): Record<string, boolean> => {
+  const stored = settings.metadata ?? {};
+  const perService = stored[service];
+  if (perService && typeof perService === 'object') return {...DEFAULT_TAGS, ...(perService as Record<string, boolean>)};
+  if (service === 'deezer' && !('deezer' in stored) && !('qobuz' in stored)) {
+    return {...DEFAULT_TAGS, ...(stored as Record<string, boolean>)};
+  }
+  return {...DEFAULT_TAGS};
+};
 
 function Section({title, icon: Icon, children}: {title: string; icon: React.ElementType; children: React.ReactNode}) {
   return (
@@ -216,6 +327,8 @@ export function SettingsPage() {
       (data: {
         cookies?: {arl?: string; sp_dc?: string; spotifyClientId?: string; spotifyClientSecret?: string};
         qobuz?: {app_id?: string; secrets?: string; token?: string};
+        metadata?: Record<string, unknown>;
+        metadataCustom?: boolean;
         ytmusic?: {cookie?: string; preferAlbumAudio?: boolean; strictAlbumAudio?: boolean};
         concurrency?: number;
         paths?: {deezer?: string; qobuz?: string; ytmusic?: string};
@@ -264,6 +377,10 @@ export function SettingsPage() {
           ...(data.quality?.deezer ? {deezerQuality: normaliseDeezerQuality(data.quality.deezer)} : {}),
           ...(data.quality?.qobuz ? {qobuzQuality: String(data.quality.qobuz) as Settings['qobuzQuality']} : {}),
           ...(data.quality?.ytmusic ? {ytmusicFormat: data.quality.ytmusic === 'opus' ? 'opus' : 'aac'} : {}),
+          ...(data.metadata && typeof data.metadata === 'object'
+            ? {metadata: data.metadata as Record<string, Record<string, boolean>>}
+            : {}),
+          ...(typeof data.metadataCustom === 'boolean' ? {metadataCustom: data.metadataCustom} : {}),
           ytmusicPreferAlbumAudio: data.ytmusic?.preferAlbumAudio !== false,
           ytmusicStrictAlbumAudio: data.ytmusic?.strictAlbumAudio === true,
           ...(data.services
@@ -309,6 +426,8 @@ export function SettingsPage() {
               secrets: settings.qobuzSecrets,
               token: settings.qobuzToken,
             },
+            metadata: settings.metadata,
+            metadataCustom: settings.metadataCustom,
             ytmusic: {
               cookie: settings.ytmusicCookie,
               preferAlbumAudio: settings.ytmusicPreferAlbumAudio,
@@ -521,6 +640,70 @@ export function SettingsPage() {
             </Badge>
           </div>
         </Field>
+      </Section>
+
+      {/*
+        Expert territory, and it says so.
+        Everything here is on by default except where noted, so somebody who
+        never opens this section gets exactly what they got before.
+      */}
+      <Section title="Metadata" icon={Tags}>
+        <Field
+          label="Customise what gets written into files"
+          description="Off means the standard set of tags. Turning it off again restores them."
+        >
+          <div className="flex sm:justify-end">
+            <Switch
+              checked={settings.metadataCustom}
+              onCheckedChange={(on) =>
+                /* Switching off restores the defaults rather than leaving an
+                   invisible customisation in force — a hidden setting that
+                   still applies is how a library ends up tagged in a way
+                   nobody remembers choosing. */
+                update(
+                  on
+                    ? {metadataCustom: true}
+                    : {
+                        metadataCustom: false,
+                        metadata: {
+                          deezer: {...DEFAULT_TAGS},
+                          qobuz: {...DEFAULT_TAGS},
+                          ytmusic: {...DEFAULT_TAGS},
+                        },
+                      },
+                )
+              }
+            />
+          </div>
+        </Field>
+
+        {settings.metadataCustom &&
+          SERVICE_TAGS.map((service) => (
+            <div key={service.id} className="space-y-4">
+              <div className="border-t border-border" />
+              <div>
+                <p className="text-sm font-medium text-text-primary">{service.label}</p>
+                <p className="mt-0.5 text-xs text-text-muted">{service.note}</p>
+              </div>
+              {METADATA_TAGS.filter((tag) => service.tags.includes(tag.key)).map((tag) => (
+                <Field key={tag.key} label={tag.label} description={tag.perService?.[service.id] ?? tag.note}>
+                  <div className="flex sm:justify-end">
+                    <Switch
+                      checked={metadataFor(settings, service.id)[tag.key] ?? false}
+                      onCheckedChange={(v) =>
+                        update({
+                          metadata: {
+                            ...settings.metadata,
+                            [service.id]: {...metadataFor(settings, service.id), [tag.key]: v},
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                </Field>
+              ))}
+            </div>
+          ))}
       </Section>
 
       {/* Distinct from Audio Quality above: that is what to fetch now, this is

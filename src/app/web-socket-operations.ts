@@ -1,4 +1,6 @@
 import type {Socket} from 'socket.io';
+import {cancelJob} from './download-cancellation';
+import {metadataSettingsFrom} from '../lib/metadata-options';
 
 interface WebSocketOperationsDependencies {
   socket: Socket;
@@ -59,6 +61,9 @@ export const registerOperationsSocketHandlers = ({
           secrets: conf.get('qobuz.secrets'),
           token: conf.get('qobuz.token'),
         },
+        /* Which tags are written; the interface offers these under Metadata. */
+        metadata: metadataSettingsFrom(configAny.get('metadata')),
+        metadataCustom: configAny.get('metadataCustom') === true,
         ytmusic: {
           cookie: configAny.get('ytmusic.cookie'),
           /* Defaults live here as well as in the engine, so the interface
@@ -208,6 +213,16 @@ export const registerOperationsSocketHandlers = ({
         configAny.set('ytmusic.strictAlbumAudio', data.ytmusic.strictAlbumAudio === true);
       }
 
+      if (typeof data.metadataCustom === 'boolean') {
+        configAny.set('metadataCustom', data.metadataCustom);
+      }
+
+      if (data.metadata && typeof data.metadata === 'object') {
+        /* Merged through the same reader the writers use, so an unknown key
+           cannot land in the config and a missing one keeps its default. */
+        configAny.set('metadata', metadataSettingsFrom(data.metadata));
+      }
+
       if (data.saveLayout) {
         conf.set('saveLayout', data.saveLayout);
       }
@@ -299,13 +314,38 @@ export const registerOperationsSocketHandlers = ({
 
   socket.on('cancelDownload', (data) => {
     try {
-      const item = activeDownloads.get(data.id);
+      const id = String(data?.id ?? '');
+
+      /*
+       * Queue items and downloads started from a button are tracked
+       * separately, and only the first had ever been looked up here — so
+       * cancelling an album from the downloads list marked nothing, stopped
+       * nothing, and told the caller nothing. Both are checked now.
+       */
+      const item = activeDownloads.get(id);
       if (item) {
         item.status = 'cancelled';
-        activeDownloads.delete(data.id);
-        socket.emit('downloadProgress', {
-          itemId: data.id,
-          itemStatus: 'cancelled',
+        activeDownloads.delete(id);
+      }
+
+      const stopped = cancelJob(id);
+
+      /*
+       * Answered whether or not anything was found. A cancel that silently did
+       * nothing is what left the row sitting at "downloading" while the files
+       * kept arriving.
+       */
+      if (item || stopped) {
+        socket.emit('downloadProgress', {itemId: id, itemStatus: 'cancelled'});
+      } else {
+        /*
+         * Nothing was found, so nothing was stopped — and saying "cancelled"
+         * anyway would mark a row that is still downloading. The honest answer
+         * is that there was nothing here to cancel.
+         */
+        socket.emit('downloadError', {
+          itemId: id,
+          message: 'That download had already finished',
         });
       }
     } catch (error: any) {
