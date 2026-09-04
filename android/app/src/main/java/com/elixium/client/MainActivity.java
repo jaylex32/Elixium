@@ -228,6 +228,19 @@ public class MainActivity extends AppCompatActivity {
     webView.addJavascriptInterface(folders, "ElixiumHost");
 
     /*
+     * Transport controls run the interface's own player rather than a second
+     * one written natively, so the queue, shuffle and repeat cannot drift out
+     * of step with what the screen shows.
+     */
+    Playback.get(this)
+        .setRemote(
+            script ->
+                runOnUiThread(
+                    () -> {
+                      if (webView != null) webView.evaluateJavascript(script, null);
+                    }));
+
+    /*
      * Define window.elixium before the interface's own scripts run.
      *
      * Settings reads it while it renders to decide whether to show a Browse

@@ -74,6 +74,18 @@ final class FolderBridge {
     });
   }
 
+  /**
+   * The interface's playback state, on its way to the system.
+   *
+   * Called whenever the track, the play state or the second changes — not on
+   * every timeupdate, which would be four times a second for a notification
+   * that shows whole seconds.
+   */
+  @JavascriptInterface
+  public void playback(String state) {
+    Playback.get(activity).update(state);
+  }
+
   @JavascriptInterface
   public boolean openFolder(String target) {
     if (target == null || target.isEmpty()) return false;

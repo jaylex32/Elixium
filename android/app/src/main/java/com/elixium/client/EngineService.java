@@ -13,6 +13,7 @@ import android.os.IBinder;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
+import androidx.media.app.NotificationCompat.MediaStyle;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,8 +45,32 @@ public class EngineService extends Service {
   /** Node runs for the life of the process, so starting it twice is a crash. */
   private static boolean started = false;
 
+  /* The notification's buttons come back as service starts. */
+  static final String ACTION_PLAY_PAUSE = "com.elixium.client.PLAY_PAUSE";
+  static final String ACTION_NEXT = "com.elixium.client.NEXT";
+  static final String ACTION_PREVIOUS = "com.elixium.client.PREVIOUS";
+
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
+    Playback playback = Playback.get(this);
+    // Redraw whenever the interface reports something new.
+    playback.setListener(this::refreshNotification);
+
+    /*
+     * A button on the notification arrives as a start of this service. It is
+     * handed to the session rather than acted on here, so the notification and
+     * a headset button take the same path into the interface.
+     */
+    String action = intent == null ? null : intent.getAction();
+    if (ACTION_PLAY_PAUSE.equals(action)) {
+      if (playback.isPlaying()) playback.session().getController().getTransportControls().pause();
+      else playback.session().getController().getTransportControls().play();
+    } else if (ACTION_NEXT.equals(action)) {
+      playback.session().getController().getTransportControls().skipToNext();
+    } else if (ACTION_PREVIOUS.equals(action)) {
+      playback.session().getController().getTransportControls().skipToPrevious();
+    }
+
     enterForeground(NOTIFICATION_ID, notification());
 
     if (started) return START_STICKY;
@@ -185,8 +210,29 @@ public class EngineService extends Service {
     file.delete();
   }
 
+  /** Redraw in place, so the buttons and the title follow the music. */
+  private void refreshNotification() {
+    NotificationManager manager = getSystemService(NotificationManager.class);
+    if (manager != null) manager.notify(NOTIFICATION_ID, notification());
+  }
+
+  private PendingIntent button(String action) {
+    Intent intent = new Intent(this, EngineService.class).setAction(action);
+    return PendingIntent.getService(
+        this, action.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+  }
+
+  /**
+   * The player in the shade and on the lock screen.
+   *
+   * Built from the session rather than from this service's own idea of the
+   * state, which is what lets the lock screen, the headset and the interface
+   * agree. Before there is any music it is a plain line saying the engine is
+   * running — a media notification with nothing playing is worse than none.
+   */
   private Notification notification() {
     createChannel();
+    Playback playback = Playback.get(this);
 
     Intent open = new Intent(this, MainActivity.class);
     open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -194,15 +240,42 @@ public class EngineService extends Service {
         PendingIntent.getActivity(
             this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
-    return new NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle(getString(R.string.app_name))
-        .setContentText(getString(R.string.engine_running))
-        .setSmallIcon(android.R.drawable.ic_media_play)
-        .setContentIntent(tap)
-        .setOngoing(true)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
-        .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .build();
+    NotificationCompat.Builder builder =
+        new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(tap)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+    if (!playback.hasTrack()) {
+      return builder
+          .setContentTitle(getString(R.string.app_name))
+          .setContentText(getString(R.string.engine_running))
+          .setCategory(NotificationCompat.CATEGORY_SERVICE)
+          .build();
+    }
+
+    builder
+        .setContentTitle(playback.title())
+        .setContentText(playback.subtitle())
+        .setLargeIcon(playback.artwork())
+        .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+        .addAction(
+            android.R.drawable.ic_media_previous, getString(R.string.previous), button(ACTION_PREVIOUS))
+        .addAction(
+            playback.isPlaying() ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+            getString(playback.isPlaying() ? R.string.pause : R.string.play),
+            button(ACTION_PLAY_PAUSE))
+        .addAction(android.R.drawable.ic_media_next, getString(R.string.next), button(ACTION_NEXT))
+        .setStyle(
+            new MediaStyle()
+                .setMediaSession(playback.session().getSessionToken())
+                // Which buttons survive when the shade collapses.
+                .setShowActionsInCompactView(0, 1, 2));
+
+    return builder.build();
   }
 
   /** Named apart from Service.startForeground, which is final. */

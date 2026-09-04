@@ -7,7 +7,7 @@ import {getStreamUrl, probeStreamKind} from '@/shared/lib/api';
 import {usePlayerStore} from '@/store/player-store';
 import {useSettingsStore} from '@/store/settings-store';
 import {useIsMobile} from '@/shared/hooks/useMediaQuery';
-import {useMediaSession} from '@/shared/hooks/useMediaSession';
+import {useMediaSession, useNativeMediaHost} from '@/shared/hooks/useMediaSession';
 import {Progress} from '@/shared/components/ui/Progress';
 import {Button} from '@/shared/components/ui/Button';
 import {useDownload} from '@/shared/hooks/useDownload';
@@ -81,6 +81,8 @@ export function PlayerBar({onOpenQueue}: {onOpenQueue: () => void}) {
 
   // Lock-screen / notification / media-key controls.
   useMediaSession(audioRef);
+  /* Android's WebView shows the OS nothing, so the host is told directly. */
+  useNativeMediaHost(audioRef);
 
   // State, not a ref: the buffering spinner is rendered output, and a ref
   // mutation never triggers the re-render that would reveal it.

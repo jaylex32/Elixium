@@ -170,4 +170,10 @@ dependencies {
    * Injecting after the load finishes is a race the interface usually wins.
    */
   implementation 'androidx.webkit:webkit:1.11.0'
+  /*
+   * MediaSessionCompat and the media-style notification. The WebView never
+   * tells Android anything is playing, so the app has to say so itself — this
+   * is what puts a player in the shade and on the lock screen.
+   */
+  implementation 'androidx.media:media:1.7.0'
 }
