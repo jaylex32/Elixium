@@ -8,12 +8,17 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- Only needed to hand a download to the system on Android 9 and older;
+       from Android 10 the download manager writes on the app's behalf. -->
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+      android:maxSdkVersion="28" />
 
   <application
       android:allowBackup="true"
       android:icon="@mipmap/ic_launcher"
       android:label="@string/app_name"
       android:supportsRtl="true"
+      android:hardwareAccelerated="true"
       android:usesCleartextTraffic="true"
       android:theme="@style/Theme.Elixium">
 
@@ -21,6 +26,7 @@
         android:name=".MainActivity"
         android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode"
         android:launchMode="singleTask"
+        android:resizeableActivity="true"
         android:exported="true">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -29,7 +35,7 @@
     </activity>
 
     <service
-        android:name=".PlaybackService"
+        android:name=".EngineService"
         android:exported="false"
         android:foregroundServiceType="mediaPlayback" />
 

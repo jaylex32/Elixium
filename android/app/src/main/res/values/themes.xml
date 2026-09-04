@@ -5,4 +5,14 @@
     <item name="android:statusBarColor">@color/ground</item>
     <item name="android:navigationBarColor">@color/ground</item>
   </style>
+
+  <!-- The default button is light grey, which reads as a foreign control in a
+       dark interface. -->
+  <style name="ElixiumButton" parent="Widget.AppCompat.Button">
+    <item name="android:backgroundTint">@color/accent</item>
+    <item name="android:textColor">@color/ground</item>
+    <item name="android:textStyle">bold</item>
+    <item name="android:paddingTop">14dp</item>
+    <item name="android:paddingBottom">14dp</item>
+  </style>
 </resources>

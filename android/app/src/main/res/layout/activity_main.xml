@@ -1,11 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  One layout for all three states, rather than swapping the content view.
+
+  Replacing the content view destroys the WebView, and with it the queue, the
+  scroll position and everything the interface was holding in memory. Keeping a
+  single view and toggling visibility is what makes returning from the setup
+  screen feel like going back rather than starting again.
+
+  fitsSystemWindows keeps the page clear of the status bar and the gesture
+  handle, which is what makes it sit correctly on a notched phone and on a
+  tablet without either being a special case.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     android:background="@color/ground">
 
   <WebView
       android:id="@+id/web"
       android:layout_width="match_parent"
-      android:layout_height="match_parent" />
+      android:layout_height="match_parent"
+      android:visibility="gone" />
+
+  <!-- Shown until the interface has painted, so the app never opens on a blank frame. -->
+  <LinearLayout
+      android:id="@+id/loading"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical"
+      android:gravity="center"
+      android:background="@color/ground">
+
+    <ImageView
+        android:layout_width="88dp"
+        android:layout_height="88dp"
+        android:src="@mipmap/ic_launcher"
+        android:contentDescription="@string/app_name" />
+
+    <ProgressBar
+        android:id="@+id/spinner"
+        style="?android:attr/progressBarStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:indeterminateTint="@color/accent" />
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:paddingStart="32dp"
+        android:paddingEnd="32dp"
+        android:gravity="center"
+        android:text="@string/starting_engine"
+        android:textColor="@color/muted"
+        android:textSize="14sp" />
+  </LinearLayout>
+
 </FrameLayout>

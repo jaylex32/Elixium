@@ -2,9 +2,61 @@ plugins {
   id 'com.android.application'
 }
 
+/*
+ * The Node runtime, fetched rather than committed.
+ *
+ * libnode.so is about 60 MB per architecture. Three of those in git would be
+ * larger than the rest of the repository put together and would be re-downloaded
+ * by everyone who clones it, so the build fetches the release archive once and
+ * caches it under build/.
+ */
+def nodeVersion = '18.20.4'
+def nodeUrl = "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v${nodeVersion}/nodejs-mobile-v${nodeVersion}-android.zip"
+def nodeDir = layout.buildDirectory.dir('nodejs-mobile').get().asFile
+def nodeArchive = layout.buildDirectory.file('nodejs-mobile.zip').get().asFile
+
+tasks.register('fetchNodeRuntime') {
+  description = 'Downloads the Node runtime the engine runs inside.'
+  outputs.dir nodeDir
+  doLast {
+    if (new File(nodeDir, 'bin/arm64-v8a/libnode.so').exists()) return
+
+    if (!nodeArchive.exists()) {
+      nodeArchive.parentFile.mkdirs()
+      logger.lifecycle("Downloading Node runtime ${nodeVersion} (about 55 MB)")
+      new URL(nodeUrl).withInputStream { source ->
+        nodeArchive.withOutputStream { it << source }
+      }
+    }
+    copy {
+      from zipTree(nodeArchive)
+      into nodeDir
+    }
+    logger.lifecycle("Node runtime ready at ${nodeDir}")
+  }
+}
+
+/*
+ * The engine itself, staged into a single archive.
+ *
+ * dist/src plus the production dependencies is a few thousand files, and
+ * copying them out of assets one by one on first launch takes long enough to
+ * look broken. One zip is unpacked in a couple of seconds instead.
+ */
+tasks.register('buildEnginePayload', Exec) {
+  description = 'Packs the compiled engine and its runtime dependencies into assets.'
+  workingDir = rootDir
+  commandLine 'node', 'make-payload.js'
+}
+
+tasks.named('preBuild') {
+  dependsOn 'fetchNodeRuntime', 'buildEnginePayload'
+}
+
 android {
   namespace 'com.elixium.client'
   compileSdk 34
+  ndkVersion '25.2.9519653'
 
   defaultConfig {
     applicationId "com.elixium.client"
@@ -12,6 +64,68 @@ android {
     targetSdk 34
     versionCode 1
     versionName "1.4.0"
+
+    externalNativeBuild {
+      cmake {
+        /*
+         * libnode.so is linked against the shared C++ runtime, so that runtime
+         * has to be packaged with it. The NDK defaults to the static one, which
+         * builds and installs perfectly well and then fails at load with
+         * "library libc++_shared.so not found".
+         */
+        arguments "-DNODE_DIR=${nodeDir}", "-DANDROID_STL=c++_shared"
+        cppFlags '-std=c++17', '-fexceptions'
+        /*
+         * 64-bit ARM covers every phone sold for years; x86_64 is here so the
+         * whole thing can be run on an emulator before it reaches a device.
+         *
+         * Filtered here rather than through ndk.abiFilters, which cannot be
+         * combined with the per-architecture split below. Without a filter the
+         * NDK also builds x86, for which there is no runtime to link against.
+         */
+        abiFilters 'arm64-v8a', 'x86_64'
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path 'CMakeLists.txt'
+      version '3.22.1'
+    }
+  }
+
+  sourceSets {
+    main {
+      // Packages libnode.so itself alongside the bridge that links against it.
+      jniLibs.srcDirs += ["${nodeDir}/bin"]
+    }
+  }
+
+  /*
+   * One APK per architecture. A universal build would carry every copy of the
+   * runtime — around 190 MB — to give each phone the 60 MB it can actually use.
+   */
+  splits {
+    abi {
+      enable true
+      reset()
+      include 'arm64-v8a', 'x86_64'
+      universalApk false
+    }
+  }
+
+  packagingOptions {
+    jniLibs {
+      // libnode.so is loaded by the bridge with System.loadLibrary, which needs
+      // a real file rather than an entry inside the APK.
+      useLegacyPackaging true
+    }
+  }
+
+  // EngineService reads VERSION_NAME to decide whether to unpack again.
+  buildFeatures {
+    buildConfig true
   }
 
   buildTypes {
@@ -27,11 +141,9 @@ android {
 }
 
 /*
- * Kotlin folded the jdk7 and jdk8 standard libraries into kotlin-stdlib at
- * 1.8, but older transitive dependencies still ask for them by name. Both then
- * arrive carrying the same classes, and dex merging refuses the duplicates.
- * Dropping the legacy artifacts leaves one copy, which is what they resolve to
- * anyway.
+ * Kotlin folded the jdk7 and jdk8 standard libraries into kotlin-stdlib at 1.8,
+ * but older transitive dependencies still ask for them by name. Both then arrive
+ * carrying the same classes, and dex merging refuses the duplicates.
  */
 configurations.configureEach {
   exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'

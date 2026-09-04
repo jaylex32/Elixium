@@ -10,3 +10,6 @@ app/build/
 *.jks
 *.keystore
 keystore.properties
+
+# Native build scratch
+app/.cxx/

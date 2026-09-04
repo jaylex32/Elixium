@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <string name="app_name">Elixium</string>
-  <string name="server_prompt">Where is your Elixium server?</string>
-  <string name="server_hint">https://music.example.com</string>
-  <string name="connect">Connect</string>
   <string name="playback_channel">Playback</string>
   <string name="playing">Playing</string>
   <string name="playing_detail">Elixium is playing in the background</string>
-  <string name="cannot_reach">Could not reach that address. Check it and try again.</string>
-  <string name="change_server">Change server</string>
+  <string name="no_file_picker">No app on this phone can pick a file.</string>
+  <string name="saving">Saving %1$s</string>
+  <string name="download_failed">Could not start that download.</string>
+  <string name="engine_running">Elixium is running</string>
+  <string name="starting_engine">Starting Elixium…</string>
+  <string name="engine_failed">Elixium could not start. Reopen the app to try again.</string>
 </resources>
