@@ -13,3 +13,6 @@ keystore.properties
 
 # Native build scratch
 app/.cxx/
+
+# Built from dist/ by make-payload.js on every build; not a source file.
+app/src/main/assets/engine.zip
