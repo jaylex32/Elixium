@@ -18,13 +18,13 @@ const path = require('path');
 
 const here = __dirname;
 /*
- * The build configuration lives in electron-builder.js, not
+ * The build configuration lives in electron-builder.cjs, not
  * package.json, because it computes which of node_modules to ship rather than
  * listing it. This check reads it from there so it keeps checking the list
  * that is actually used — reading a `build` block that no longer exists would
  * have left it silently passing on an empty list.
  */
-const config = require('./electron-builder.js');
+const config = require('./electron-builder.cjs');
 const listed = config.files || [];
 
 /** The entry points electron actually loads, and anything they pull in. */

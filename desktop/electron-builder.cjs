@@ -5,6 +5,15 @@
  * Build configuration, in a file rather than package.json so it can compute
  * what to ship instead of listing it.
  *
+ * The extension is .cjs and must stay .cjs. Windows resolves a bare command
+ * against the current directory first, using PATHEXT — which includes .JS — so
+ * with this file named electron-builder.js the `electron-builder` in the dist
+ * script found *this file* instead of the CLI and ran it under Windows Script
+ * Host: no output, exit code 0, nothing built. macOS and Linux have no PATHEXT
+ * and were unaffected, so it broke exactly one platform, silently. .CJS is not
+ * in PATHEXT, and electron-builder looks for the .cjs form when it searches for
+ * a config.
+ *
  * The thing being computed is which of node_modules the engine actually needs.
  * `extraResources` copied the whole folder, so every build carried the entire
  * development toolchain into the finished app: the TypeScript compiler at 64
@@ -125,6 +134,21 @@ const nodeModulesFilter = () => {
   return [
     '**/*',
     ...dropped.map((name) => `!${name}/**/*`),
+    /*
+     * .bin holds the command-line shims, and it must go with them.
+     *
+     * npm writes these as symlinks into the package folders on macOS and
+     * Linux, so dropping a package leaves its shim pointing at nothing. A
+     * dangling symlink inside an .app is not a tidiness problem: codesign
+     * walks the bundle and fails outright on it, which is what broke both
+     * macOS builds of 1.4.0 while Windows — where npm writes .cmd files
+     * instead of symlinks — packaged happily.
+     *
+     * Nothing needs them at runtime. The engine is started by path, as
+     * `<electron> .../elixium.js`, never through a shim.
+     */
+    '!.bin/**/*',
+    '!**/.bin/**/*',
     /*
      * Type declarations describe code to the compiler; Node cannot execute
      * them, and @types packages contain nothing else at all.
