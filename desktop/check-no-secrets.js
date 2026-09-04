@@ -54,4 +54,78 @@ if (hits.length > 0) {
   process.exit(1);
 }
 
-console.log('clean: no config, watchlist, .env or logs in the build output');
+/**
+ * The shell's asar must not contain node_modules.
+ *
+ * The shell has no dependencies — its four files require Node built-ins and
+ * electron — so anything under node_modules in there arrived by accident. It
+ * did, for a long time: CI installed the shell's dependencies with
+ * `npm install --prefix desktop` from the repository root, which makes npm
+ * install the repository itself as a dependency, and electron-builder packed
+ * the entire checkout into app.asar. That was 296 MB in every artifact on
+ * every platform, and it was invisible locally, where the mistake does not
+ * happen and the asar is 45 KB.
+ *
+ * Checked here rather than trusted to a `files` rule, because the `files`
+ * exclusion did not stop it: npm links such a dependency as a symlink, and
+ * electron-builder resolves it outside the app directory where the filter no
+ * longer applies. Only the size of the result gave it away.
+ */
+const asarFiles = (asarPath) => {
+  const handle = fs.openSync(asarPath, 'r');
+  try {
+    /*
+     * The header is a pickle: four little-endian sizes, then JSON. The fourth
+     * is the length of the JSON itself.
+     */
+    const sizes = Buffer.alloc(16);
+    if (fs.readSync(handle, sizes, 0, 16, 0) < 16) return null;
+    const jsonLength = sizes.readUInt32LE(12);
+    if (!Number.isInteger(jsonLength) || jsonLength <= 0 || jsonLength > 64 * 1024 * 1024) return null;
+
+    const json = Buffer.alloc(jsonLength);
+    if (fs.readSync(handle, json, 0, jsonLength, 16) < jsonLength) return null;
+    const parsed = JSON.parse(json.toString('utf8'));
+    return parsed && parsed.files ? Object.keys(parsed.files) : null;
+  } catch {
+    /*
+     * Unreadable or an unfamiliar format. Not a reason to fail a release —
+     * this check exists to catch one specific mistake, not to gate on being
+     * able to parse every future asar.
+     */
+    return null;
+  } finally {
+    fs.closeSync(handle);
+  }
+};
+
+const asars = [];
+const findAsars = (dir) => {
+  for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) findAsars(full);
+    else if (entry.name === 'app.asar') asars.push(full);
+  }
+};
+findAsars(root);
+
+for (const asar of asars) {
+  const entries = asarFiles(asar);
+  if (entries === null) continue;
+  if (entries.includes('node_modules')) {
+    const size = (fs.statSync(asar).size / (1024 * 1024)).toFixed(1);
+    console.error('Refusing to ship: node_modules was packed into the app bundle.');
+    console.error('  ' + path.relative(__dirname, asar) + '  (' + size + ' MB)');
+    console.error('\nThe desktop shell has no dependencies, so this is something being');
+    console.error('installed into desktop/node_modules and picked up as one. Check that');
+    console.error('the CI step installs with a working-directory of desktop rather than');
+    console.error('`npm install --prefix desktop` from the repository root, which makes');
+    console.error('npm install the repository itself as a dependency of the shell.');
+    process.exit(1);
+  }
+}
+
+console.log(
+  `clean: no config, watchlist, .env or logs in the build output` +
+    (asars.length > 0 ? `, and no node_modules in ${asars.length === 1 ? 'the app bundle' : 'the app bundles'}` : ''),
+);

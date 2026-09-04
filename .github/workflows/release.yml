@@ -307,7 +307,15 @@ jobs:
           node sync-public.js
 
       - name: Install desktop dependencies
-        run: npm install --prefix desktop --no-audit --no-fund
+        working-directory: desktop
+        # Run from inside desktop rather than `npm install --prefix desktop`
+        # from the repository root. With --prefix, npm installs the package in
+        # the *current* directory — the repository itself — into
+        # desktop/node_modules as a dependency of the shell, and
+        # electron-builder then packed the whole checkout into app.asar: 296 MB
+        # of changelogs, dist and public in every artifact, on every platform,
+        # for as long as this step has existed.
+        run: npm install --no-audit --no-fund
 
       - name: Build desktop app
         if: ${{ !startsWith(matrix.os, 'macos') }}
