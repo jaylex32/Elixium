@@ -64,7 +64,7 @@ export interface YtMusicServiceDependencies {
    * The naming template, so YouTube Music files are laid out the way the
    * user asked for in Settings rather than by a rule hardcoded here.
    */
-  getLayout?: () => string | undefined;
+  getLayout?: (kind?: string) => string | undefined;
   /** Zero-padding width for track numbers, as configured. */
   getNumberWidth?: () => number;
   /** Take Opus over AAC, accepting that WebM cannot carry tags. */
@@ -849,7 +849,17 @@ export const createYtMusicService = ({
      * Qobuz one does, and that is a setting, not a rule for this module to
      * decide.
      */
-    const template = getLayout?.() || '{album_artist}/{album}/{track_number} {title}';
+    /*
+     * The template for what is actually being downloaded.
+     *
+     * A playlist filed by album artist buries it: every track lands under
+     * whichever artist the collection reported, which is how eighty-four albums
+     * by different people ended up in one folder. The kind travels with the
+     * request so a playlist can be filed as a playlist, exactly as Deezer and
+     * Qobuz already do.
+     */
+    const template =
+      getLayout?.(metadata.playlist ? 'playlist' : 'track') || '{album_artist}/{album}/{track_number} {title}';
     const relative = ytmusicSaveLayout({
       fields: {
         title: metadata.title,
@@ -860,6 +870,7 @@ export const createYtMusicService = ({
         trackNumber: metadata.trackNumber ?? null,
         trackTotal: metadata.trackTotal ?? null,
         videoId: chosenId,
+        playlist: metadata.playlist ?? undefined,
       },
       path: template,
       minimumIntegerDigits: getNumberWidth?.() || 2,

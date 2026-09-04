@@ -35,6 +35,8 @@ export interface TrackMetadata {
   artist: string;
   album?: string;
   albumArtist?: string;
+  /** The collection this came from, when it came from a playlist. */
+  playlist?: string;
   year?: number | null;
   trackNumber?: number | null;
   trackTotal?: number | null;

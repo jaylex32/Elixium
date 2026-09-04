@@ -106,7 +106,20 @@ export function useDownload() {
             title: track.title,
             artist: track.artist || albumArtist,
             album: track.album || album,
-            albumArtist,
+            /*
+             * A playlist has no album artist, and pretending otherwise files
+             * the whole thing under one name.
+             *
+             * The saved layout starts with {album_artist}, so sending the
+             * collection's artist for every track put eighty-four albums by
+             * different people inside a folder named after whoever happened to
+             * be first. An album genuinely has one album artist and still gets
+             * it; a playlist is a list of other people's records, so each track
+             * keeps its own.
+             */
+            albumArtist: target.type === 'playlist' ? track.artist || albumArtist : albumArtist,
+            /* Names the collection, and selects the playlist template with it. */
+            playlist: target.type === 'playlist' ? album || target.title : undefined,
             year,
             trackNumber: track.rawData?.trackNumber ?? null,
             trackTotal: tracks.length > 1 ? tracks.length : null,

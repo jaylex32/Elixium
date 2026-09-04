@@ -36,7 +36,10 @@ const droppedPackages = new Set(
 
 /** Files that are never loaded at runtime, whichever package they belong to. */
 const isDeadWeight = (file) =>
-  file.endsWith('.d.ts') || file.endsWith('.map') || file.endsWith('.md') || file.includes(`${path.sep}.bin${path.sep}`);
+  file.endsWith('.d.ts') ||
+  file.endsWith('.map') ||
+  file.endsWith('.md') ||
+  file.includes(`${path.sep}.bin${path.sep}`);
 
 /**
  * Rewrite the one regular expression the mobile runtime cannot compile.

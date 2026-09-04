@@ -262,6 +262,8 @@ export interface YtMusicLayoutFields {
   trackNumber?: number | null;
   trackTotal?: number | null;
   videoId?: string;
+  /** The collection a playlist download came from, for the playlist template. */
+  playlist?: string;
 }
 
 /**
@@ -304,6 +306,7 @@ export const ytmusicSaveLayout = ({
     track_number: number,
     total_tracks: fields.trackTotal ? String(fields.trackTotal) : '',
     video_id: fields.videoId ?? '',
+    playlist: fields.playlist ?? '',
   };
 
   for (const key of result.match(/(?<=\{)[^}]*/g) ?? []) {

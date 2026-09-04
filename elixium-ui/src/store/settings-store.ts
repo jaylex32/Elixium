@@ -79,6 +79,10 @@ export interface Settings {
     'qobuz-album': string;
     'qobuz-artist': string;
     'qobuz-playlist': string;
+    'ytmusic-track': string;
+    'ytmusic-album': string;
+    'ytmusic-artist': string;
+    'ytmusic-playlist': string;
     /* YouTube Music has its own placeholder vocabulary; see PathTemplates. */
     ytmusic: string;
   };
@@ -127,6 +131,10 @@ const defaults: Settings = {
     'qobuz-album': '{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
     'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
     'qobuz-playlist': 'Playlist/{list_title}/{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
+    'ytmusic-track': '{album_artist}/{album}/{track_number} {title}',
+    'ytmusic-album': '{album_artist}/{album}/{track_number} {title}',
+    'ytmusic-artist': '{album_artist}/{album}/{track_number} {title}',
+    'ytmusic-playlist': 'Playlist/{playlist}/{artist} - {title}',
     ytmusic: '{album_artist}/{album}/{track_number} {title}',
   },
   coverSize: '1000',

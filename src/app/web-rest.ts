@@ -334,6 +334,8 @@ export const registerWebRestRoutes = ({
           artist,
           album: String(body.album || ''),
           albumArtist: String(body.albumArtist || artist),
+          /* Present only for a playlist, and what selects its template. */
+          playlist: body.playlist ? String(body.playlist) : undefined,
           year: body.year ? Number(body.year) : null,
           trackNumber: body.trackNumber ? Number(body.trackNumber) : null,
           trackTotal: body.trackTotal ? Number(body.trackTotal) : null,

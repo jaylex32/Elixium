@@ -113,15 +113,23 @@ const SERVICES: {
     label: 'YouTube Music',
     accent: '#ff0033',
     /*
-     * One template, not four.
+     * Four templates, as the other two services have.
      *
-     * A YouTube Music download is always a single track — an album or playlist
-     * is downloaded as its tracks, one at a time, through the same path. There
-     * is no separate album or playlist writer to give a template of its own,
-     * and offering four fields that all fed one code path would be a lie about
-     * what the setting does.
+     * This was one for a long time, on the reasoning that a YouTube Music
+     * download is always a single track — an album or a playlist is downloaded
+     * as its tracks, one at a time, through the same path. True of the
+     * mechanism, and wrong for the result: the one template began with the
+     * album artist, so a playlist filed every track under whichever artist the
+     * collection reported and buried eighty-four albums by different people in
+     * a single folder. What is being downloaded is known when it is requested,
+     * so it now chooses, exactly as Deezer and Qobuz do.
      */
-    rows: [{key: 'ytmusic', label: 'Every download', row: 'track'}],
+    rows: [
+      {key: 'ytmusic-track', label: 'Single track', row: 'track'},
+      {key: 'ytmusic-album', label: 'Album', row: 'album'},
+      {key: 'ytmusic-artist', label: 'Artist', row: 'artist'},
+      {key: 'ytmusic-playlist', label: 'Playlist', row: 'playlist'},
+    ],
     /*
      * Its own vocabulary, and deliberately not either of the others'.
      *
@@ -141,6 +149,8 @@ const SERVICES: {
       '{total_tracks}',
       '{no_track_number}',
       '{video_id}',
+      /* Only filled on a playlist download; empty everywhere else. */
+      '{playlist}',
     ],
   },
 ];
@@ -156,6 +166,10 @@ const DEFAULTS: Settings['layout'] = {
   'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
   'qobuz-playlist': 'Playlist/{list_title}/{alb_artist}/{alb_artist} - {alb_title}/{no_track_number}{alb_artist} - {title}',
   ytmusic: '{album_artist}/{album}/{track_number} {title}',
+  'ytmusic-track': '{album_artist}/{album}/{track_number} {title}',
+  'ytmusic-album': '{album_artist}/{album}/{track_number} {title}',
+  'ytmusic-artist': '{album_artist}/{album}/{track_number} {title}',
+  'ytmusic-playlist': 'Playlist/{playlist}/{artist} - {title}',
 };
 
 export function PathTemplates() {

@@ -670,7 +670,17 @@ const ytmusicService = createYtMusicService({
    * impossible to find. A YouTube Music download uses `saveLayout.ytmusic`
    * when one is set, and otherwise the layout below.
    */
-  getLayout: () => (conf.get('saveLayout.ytmusic') as string) || undefined,
+  /*
+   * The template for the kind of thing being downloaded.
+   *
+   * Falls back to the single `saveLayout.ytmusic` that existed before there
+   * were four, so a configuration written by an older version keeps filing
+   * downloads exactly where it always did.
+   */
+  getLayout: (kind?: string) => {
+    const specific = conf.get(`saveLayout.ytmusic-${kind ?? 'track'}` as never) as string | undefined;
+    return specific || (conf.get('saveLayout.ytmusic') as string) || undefined;
+  },
   /*
    * `trackNumber` is a boolean setting — whether to number files at all — so
    * reading it as a width yields 1 from `Number(true)`, and every track is

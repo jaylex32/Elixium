@@ -12,6 +12,10 @@ type keysType =
   | 'saveLayout.artist'
   | 'saveLayout.playlist'
   | 'saveLayout.ytmusic'
+  | 'saveLayout.ytmusic-track'
+  | 'saveLayout.ytmusic-album'
+  | 'saveLayout.ytmusic-artist'
+  | 'saveLayout.ytmusic-playlist'
   | 'playlist.resolveFullPath'
   | 'trackNumber'
   | 'fallbackTrack'
@@ -69,6 +73,10 @@ type configType = {
     'qobuz-track': string;
     'qobuz-artist': string;
     'qobuz-playlist': string;
+    'ytmusic-track': string;
+    'ytmusic-album': string;
+    'ytmusic-artist': string;
+    'ytmusic-playlist': string;
     /*
      * YouTube Music files itself by its own template.
      *
@@ -150,6 +158,19 @@ const defaultConfig: configType = {
     'qobuz-artist': 'artist/{alb_title}/{no_track_number}{alb_artist} - {title}',
     'qobuz-playlist': 'Playlist/{list_title}/{title}',
     ytmusic: '{album_artist}/{album}/{track_number} {title}',
+    'ytmusic-track': '{album_artist}/{album}/{track_number} {title}',
+    'ytmusic-album': '{album_artist}/{album}/{track_number} {title}',
+    'ytmusic-artist': '{album_artist}/{album}/{track_number} {title}',
+    /*
+     * A playlist is not an album, and filing it as one buries it.
+     *
+     * The album template starts with the album artist, which is right for a
+     * record and wrong for a list of other people's records: every track went
+     * under whichever artist the playlist reported, so eighty-four albums by
+     * different people ended up inside one folder. Grouping by the playlist
+     * instead is what Deezer's own playlist template does.
+     */
+    'ytmusic-playlist': 'Playlist/{playlist}/{artist} - {title}',
   },
   playlist: {
     resolveFullPath: false,

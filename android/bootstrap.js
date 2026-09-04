@@ -10,6 +10,7 @@
  *   adb shell run-as com.elixium.client cat files/elixium.log
  */
 
+/* eslint-disable @typescript-eslint/no-var-requires -- runs under Node on the phone, CommonJS. */
 const fs = require('fs');
 const path = require('path');
 
